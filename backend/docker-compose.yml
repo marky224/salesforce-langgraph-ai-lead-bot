@@ -1,0 +1,27 @@
+# docker-compose.yml — Local development
+#
+# Usage:
+#   docker compose up --build        # Build and start
+#   docker compose up -d             # Detached mode
+#   docker compose logs -f backend   # Follow logs
+#   docker compose down              # Stop and remove
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-lead-bot
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../.env
+    environment:
+      - LOG_LEVEL=DEBUG
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

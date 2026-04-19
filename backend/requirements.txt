@@ -1,0 +1,24 @@
+# Core framework
+fastapi>=0.115.0,<1.0
+uvicorn[standard]>=0.32.0,<1.0
+pydantic>=2.10.0,<3.0
+pydantic-settings>=2.7.0,<3.0
+
+# LangGraph / LangChain
+langgraph>=0.4.0,<1.0
+langchain-core>=0.3.0,<1.0
+
+# LLM providers (install the one you need)
+langchain-anthropic>=0.3.0,<1.0
+# langchain-openai>=0.3.0,<1.0
+# langchain-groq>=0.2.0,<1.0
+
+# Salesforce
+simple-salesforce>=1.12.0,<2.0
+
+# Email validation
+email-validator>=2.0.0,<3.0
+
+# Testing (dev only — excluded from Docker via .dockerignore)
+pytest>=8.0.0,<9.0
+pytest-asyncio>=0.24.0,<1.0
