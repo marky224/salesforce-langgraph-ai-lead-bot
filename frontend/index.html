@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Solutions — Powered by LangGraph</title>
+  <style>
+    /* -----------------------------------------------------------------------
+       Demo page styles — these simulate Mark's existing site.
+       In production, only the <script> tag at the bottom is needed.
+       ----------------------------------------------------------------------- */
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --page-bg: #fafafa;
+      --page-text: #1a1a2e;
+      --page-accent: #6366f1;
+      --page-muted: #64748b;
+      --page-surface: #ffffff;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --page-bg: #0f0f1a;
+        --page-text: #e2e8f0;
+        --page-accent: #818cf8;
+        --page-muted: #94a3b8;
+        --page-surface: #1e1e2e;
+      }
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+        Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+      background: var(--page-bg);
+      color: var(--page-text);
+      line-height: 1.7;
+      min-height: 100vh;
+    }
+
+    /* Navigation */
+    nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 32px;
+      border-bottom: 1px solid rgba(99, 102, 241, 0.1);
+    }
+
+    .nav-brand {
+      font-weight: 700;
+      font-size: 20px;
+      color: var(--page-accent);
+      text-decoration: none;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 28px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      text-decoration: none;
+      color: var(--page-muted);
+      font-size: 14px;
+      font-weight: 500;
+      transition: color 0.15s;
+    }
+
+    .nav-links a:hover {
+      color: var(--page-text);
+    }
+
+    /* Hero */
+    .hero {
+      max-width: 720px;
+      margin: 80px auto 60px;
+      padding: 0 24px;
+      text-align: center;
+    }
+
+    .hero h1 {
+      font-size: clamp(32px, 5vw, 52px);
+      font-weight: 800;
+      line-height: 1.15;
+      margin-bottom: 20px;
+      letter-spacing: -0.02em;
+    }
+
+    .hero h1 .accent {
+      color: var(--page-accent);
+    }
+
+    .hero p {
+      font-size: 18px;
+      color: var(--page-muted);
+      max-width: 560px;
+      margin: 0 auto 32px;
+    }
+
+    .hero-cta {
+      display: inline-block;
+      padding: 14px 36px;
+      background: var(--page-accent);
+      color: white;
+      border-radius: 10px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 16px;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    .hero-cta:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
+    }
+
+    /* Feature cards */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+      max-width: 960px;
+      margin: 0 auto 80px;
+      padding: 0 24px;
+    }
+
+    .feature-card {
+      background: var(--page-surface);
+      border: 1px solid rgba(99, 102, 241, 0.08);
+      border-radius: 12px;
+      padding: 28px 24px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .feature-card:hover {
+      border-color: rgba(99, 102, 241, 0.2);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+    }
+
+    .feature-icon {
+      width: 44px;
+      height: 44px;
+      background: rgba(99, 102, 241, 0.08);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      color: var(--page-accent);
+    }
+
+    .feature-card h3 {
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .feature-card p {
+      font-size: 14px;
+      color: var(--page-muted);
+      line-height: 1.6;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 32px;
+      color: var(--page-muted);
+      font-size: 13px;
+      border-top: 1px solid rgba(99, 102, 241, 0.08);
+    }
+
+    /* Hint arrow pointing to chat bubble */
+    .chat-hint {
+      position: fixed;
+      bottom: 96px;
+      right: 52px;
+      color: var(--page-accent);
+      font-size: 13px;
+      font-weight: 500;
+      opacity: 0;
+      animation: hint-fade 6s ease 8s forwards;
+      pointer-events: none;
+      z-index: 99998;
+    }
+
+    @keyframes hint-fade {
+      0% { opacity: 0; transform: translateY(4px); }
+      15% { opacity: 1; transform: translateY(0); }
+      85% { opacity: 1; transform: translateY(0); }
+      100% { opacity: 0; transform: translateY(4px); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .chat-hint { animation: none; display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation -->
+  <nav>
+    <a href="#" class="nav-brand">SolveTech AI</a>
+    <ul class="nav-links">
+      <li><a href="#">Solutions</a></li>
+      <li><a href="#">Pricing</a></li>
+      <li><a href="#">About</a></li>
+      <li><a href="#">Contact</a></li>
+    </ul>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <h1>
+      Smarter workflows,<br />
+      <span class="accent">powered by AI</span>
+    </h1>
+    <p>
+      We help businesses automate repetitive work, connect their tools, and
+      make better decisions with modern AI solutions.
+    </p>
+    <a href="#" class="hero-cta" onclick="window.__chatWidget && window.__chatWidget.toggle(); return false;">
+      Talk to Our AI Advisor
+    </a>
+  </section>
+
+  <!-- Feature Cards -->
+  <section class="features">
+    <div class="feature-card">
+      <div class="feature-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+          <path d="M2 17l10 5 10-5"></path>
+          <path d="M2 12l10 5 10-5"></path>
+        </svg>
+      </div>
+      <h3>Workflow Automation</h3>
+      <p>Eliminate manual data entry and repetitive tasks. Connect your CRM, email, and internal tools into seamless automated workflows.</p>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+          <polyline points="7.5 4.21 12 6.81 16.5 4.21"></polyline>
+          <polyline points="7.5 19.79 7.5 14.6 3 12"></polyline>
+          <polyline points="21 12 16.5 14.6 16.5 19.79"></polyline>
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+          <line x1="12" y1="22.08" x2="12" y2="12"></line>
+        </svg>
+      </div>
+      <h3>AI-Powered Insights</h3>
+      <p>Turn your data into actionable intelligence. Our AI analyzes patterns, predicts outcomes, and surfaces the insights that matter most.</p>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+          <circle cx="9" cy="7" r="4"></circle>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+        </svg>
+      </div>
+      <h3>Smart CRM Integration</h3>
+      <p>Salesforce, HubSpot, or custom — we integrate AI directly into your sales stack so your team works smarter, not harder.</p>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <p>&copy; 2026 SolveTech AI — Demo site for the salesforce-langgraph-ai-lead-bot project.</p>
+  </footer>
+
+  <!-- Chat hint arrow -->
+  <div class="chat-hint">Chat with us &darr;</div>
+
+  <!-- =====================================================================
+       CHAT WIDGET EMBED — This is the only code needed on a production site.
+       Set window.CHAT_BACKEND_URL before loading the script.
+       ===================================================================== -->
+  <script>
+    // Production: set this to your Azure Container Apps URL
+    // window.CHAT_BACKEND_URL = 'https://your-app.azurecontainerapps.io';
+
+    // Development: defaults to http://localhost:8000
+  </script>
+  <script src="widget.js" type="module"></script>
+
+</body>
+</html>

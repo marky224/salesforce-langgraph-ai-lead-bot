@@ -1,0 +1,91 @@
+# ==========================================
+# SECRETS — never commit these
+# ==========================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+
+# Salesforce auth tokens / session files
+.sfdx/
+.sf/
+
+# Azure credentials
+azure.json
+servicePrincipal.json
+
+# ==========================================
+# Python
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+ENV/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ==========================================
+# Testing
+# ==========================================
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+
+# ==========================================
+# IDE — PyCharm
+# ==========================================
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# IDE — VS Code
+.vscode/
+
+# IDE — general
+*.swp
+*.swo
+*~
+*.bak
+
+# ==========================================
+# OS
+# ==========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ==========================================
+# Docker
+# ==========================================
+*.log
+docker-compose.override.yml
+
+# ==========================================
+# Node (frontend)
+# ==========================================
+node_modules/
+package-lock.json
+yarn.lock
