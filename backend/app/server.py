@@ -261,6 +261,12 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         final_stage = ConversationStage.GREETING
         lead_id = None
 
+        # Only stream tokens from these nodes (not extraction/router/scoring)
+        _CONVERSATIONAL_NODES = {
+            "greeting", "discovery", "qualification",
+            "objection_handling", "lead_capture", "confirmation", "error",
+        }
+
         try:
             async for event in graph.astream_events(
                 graph_input,
@@ -269,8 +275,13 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             ):
                 kind = event.get("event", "")
 
-                # Stream LLM tokens as they arrive
+                # Stream LLM tokens only from conversational nodes
                 if kind == "on_chat_model_stream":
+                    # Check which graph node this LLM call belongs to
+                    node_name = event.get("metadata", {}).get("langgraph_node", "")
+                    if node_name not in _CONVERSATIONAL_NODES:
+                        continue
+
                     chunk = event.get("data", {}).get("chunk")
                     if chunk and hasattr(chunk, "content") and chunk.content:
                         token = chunk.content
