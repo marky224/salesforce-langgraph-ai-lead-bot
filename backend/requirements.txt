@@ -8,10 +8,10 @@ pydantic-settings>=2.7.0,<3.0
 langgraph>=0.4.0,<1.0
 langchain-core>=0.3.0,<1.0
 
-# LLM providers (install the one you need)
-langchain-anthropic>=0.3.0,<1.0
-# langchain-openai>=0.3.0,<1.0
-# langchain-groq>=0.2.0,<1.0
+# LLM providers (uncomment the one you need)
+# langchain-anthropic>=0.3.0,<1.0   # For Anthropic (Claude)
+langchain-openai>=0.3.0,<1.0        # For OpenAI (GPT-4o) or xAI (Grok)
+# langchain-groq>=0.2.0,<1.0        # For Groq (Llama/Mixtral)
 
 # Salesforce
 simple-salesforce>=1.12.0,<2.0

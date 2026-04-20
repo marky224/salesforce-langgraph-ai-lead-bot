@@ -1,6 +1,6 @@
 # salesforce-langgraph-ai-lead-bot
 
-[![Python 3.12+](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)](https://python.org)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://python.org)
 [![LangGraph](https://img.shields.io/badge/LangGraph-0.4+-1C3C3C?logo=langchain&logoColor=white)](https://langchain-ai.github.io/langgraph/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Salesforce](https://img.shields.io/badge/Salesforce-Agentforce-00A1E0?logo=salesforce&logoColor=white)](https://www.salesforce.com)
@@ -198,7 +198,7 @@ salesforce-langgraph-ai-lead-bot/
 
 ### Prerequisites
 
-- Python 3.12+
+- Python 3.11+
 - Docker (for containerized deployment)
 - A Salesforce Developer Edition org ([free signup](https://developer.salesforce.com/signup))
 - An API key for at least one LLM provider
