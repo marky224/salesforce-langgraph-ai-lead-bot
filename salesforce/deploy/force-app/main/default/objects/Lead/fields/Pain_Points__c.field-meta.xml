@@ -1,0 +1,10 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Pain_Points__c</fullName>
+    <label>Pain Points</label>
+    <type>LongTextArea</type>
+    <length>32000</length>
+    <visibleLines>5</visibleLines>
+    <required>false</required>
+    <externalId>false</externalId>
+</CustomField>
