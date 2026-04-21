@@ -50,20 +50,18 @@ def _get_sf_client() -> Any:
     """
     Create and cache a ``simple_salesforce.Salesforce`` client.
 
-    Tries Client Credentials Flow first (if SF_CLIENT_ID and
-    SF_CLIENT_SECRET are set), then falls back to Username-Password Flow.
+    Uses the OAuth2 REST token endpoint (not SOAP) to authenticate,
+    which works in newer Salesforce orgs where SOAP login is disabled
+    by default.
+
+    Auth priority:
+    1. OAuth2 Client Credentials Flow (if SF_CLIENT_ID set)
+    2. OAuth2 Username-Password Flow via REST (fallback)
 
     Returns
     -------
     Salesforce
         An authenticated ``simple_salesforce.Salesforce`` instance.
-
-    Raises
-    ------
-    ImportError
-        If ``simple_salesforce`` is not installed.
-    ValueError
-        If insufficient credentials are configured.
     """
     try:
         from simple_salesforce import Salesforce
@@ -73,6 +71,7 @@ def _get_sf_client() -> Any:
             "Install it with: pip install simple-salesforce"
         ) from exc
 
+    import requests
     from app.config import get_settings
 
     s = get_settings()
@@ -84,56 +83,77 @@ def _get_sf_client() -> Any:
             "in your environment variables."
         )
 
-    # --- Attempt Client Credentials Flow ---
+    login_domain = "test" if "sandbox" in s.sf_instance_url.lower() else "login"
+    token_url = f"https://{login_domain}.salesforce.com/services/oauth2/token"
+
+    # --- Attempt 1: OAuth2 Client Credentials Flow (server-to-server) ---
     if s.sf_client_id and s.sf_client_secret:
         try:
-            sf = Salesforce(
-                username=s.sf_username,
-                password=s.sf_password.get_secret_value(),
-                security_token=(
-                    s.sf_security_token.get_secret_value()
-                    if s.sf_security_token
-                    else ""
-                ),
-                consumer_key=s.sf_client_id.get_secret_value(),
-                consumer_secret=s.sf_client_secret.get_secret_value(),
-                domain=(
-                    "test"
-                    if "sandbox" in s.sf_instance_url.lower()
-                    or "test" in s.sf_instance_url.lower()
-                    else "login"
-                ),
-            )
-            logger.info(
-                "Salesforce client authenticated via Connected App (user: %s)",
-                s.sf_username,
-            )
-            return sf
+            resp = requests.post(token_url, data={
+                "grant_type": "client_credentials",
+                "client_id": s.sf_client_id.get_secret_value(),
+                "client_secret": s.sf_client_secret.get_secret_value(),
+            })
+            if resp.status_code == 200:
+                token_data = resp.json()
+                sf = Salesforce(
+                    instance_url=token_data["instance_url"],
+                    session_id=token_data["access_token"],
+                )
+                logger.info(
+                    "Salesforce client authenticated via Client Credentials Flow (instance: %s)",
+                    token_data["instance_url"],
+                )
+                return sf
+            else:
+                logger.warning(
+                    "Client Credentials Flow failed (%s): %s — trying username-password",
+                    resp.status_code,
+                    resp.text[:200],
+                )
         except Exception:
             logger.warning(
-                "Connected App auth failed, falling back to username-password flow",
+                "Client Credentials Flow failed, falling back to username-password",
                 exc_info=True,
             )
 
-    # --- Fallback: Username-Password Flow ---
+    # --- Attempt 2: OAuth2 Username-Password Flow via REST ---
+    password = s.sf_password.get_secret_value()
+    security_token = (
+        s.sf_security_token.get_secret_value()
+        if s.sf_security_token
+        else ""
+    )
+
+    token_payload = {
+        "grant_type": "password",
+        "client_id": (
+            s.sf_client_id.get_secret_value() if s.sf_client_id else ""
+        ),
+        "client_secret": (
+            s.sf_client_secret.get_secret_value() if s.sf_client_secret else ""
+        ),
+        "username": s.sf_username,
+        "password": f"{password}{security_token}",
+    }
+
+    resp = requests.post(token_url, data=token_payload)
+
+    if resp.status_code != 200:
+        error_data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {"error": resp.text}
+        raise RuntimeError(
+            f"Salesforce OAuth2 login failed ({resp.status_code}): "
+            f"{error_data.get('error', 'unknown')} — {error_data.get('error_description', resp.text[:200])}"
+        )
+
+    token_data = resp.json()
     sf = Salesforce(
-        username=s.sf_username,
-        password=s.sf_password.get_secret_value(),
-        security_token=(
-            s.sf_security_token.get_secret_value()
-            if s.sf_security_token
-            else ""
-        ),
-        domain=(
-            "test"
-            if "sandbox" in s.sf_instance_url.lower()
-            or "test" in s.sf_instance_url.lower()
-            else "login"
-        ),
+        instance_url=token_data["instance_url"],
+        session_id=token_data["access_token"],
     )
     logger.info(
-        "Salesforce client authenticated via username-password (user: %s)",
-        s.sf_username,
+        "Salesforce client authenticated via OAuth2 username-password (instance: %s)",
+        token_data["instance_url"],
     )
     return sf
 
