@@ -113,7 +113,24 @@ def route_after_extraction(state: GraphState) -> str:
     # Visitor confirmed details — proceed to scoring + Salesforce
     if stage == ConversationStage.CONFIRMATION:
         # Check if confirmation was accepted (not an objection)
-        if _latest_message_is_affirmative(state):
+        is_affirmative = _latest_message_is_affirmative(state)
+
+        # --- Debug: log the exact message and check result ---
+        from langchain_core.messages import HumanMessage as _HM
+        _latest = ""
+        for _m in reversed(state.get("messages", [])):
+            if isinstance(_m, _HM):
+                _latest = _m.content
+                break
+        logger.info(
+            "CONFIRMATION check: is_affirmative=%s, word_count=%d, message='%.120s'",
+            is_affirmative,
+            len(_latest.split()),
+            _latest,
+        )
+        # --- End debug ---
+
+        if is_affirmative:
             logger.info("Edge: extraction → scoring (confirmation accepted)")
             return NODE_SCORING
         else:
@@ -271,22 +288,53 @@ def _latest_message_is_affirmative(state: GraphState) -> bool:
 
     Used by ``route_after_extraction`` to decide whether the visitor
     accepted the confirmation summary or wants to make corrections.
+
+    The check is intentionally generous — it's better to proceed to
+    scoring on an ambiguous message than to loop the visitor back
+    through another round of questions.  If the visitor genuinely
+    wants to correct something, they'll say so explicitly (e.g.
+    "actually my email is wrong" or "no, change the company name").
     """
     from langchain_core.messages import HumanMessage
 
     for msg in reversed(state.get("messages", [])):
         if isinstance(msg, HumanMessage):
             text = msg.content.lower().strip()
+
+            # --- Negative signals: visitor wants to correct something ---
+            negatives = {
+                "no", "nope", "wrong", "incorrect", "change", "update",
+                "fix", "actually", "wait", "hold on", "not right",
+                "that's wrong", "thats wrong", "mistake",
+            }
+            # If the message is short and clearly negative, reject
+            if len(text.split()) <= 10 and any(n in text for n in negatives):
+                # But "no problem" / "no worries" are actually affirmative
+                false_negatives = {"no problem", "no worries", "no issues"}
+                if not any(fn in text for fn in false_negatives):
+                    return False
+
+            # --- Positive signals ---
             affirmatives = {
                 "yes", "yeah", "yep", "yup", "correct", "that's right",
                 "thats right", "looks good", "looks great", "perfect",
-                "confirmed", "all good", "good to go", "sure", "ok",
-                "okay", "sounds good", "right", "absolutely", "exactly",
-                "spot on", "you got it", "that works",
+                "confirmed", "confirm", "all good", "good to go", "sure",
+                "ok", "okay", "sounds good", "right", "absolutely",
+                "exactly", "spot on", "you got it", "that works",
+                "great", "awesome", "thanks", "thank you", "lgtm",
+                "go ahead", "proceed", "submit", "send it", "ship it",
+                "all correct", "looks correct", "that's correct",
             }
-            # Check if the message is short and affirmative
-            if len(text.split()) <= 6 and any(a in text for a in affirmatives):
+            # Generous check: up to 20 words and contains any affirmative
+            if len(text.split()) <= 20 and any(a in text for a in affirmatives):
                 return True
+
+            # Fallback: if the message is very short (1-3 words) and
+            # doesn't contain a negative, treat it as affirmative.
+            # Covers things like "cool", "nice", "done", thumbs-up text.
+            if len(text.split()) <= 3 and not any(n in text for n in negatives):
+                return True
+
             return False
 
     return False
