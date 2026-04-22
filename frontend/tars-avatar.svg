@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+<rect fill="#4f46e5" width="120" height="120" rx="16"/>
+<!-- Antenna left -->
+<line x1="38" y1="30" x2="28" y2="8" stroke="#c7d2fe" stroke-width="3" stroke-linecap="round"/>
+<circle cx="28" cy="7" r="5" fill="#34d399"/>
+<!-- Antenna right -->
+<line x1="82" y1="30" x2="92" y2="8" stroke="#c7d2fe" stroke-width="3" stroke-linecap="round"/>
+<circle cx="92" cy="7" r="5" fill="#34d399"/>
+<!-- Head -->
+<rect x="24" y="28" width="72" height="50" rx="14" fill="#1e1b4b"/>
+<!-- Visor -->
+<rect x="30" y="40" width="60" height="22" rx="11" fill="#312e81"/>
+<!-- Eyes -->
+<circle cx="46" cy="51" r="7" fill="#67e8f9"/>
+<circle cx="46" cy="51" r="3.5" fill="#fff"/>
+<circle cx="74" cy="51" r="7" fill="#67e8f9"/>
+<circle cx="74" cy="51" r="3.5" fill="#fff"/>
+<!-- Mouth -->
+<rect x="44" y="68" width="32" height="3.5" rx="1.75" fill="#818cf8"/>
+<!-- Body -->
+<rect x="30" y="84" width="60" height="28" rx="8" fill="#1e1b4b"/>
+<!-- Chest display -->
+<rect x="42" y="90" width="36" height="16" rx="4" fill="#312e81"/>
+<path d="M47 98h6l2-4 3 6 3-7 2 8 3-5h8" stroke="#34d399" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
