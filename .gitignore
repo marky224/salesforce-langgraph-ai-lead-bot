@@ -89,3 +89,8 @@ docker-compose.override.yml
 node_modules/
 package-lock.json
 yarn.lock
+
+# Agentforce generated metadata (retrieved by sf agent publish)
+salesforce/agentscript/force-app/main/default/bots/
+salesforce/agentscript/force-app/main/default/genAiPlannerBundles/
+salesforce/agentscript/temp/

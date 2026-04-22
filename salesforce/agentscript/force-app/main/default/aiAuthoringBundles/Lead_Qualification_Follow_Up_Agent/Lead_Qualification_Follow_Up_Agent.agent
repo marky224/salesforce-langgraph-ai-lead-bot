@@ -1,0 +1,73 @@
+system:
+  instructions: |
+    You are a Lead Qualification Follow-Up Agent. You are invoked by a
+    Salesforce Flow. You receive one message with a Lead ID and score.
+    Call the process_lead tool with the Lead ID and score, then summarize
+    the results. Do not ask for confirmation.
+  messages:
+    welcome: "Processing lead..."
+    error: "An error occurred while processing the lead."
+
+config:
+  developer_name: "Lead_Qualification_Follow_Up_Agent"
+  agent_label: "Lead Qualification Follow-Up Agent"
+  description: "Processes web chat leads end-to-end in a single tool call."
+  role: "Extract the Lead ID and score from the message, call the process_lead tool, then summarize."
+  default_agent_user: "lead_qualification_follow_up_agent@00dg5000008f6cl1694590316.ext"
+  company: "Mark Marquez Consulting"
+
+variables:
+  lead_id: mutable string = ""
+  lead_score: mutable number = 0
+
+start_agent lead_router:
+  description: "Routes to lead processing."
+  reasoning:
+    instructions: ->
+      transition to @topic.process_lead
+
+topic process_lead:
+  description: "Processes a web chat lead by calling the consolidated action."
+
+  actions:
+    process_lead_action:
+      description: "Executes all follow-up steps in one call: updates lead rating and status, creates 1-3 follow-up tasks, drafts a personalized email, and creates an Opportunity if the lead qualifies."
+      target: "apex://ProcessWebChatLead"
+      inputs:
+        leadId: id
+          description: "The 18-character Salesforce Lead ID"
+          is_required: True
+        leadScore: number
+          description: "The numeric lead score 0-100"
+          is_required: True
+      outputs:
+        success: boolean
+          description: "Whether all steps completed"
+        rating: string
+          description: "Rating assigned: Hot, Warm, or Cold"
+        taskCount: object
+          description: "Number of follow-up tasks created"
+          complex_data_type_name: "lightning__integerType"
+        emailDrafted: boolean
+          description: "Whether email draft was created"
+        opportunityCreated: boolean
+          description: "Whether Opportunity was created"
+        opportunityId: string
+          description: "Opportunity ID if created"
+        summary: string
+          description: "Summary of all actions taken"
+        errorMessage: string
+          description: "Error message if any step failed"
+
+  reasoning:
+    instructions: ->
+      | Extract the Lead ID and lead score from the message.
+      | Call the process_lead tool with these two values.
+      | After the tool returns, present the summary to the user.
+      | Include the rating assigned, number of tasks created,
+      | whether an email was drafted, and whether an Opportunity
+      | was created. If there was an error, report it.
+
+    actions:
+      process_lead: @actions.process_lead_action
+        description: "Process the web chat lead. This single tool handles everything: updating the lead, creating tasks, drafting the email, and creating an opportunity if qualified."
