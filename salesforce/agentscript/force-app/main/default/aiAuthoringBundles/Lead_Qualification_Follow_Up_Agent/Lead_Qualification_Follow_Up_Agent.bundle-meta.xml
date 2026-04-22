@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AiAuthoringBundle xmlns="http://soap.sforce.com/2006/04/metadata">
+  <bundleType>agent</bundleType>
+  <description>Lead Qualification Follow-Up Agent — processes web chat leads end-to-end via Agent Script with deterministic action chaining.</description>
+  <masterLabel>Lead Qualification Follow-Up Agent</masterLabel>
+  <target>Lead_Qualification_Follow_Up_Agent.v7</target>
+</AiAuthoringBundle>
