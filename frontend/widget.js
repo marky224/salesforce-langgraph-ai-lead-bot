@@ -14,9 +14,9 @@ const CONFIG = {
   backendUrl: window.CHAT_BACKEND_URL || 'http://localhost:8000',
 
   assistant: {
-    name: 'Alex',
+    name: 'TARS',
     tagline: 'AI Solutions Advisor',
-    avatar: 'https://api.dicebear.com/9.x/bottts-neutral/svg?seed=Alex&backgroundColor=4f46e5',
+    avatar: 'https://zealous-moss-0360b7210.7.azurestaticapps.net/tars-avatar.svg',
   },
 
   user: {
@@ -139,7 +139,7 @@ async function initConversation() {
   } catch (err) {
     console.error('Failed to initialise conversation:', err);
     return (
-      "Hey there! I'm Alex, an AI solutions advisor working with Mark. " +
+      "Hey there! I'm TARS, an AI solutions advisor working with Mark. " +
       "Whether you need help with IT automation, data engineering, " +
       "cybersecurity, or AI-powered workflows — I'd love to hear " +
       "what you're working on."
