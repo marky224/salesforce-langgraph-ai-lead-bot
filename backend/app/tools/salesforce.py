@@ -331,7 +331,6 @@ async def create_transcript_task(
         "Status": "Completed",
         "Priority": "Normal",
         "ActivityDate": date.today().isoformat(),
-        "Type": "Other",
     }
 
     logger.info("Creating Salesforce Task for Lead %s: %s", lead_id, subject)

@@ -125,10 +125,18 @@ async def _invoke_llm(system_prompt: str, messages: list) -> str:
 
 def _safe_parse_json(text: str) -> dict:
     """
-    Parse a JSON string returned by the LLM, stripping markdown fences
-    and leading/trailing whitespace.  Returns ``{}`` on failure.
+    Parse a JSON string returned by the LLM, stripping markdown fences,
+    leading/trailing whitespace, and any preamble text before the JSON.
+
+    Handles common LLM quirks:
+    - Markdown fences: ```json ... ```
+    - Preamble text: "Assistant: {..." or "Here is the JSON:\n{..."
+    - Trailing text after the closing brace
+
+    Returns ``{}`` on failure.
     """
     cleaned = text.strip()
+
     # Strip ```json ... ``` fencing if present
     if cleaned.startswith("```"):
         cleaned = cleaned.split("\n", 1)[-1]  # remove first line
@@ -136,12 +144,25 @@ def _safe_parse_json(text: str) -> dict:
         cleaned = cleaned.rsplit("```", 1)[0]
     cleaned = cleaned.strip()
 
+    # Strip any preamble before the first '{' (e.g. "Assistant: {...")
+    # This handles xAI/Grok's tendency to prefix JSON with "Assistant:"
+    brace_pos = cleaned.find("{")
+    if brace_pos > 0:
+        preamble = cleaned[:brace_pos].strip()
+        if preamble:
+            logger.debug("Stripping JSON preamble: '%.80s'", preamble)
+        cleaned = cleaned[brace_pos:]
+
+    # Strip any trailing text after the last '}'
+    last_brace = cleaned.rfind("}")
+    if last_brace >= 0:
+        cleaned = cleaned[: last_brace + 1]
+
     try:
         return json.loads(cleaned)
     except (json.JSONDecodeError, ValueError):
         logger.warning("Failed to parse LLM JSON output: %.200s", text)
         return {}
-
 
 def _merge_dict(base: dict, updates: dict) -> dict:
     """
