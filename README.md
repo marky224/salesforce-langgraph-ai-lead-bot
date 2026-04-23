@@ -1,35 +1,78 @@
 # salesforce-langgraph-ai-lead-bot
 
-[![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://python.org)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://python.org)
 [![LangGraph](https://img.shields.io/badge/LangGraph-0.4+-1C3C3C?logo=langchain&logoColor=white)](https://langchain-ai.github.io/langgraph/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Salesforce](https://img.shields.io/badge/Salesforce-Agentforce-00A1E0?logo=salesforce&logoColor=white)](https://www.salesforce.com)
-[![Azure](https://img.shields.io/badge/Azure-Container%20Apps-0078D4?logo=microsoft-azure&logoColor=white)](https://azure.microsoft.com/en-us/products/container-apps)
+[![Azure Container Apps](https://img.shields.io/badge/Azure-Container%20Apps-0078D4?logo=microsoft-azure&logoColor=white)](https://azure.microsoft.com/en-us/products/container-apps)
+[![Azure Static Web Apps](https://img.shields.io/badge/Azure-Static%20Web%20Apps-0078D4?logo=microsoft-azure&logoColor=white)](https://azure.microsoft.com/en-us/products/app-service/static)
+[![Tests](https://img.shields.io/badge/Tests-63%20passing-brightgreen?logo=pytest&logoColor=white)](backend/tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 An end-to-end AI sales lead generation system that qualifies prospects through natural conversation and automatically creates enriched records in Salesforce — with intelligent follow-up powered by Agentforce.
 
 ---
 
-## Demo
+## Live Demo
 
-> 🚧 **Live demo coming soon** — the chat widget will be embedded on [markandrewmarquez.com](https://markandrewmarquez.com)
+**Try it now** — visit [markandrewmarquez.com](https://markandrewmarquez.com) and click the chat bubble in the bottom-right corner to talk to TARS.
 
-<!-- TODO: Add screenshot/gif of the chat widget in action -->
-<!-- TODO: Add screenshot of the Salesforce Lead + Tasks created -->
+**Swagger UI** — explore the API at [salesforce-langgraph-ai-lead-bot...azurecontainerapps.io/docs](https://salesforce-langgraph-ai-lead-bot.purplesky-0949fcd0.centralus.azurecontainerapps.io/docs)
+
+> **Note:** The backend runs on Azure Container Apps free tier with scale-to-zero enabled. The first message may take 10–15 seconds while the container cold-starts.
+
+### Chat Widget — TARS Greeting
+
+The floating chat bubble on [markandrewmarquez.com](https://markandrewmarquez.com). Click it and TARS introduces itself with a warm opening question.
+
+![TARS chatbot greeting on markandrewmarquez.com](images/tars-demo-screenshot.jpg)
+
+### Conversation Flow — Discovery & Qualification
+
+TARS guides the visitor through a natural conversation, exploring pain points and qualifying the lead with questions about budget, timeline, and company size.
+
+![TARS mid-conversation during qualification](images/tars-conversation.jpg)
+
+### Salesforce — Lead Record with Custom Fields
+
+After the conversation completes, a Lead is automatically created in Salesforce with all qualification data populated in custom fields.
+
+![Salesforce Lead record with custom qualification fields](images/salesforce-lead.jpg)
+
+### Salesforce — Conversation Transcript
+
+The full chat transcript is attached as a Task record linked to the Lead, giving the sales team complete context.
+
+![Salesforce Task record with conversation transcript](images/salesforce-transcript.jpg)
+
+### Agentforce — Automated Follow-Up
+
+The Agentforce agent analyzes the lead and transcript, then creates prioritized follow-up Tasks and drafts a personalized email — all without human intervention.
+
+![Agentforce-created follow-up Tasks and email draft](images/agentforce-followup.jpg)
+
+### API — Swagger UI
+
+The FastAPI backend exposes a fully documented REST API with streaming support.
+
+![Swagger UI showing API endpoints](images/swagger-ui.jpg)
+
+### Demo Video
+
+> 📹 **Full walkthrough video coming soon**
 
 ---
 
 ## How It Works
 
-A visitor lands on the website and clicks the floating chat bubble. Alex, the AI solutions advisor, guides them through a natural conversation — exploring their challenges, understanding their timeline and budget, and collecting contact information. Once the conversation wraps up, the system automatically:
+A visitor lands on the website and clicks the floating chat bubble. TARS, the AI solutions advisor, guides them through a natural conversation — exploring their challenges, understanding their timeline and budget, and collecting contact information. Once the conversation wraps up, the system automatically:
 
 1. **Scores the lead** (0–100) based on budget, timeline, company size, decision-maker status, and pain points
 2. **Creates a Lead** in Salesforce with all qualification data in custom fields
 3. **Attaches the full transcript** as a linked Task record
 4. **Triggers an Agentforce agent** that analyzes the conversation and creates prioritized follow-up Tasks, drafts a personalized email, and optionally creates an Opportunity for high-value leads
 
-The conversation feels natural — the bot adapts if the visitor volunteers information early, handles objections with empathy, and gracefully captures whatever data is available if someone needs to leave mid-conversation.
+The conversation feels natural — TARS adapts if the visitor volunteers information early, handles objections with empathy, and gracefully captures whatever data is available if someone needs to leave mid-conversation.
 
 ---
 
@@ -87,38 +130,42 @@ On conversation completion:
     → Agentforce: analyzes transcript + creates follow-up actions
 ```
 
+See [architecture.md](architecture.md) for detailed Mermaid diagrams of the LangGraph state machine, data model, and scoring rubric.
+
 ---
 
 ## Features
 
-**Conversational AI Chatbot**
+**TARS — Conversational AI Sales Chatbot**
 - Stateful multi-turn conversations with persistent memory across page reloads
-- 7 conversation stages: greeting → discovery → qualification → objection handling → lead capture → confirmation → completion
-- Natural stage transitions — adapts if the visitor shares information out of order
-- Soft re-engagement when visitors try to exit early (one attempt, then graceful capture)
-- Swappable LLM provider via environment variable (Anthropic, OpenAI, Groq, xAI)
+- 7 conversation stages: greeting → discovery → qualification → objection handling → lead capture → confirmation → complete
+- Natural conversation flow — adapts dynamically if visitors volunteer information early
+- Objection handling with empathy and value reinforcement
+- Graceful degradation — captures whatever data is available if someone exits mid-conversation
+- Custom TARS robot avatar and dark-themed chat bubble UI
 
-**Lead Qualification & Scoring**
-- Deterministic 0-100 scoring rubric across 6 dimensions
-- Real-time data extraction from conversation context using structured JSON prompts
-- Incremental data accumulation — never overwrites previously captured information
-- Qualification completeness tracking to determine conversation readiness
+**Swappable LLM Providers**
+- Anthropic Claude, OpenAI GPT-4o, Groq (Llama/Mixtral), xAI Grok
+- Switch providers via a single environment variable (`LLM_PROVIDER`)
+- Currently running xAI Grok (`grok-4-1-fast-reasoning`) in production
 
 **Salesforce Integration**
-- OAuth 2.0 Connected App with Client Credentials Flow
-- Lead creation with 6 custom fields (score, budget, timeline, pain points, company size, transcript ID)
+- Automatic Lead creation with 6 custom qualification fields
 - Full conversation transcript attached as a linked Task record
-- Async API calls via thread pool to avoid blocking the FastAPI event loop
+- OAuth 2.0 Client Credentials Flow (server-to-server, no user interaction)
+- Connected via `simple_salesforce` with error handling and retry logic
 
-**Agentforce Automation**
-- Record-Triggered Flow invokes the agent on Lead creation
-- 4 agent topics: Lead Analysis, Follow-Up Tasks, Email Drafting, Opportunity Creation
-- Priority-scaled actions: High leads get 3 tasks + email + opportunity, Low leads get 1 nurture task
-- Personalized email drafts referencing specific pain points from the conversation
+**Agentforce AI Follow-Up (Inside Salesforce)**
+- Record-Triggered Flow fires automatically on Lead creation
+- Consolidated Apex class executes all 4 operations in a single agent turn
+- Creates prioritized follow-up Tasks with due dates
+- Drafts personalized follow-up email referencing conversation pain points
+- Optionally creates an Opportunity for high-value leads (score ≥ 80, budget ≥ $50K)
 
-**Embeddable Widget**
-- Floating chat bubble with dark theme matched to the host site
-- Cross-origin deployment: widget files on Azure Static Web Apps, embed snippet on GitHub Pages
+**Production Deployment**
+- Backend on Azure Container Apps (free tier, scale-to-zero)
+- Frontend widget on Azure Static Web Apps (CDN-hosted, cross-origin)
+- Embedded on GitHub Pages portfolio via 2-line `<script>` snippet
 - SSE streaming for real-time token-by-token display
 - Mobile responsive (fullscreen on small screens)
 - Lazy-loaded — nlux and the greeting only initialize when the bubble is first clicked
@@ -148,6 +195,15 @@ salesforce-langgraph-ai-lead-bot/
 ├── architecture.md
 ├── .env.example
 ├── .gitignore
+├── LICENSE
+│
+├── images/                          # Screenshots for README
+│   ├── tars-demo-screenshot.jpg
+│   ├── tars-conversation.jpg
+│   ├── salesforce-lead.jpg
+│   ├── salesforce-transcript.jpg
+│   ├── agentforce-followup.jpg
+│   └── swagger-ui.jpg
 │
 ├── backend/
 │   ├── app/
@@ -158,7 +214,7 @@ salesforce-langgraph-ai-lead-bot/
 │   │   │   ├── nodes.py             # All graph node functions
 │   │   │   ├── edges.py             # Conditional routing logic
 │   │   │   ├── graph.py             # Graph builder + compilation
-│   │   │   └── prompts.py           # System prompts for each stage
+│   │   │   └── prompts.py           # System prompts (TARS persona)
 │   │   ├── tools/
 │   │   │   ├── salesforce.py        # Salesforce API wrappers
 │   │   │   └── qualification.py     # Deterministic lead scoring
@@ -172,24 +228,40 @@ salesforce-langgraph-ai-lead-bot/
 │   ├── Dockerfile
 │   ├── docker-compose.yml
 │   ├── requirements.txt
-│   └── DEPLOY.md
+│   ├── DEPLOY.md                    # Full Azure deployment guide
+│   └── REDEPLOY.md                  # Quick redeploy workflow
 │
 ├── frontend/
 │   ├── widget.js                    # nlux chat widget + SSE adapter
 │   ├── chat-widget.css              # Widget styles (dark theme)
+│   ├── tars-avatar.svg              # Custom TARS robot avatar
+│   ├── staticwebapp.config.json     # CORS headers for cross-origin loading
+│   ├── index.html                   # Standalone demo page
 │   ├── embed-snippet.html           # Minimal code for GitHub Pages
-│   └── index.html                   # Standalone demo page
+│   └── INTEGRATION.md              # Widget integration guide with real URLs
 │
 └── salesforce/
-    ├── connected-app-setup.md
-    ├── custom-fields.md
+    ├── connected-app-setup.md       # OAuth Connected App configuration
+    ├── custom-fields.md             # 6 custom Lead fields
+    ├── deploy/                      # Apex classes (SFDX project)
+    │   └── force-app/main/default/classes/
+    │       ├── ProcessWebChatLead.cls       # Consolidated Agentforce action
+    │       ├── ProcessWebChatLeadTest.cls   # Test class (12/12 passing)
+    │       └── ...
+    ├── agentscript/                 # Agent Script CLI workflow
+    │   ├── agentscript-deployment.md        # CLI-first deploy guide
+    │   ├── sfdx-project.json
+    │   └── force-app/main/default/aiAuthoringBundles/
+    │       └── Lead_Qualification_Follow_Up_Agent/
+    │           ├── Lead_Qualification_Follow_Up_Agent.agent
+    │           └── Lead_Qualification_Follow_Up_Agent.aiAuthoringBundle-meta.xml
     ├── agentforce/
-    │   ├── agent-instructions.md
-    │   ├── agent-topics.md
-    │   └── agent-setup.md
+    │   ├── agent-instructions.md    # Agent system prompt
+    │   ├── agent-topics.md          # 4 agent topics + instructions
+    │   └── agent-setup.md           # UI-based setup walkthrough
     └── flows/
-        ├── Lead_Created_Flow.md
-        └── flow-setup.md
+        ├── Lead_Created_Flow.md     # Flow specification
+        └── flow-setup.md            # Flow setup walkthrough
 ```
 
 ---
@@ -198,7 +270,7 @@ salesforce-langgraph-ai-lead-bot/
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.12+
 - Docker (for containerized deployment)
 - A Salesforce Developer Edition org ([free signup](https://developer.salesforce.com/signup))
 - An API key for at least one LLM provider
@@ -220,7 +292,7 @@ Follow these guides in order:
 1. [Custom Fields](salesforce/custom-fields.md) — create the 6 custom fields on the Lead object
 2. [Connected App](salesforce/connected-app-setup.md) — set up OAuth authentication
 3. [Record-Triggered Flow](salesforce/flows/flow-setup.md) — create the automation flow
-4. [Agentforce Agent](salesforce/agentforce/agent-setup.md) — configure the AI follow-up agent
+4. Agentforce Agent — configure via [UI setup](salesforce/agentforce/agent-setup.md) or [Agent Script CLI](salesforce/agentscript/agentscript-deployment.md)
 
 ### 3. Run locally
 
@@ -234,7 +306,7 @@ The API is now running at `http://localhost:8000`. Visit `http://localhost:8000/
 
 ### 4. Test the chat widget
 
-Open `frontend/index.html` in a browser (or use VS Code Live Server). The chat bubble should appear in the bottom-right corner. Click it to start a conversation.
+Open `frontend/index.html` in a browser (or use VS Code Live Server). The chat bubble should appear in the bottom-right corner. Click it to start a conversation with TARS.
 
 ### 5. Run tests
 
@@ -247,7 +319,7 @@ All 63 tests should pass in under 2 seconds.
 
 ### 6. Deploy
 
-See [DEPLOY.md](backend/DEPLOY.md) for full Azure Container Apps + Static Web Apps deployment instructions.
+See [DEPLOY.md](backend/DEPLOY.md) for full Azure Container Apps + Static Web Apps deployment instructions, or [REDEPLOY.md](backend/REDEPLOY.md) for the quick redeploy workflow.
 
 ---
 
@@ -257,7 +329,7 @@ See [DEPLOY.md](backend/DEPLOY.md) for full Azure Container Apps + Static Web Ap
 |---|---|---|
 | `POST` | `/chat` | Synchronous chat — send message, get full reply |
 | `POST` | `/chat/stream` | Streaming chat via SSE — real-time token delivery |
-| `POST` | `/chat/init` | Start a new conversation and get the greeting |
+| `POST` | `/chat/init` | Start a new conversation and get the TARS greeting |
 | `GET` | `/health` | Liveness probe — returns version + timestamp |
 | `GET` | `/health/salesforce` | Salesforce connectivity check + API usage |
 | `GET` | `/docs` | Interactive Swagger UI |
@@ -265,14 +337,14 @@ See [DEPLOY.md](backend/DEPLOY.md) for full Azure Container Apps + Static Web Ap
 ### Example: Chat Request
 
 ```bash
-curl -X POST http://localhost:8000/chat \
+curl -X POST https://salesforce-langgraph-ai-lead-bot.purplesky-0949fcd0.centralus.azurecontainerapps.io/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "We need help automating our CRM workflows"}'
 ```
 
 ```json
 {
-  "reply": "Hey there! I'm Alex. That sounds like a great area to explore...",
+  "reply": "Hey there! I'm TARS. That sounds like a great area to explore — CRM workflow automation can save teams a ton of manual effort. What's driving the need right now? Are you running into specific bottlenecks, or is it more of a general efficiency push?",
   "thread_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "stage": "discovery",
   "is_complete": false,
@@ -286,8 +358,11 @@ curl -X POST http://localhost:8000/chat \
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `LLM_PROVIDER` | No | `anthropic` | LLM backend: `anthropic`, `openai`, `groq`, `xai` |
+| `LLM_PROVIDER` | No | `xai` | LLM backend: `anthropic`, `openai`, `groq`, `xai` |
 | `ANTHROPIC_API_KEY` | Yes* | — | API key for the active provider |
+| `OPENAI_API_KEY` | Yes* | — | API key for the active provider |
+| `GROQ_API_KEY` | Yes* | — | API key for the active provider |
+| `XAI_API_KEY` | Yes* | — | API key for the active provider |
 | `SF_INSTANCE_URL` | Yes | — | Salesforce org URL |
 | `SF_CLIENT_ID` | Yes | — | Connected App consumer key |
 | `SF_CLIENT_SECRET` | Yes | — | Connected App consumer secret |
@@ -298,8 +373,6 @@ curl -X POST http://localhost:8000/chat \
 | `LOG_LEVEL` | No | `INFO` | Python logging level |
 
 \* Only the key for the configured `LLM_PROVIDER` is required.
-
----
 
 ---
 
