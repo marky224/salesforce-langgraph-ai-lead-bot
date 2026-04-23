@@ -164,6 +164,19 @@ def route_after_router(state: GraphState) -> str:
             logger.warning("Unrecognised stage '%s', falling back to discovery", stage)
             return NODE_DISCOVERY
 
+    # Hard guard: if we have the visitor's name but no company, don't let the
+    # LLM router skip to confirmation — go back to lead_capture to ask for it.
+    # Only applies when name is present (conversation progressed enough to ask);
+    # early-exit flows with only an email are allowed to proceed as-is.
+    if stage == ConversationStage.CONFIRMATION:
+        lead_data = state.get("lead_data", {})
+        has_name = lead_data.get("first_name") or lead_data.get("last_name")
+        if has_name and not lead_data.get("company"):
+            logger.info(
+                "Edge: router wanted confirmation but company name is missing → lead_capture"
+            )
+            return NODE_LEAD_CAPTURE
+
     node = _STAGE_TO_NODE.get(stage, NODE_DISCOVERY)
     logger.info("Edge: router → %s (stage=%s)", node, stage.value)
     return node

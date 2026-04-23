@@ -326,34 +326,45 @@ async def confirmation_node(state: GraphState) -> dict:
     logger.info("Node: confirmation")
 
     transcript = format_transcript(state.get("messages", []))
-    known_info = format_known_info(_gs(state, "lead_data"), _gs(state, "qualification_data"))
 
-    # Build qualification summary for the confirmation prompt
+    # Only pass user-facing contact fields — not internal qualification fields
+    # like decision_maker, company_size, or budget enumerations.
+    ld = _gs(state, "lead_data")
+    contact_parts: list[str] = []
+    name = " ".join(p for p in (ld.get("first_name"), ld.get("last_name")) if p)
+    if name:
+        contact_parts.append(f"Name: {name}")
+    if ld.get("email"):
+        contact_parts.append(f"Email: {ld['email']}")
+    if ld.get("company"):
+        contact_parts.append(f"Company: {ld['company']}")
+    if ld.get("phone"):
+        contact_parts.append(f"Phone: {ld['phone']}")
+    contact_summary = "\n".join(contact_parts) if contact_parts else "No contact info captured yet."
+
+    # Qualification summary: only human-readable fields
     qd = _gs(state, "qualification_data")
     qual_parts = []
+    if qd.get("pain_points"):
+        qual_parts.append(f"Key challenges: {'; '.join(qd['pain_points'])}")
+    if qd.get("goals"):
+        qual_parts.append(f"Goals: {'; '.join(qd['goals'])}")
     if qd.get("budget_range") and qd["budget_range"] != "Unknown":
         qual_parts.append(f"Budget: {qd['budget_range']}")
     if qd.get("timeline") and qd["timeline"] != "Unknown":
         qual_parts.append(f"Timeline: {qd['timeline']}")
-    if qd.get("pain_points"):
-        qual_parts.append(f"Key challenges: {'; '.join(qd['pain_points'])}")
 
     prompt = CONFIRMATION_PROMPT.format(
         persona=PERSONA,
         transcript=transcript,
-        lead_summary=known_info,
+        lead_summary=contact_summary,
         qualification_summary="\n".join(qual_parts) if qual_parts else "Limited info collected.",
     )
     reply = await _invoke_llm(prompt, list(state.get("messages", [])))
 
-    # Also generate a transcript summary for the Salesforce Description field
-    summary_prompt = TRANSCRIPT_SUMMARY_PROMPT.format(transcript=transcript)
-    summary = await _invoke_llm(summary_prompt, [])
-
     return {
         "messages": [AIMessage(content=reply)],
         "stage": ConversationStage.CONFIRMATION,
-        "transcript_summary": summary,
     }
 
 
@@ -423,12 +434,12 @@ async def extraction_node(state: GraphState) -> dict:
 
 async def scoring_node(state: GraphState) -> dict:
     """
-    Compute a 0-100 lead quality score from qualification + contact data.
+    Compute a 0-100 lead quality score from qualification + contact data,
+    and generate the transcript summary for the Salesforce Description field.
 
-    Uses the deterministic rubric in ``SCORING_PROMPT``.  The LLM applies
-    the rubric and returns a score + breakdown JSON.
-
-    This node runs once, right before the Salesforce node.
+    The transcript summary is generated here (not in confirmation_node) so
+    that it never gets streamed to the frontend — this node is excluded from
+    the streaming conversational node list.
     """
     logger.info("Node: scoring")
 
@@ -445,9 +456,16 @@ async def scoring_node(state: GraphState) -> dict:
     # Clamp score to valid range
     score = max(0, min(100, int(score)))
 
+    # Generate transcript summary for Salesforce Description field.
+    # Done here so it is never streamed to the frontend.
+    transcript = format_transcript(state.get("messages", []))
+    summary_prompt = TRANSCRIPT_SUMMARY_PROMPT.format(transcript=transcript)
+    summary = await _invoke_llm(summary_prompt, [])
+
     return {
         "lead_score": score,
         "lead_score_breakdown": breakdown,
+        "transcript_summary": summary,
     }
 
 
