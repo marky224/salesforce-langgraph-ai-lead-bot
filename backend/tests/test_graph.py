@@ -224,29 +224,22 @@ class TestConfirmationNode:
     """Tests for confirmation_node."""
 
     @pytest.mark.asyncio
-    async def test_returns_ai_message_and_summary(self, conversation_state, mock_llm):
-        # First call: confirmation message, second call: transcript summary
-        mock_llm.ainvoke.side_effect = [
-            MagicMock(content="Great, let me confirm everything..."),
-            MagicMock(content="Prospect discussed CRM challenges..."),
-        ]
+    async def test_returns_ai_message(self, conversation_state, mock_llm):
+        mock_llm.ainvoke.return_value = MagicMock(
+            content="It was great chatting! Does that all look correct?"
+        )
 
         result = await confirmation_node(conversation_state)
 
         assert len(result["messages"]) == 1
+        assert isinstance(result["messages"][0], AIMessage)
         assert result["stage"] == ConversationStage.CONFIRMATION
-        assert "transcript_summary" in result
-        assert len(result["transcript_summary"]) > 0
 
     @pytest.mark.asyncio
-    async def test_makes_two_llm_calls(self, conversation_state, mock_llm):
-        mock_llm.ainvoke.side_effect = [
-            MagicMock(content="Confirmation"),
-            MagicMock(content="Summary"),
-        ]
-
+    async def test_makes_one_llm_call(self, conversation_state, mock_llm):
+        # Transcript summary is now generated in scoring_node, not here.
         await confirmation_node(conversation_state)
-        assert mock_llm.ainvoke.call_count == 2
+        assert mock_llm.ainvoke.call_count == 1
 
 
 # ---------------------------------------------------------------------------
@@ -370,6 +363,19 @@ class TestScoringNode:
 
         result = await scoring_node(conversation_state)
         assert result["lead_score"] == 0
+
+    @pytest.mark.asyncio
+    async def test_generates_transcript_summary(self, conversation_state, mock_llm):
+        # First call: scoring JSON, second call: transcript summary prose
+        mock_llm.ainvoke.side_effect = [
+            MagicMock(content=json.dumps({"score": 50, "breakdown": {}})),
+            MagicMock(content="Prospect is evaluating CRM solutions with a clear budget."),
+        ]
+
+        result = await scoring_node(conversation_state)
+
+        assert "transcript_summary" in result
+        assert result["transcript_summary"] == "Prospect is evaluating CRM solutions with a clear budget."
 
 
 # ---------------------------------------------------------------------------
