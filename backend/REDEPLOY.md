@@ -28,11 +28,11 @@ All tests must pass before deploying.
 ### Step 2: Build and deploy
 
 ```powershell
-# Build the image remotely (bump the version tag each time: v3, v4, v5...) -- current: v6
-az acr build --registry aileadbotacr --resource-group rg-ai-lead-bot --image ai-lead-bot:v6 .
+# Build the image remotely (bump the version tag each time: v3, v4, v5...) -- current: v11 (4/23/26 - 9:32pm CT)
+az acr build --registry aileadbotacr --resource-group rg-ai-lead-bot --image ai-lead-bot:v11 .
 
 # Update the container app to use the new image
-az containerapp update --name salesforce-langgraph-ai-lead-bot --resource-group rg-ai-lead-bot --image aileadbotacr.azurecr.io/ai-lead-bot:v6
+az containerapp update --name salesforce-langgraph-ai-lead-bot --resource-group rg-ai-lead-bot --image aileadbotacr.azurecr.io/ai-lead-bot:v11
 ```
 
 ### Step 3: Wait for the container to start
