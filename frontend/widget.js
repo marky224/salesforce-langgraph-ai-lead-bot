@@ -99,6 +99,9 @@ function createCustomAdapter() {
                 if (data.thread_id) {
                   threadId = data.thread_id;
                 }
+                if (data.lead_data) {
+                  updateLeadFieldsPanel(data.lead_data, data.stage);
+                }
                 if (data.is_complete) {
                   handleConversationComplete(data.lead_id);
                 }
@@ -227,6 +230,62 @@ function toggleChat() {
 }
 
 // ---------------------------------------------------------------------------
+// Lead fields panel — shows what contact info has been collected so far
+// ---------------------------------------------------------------------------
+
+const LEAD_CAPTURE_STAGES = new Set([
+  'lead_capture',
+  'confirmation',
+  'complete',
+]);
+
+function updateLeadFieldsPanel(leadData, stage) {
+  const panel = document.getElementById('mm-lead-fields');
+  if (!panel) return;
+
+  // Show the panel once we've reached lead_capture (or later), OR whenever
+  // any contact field has been captured — whichever comes first.
+  const hasAnyValue =
+    leadData &&
+    (leadData.first_name ||
+      leadData.last_name ||
+      leadData.title ||
+      leadData.company ||
+      leadData.email ||
+      leadData.phone);
+
+  const shouldShow = LEAD_CAPTURE_STAGES.has(stage) || hasAnyValue;
+
+  if (!shouldShow) {
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = 'block';
+
+  const fullName = [leadData.first_name, leadData.last_name]
+    .filter(Boolean)
+    .join(' ');
+
+  const set = (id, value) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (value) {
+      el.textContent = value;
+      el.classList.remove('empty');
+    } else {
+      el.textContent = '';
+      el.classList.add('empty');
+    }
+  };
+
+  set('mm-lf-name', fullName);
+  set('mm-lf-title', leadData.title);
+  set('mm-lf-company', leadData.company);
+  set('mm-lf-email', leadData.email);
+  set('mm-lf-phone', leadData.phone);
+}
+
+// ---------------------------------------------------------------------------
 // Conversation completion handler
 // ---------------------------------------------------------------------------
 
@@ -277,6 +336,14 @@ function injectWidget() {
       </button>
     </div>
     <div id="mm-chat-container"></div>
+    <div id="mm-lead-fields" style="display:none" aria-label="Contact info collected so far">
+      <div class="mm-lf-heading">Contact info</div>
+      <div class="mm-lf-row"><span class="mm-lf-label">Name:</span><span id="mm-lf-name" class="mm-lf-value empty"></span></div>
+      <div class="mm-lf-row"><span class="mm-lf-label">Title:</span><span id="mm-lf-title" class="mm-lf-value empty"></span></div>
+      <div class="mm-lf-row"><span class="mm-lf-label">Company:</span><span id="mm-lf-company" class="mm-lf-value empty"></span></div>
+      <div class="mm-lf-row"><span class="mm-lf-label">Email:</span><span id="mm-lf-email" class="mm-lf-value empty"></span></div>
+      <div class="mm-lf-row"><span class="mm-lf-label">Phone:</span><span id="mm-lf-phone" class="mm-lf-value empty"></span></div>
+    </div>
     <div id="mm-completion-banner" style="display:none">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="20 6 9 17 4 12"></polyline>

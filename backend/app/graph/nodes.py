@@ -334,6 +334,8 @@ async def confirmation_node(state: GraphState) -> dict:
     name = " ".join(p for p in (ld.get("first_name"), ld.get("last_name")) if p)
     if name:
         contact_parts.append(f"Name: {name}")
+    if ld.get("title"):
+        contact_parts.append(f"Title: {ld['title']}")
     if ld.get("email"):
         contact_parts.append(f"Email: {ld['email']}")
     if ld.get("company"):

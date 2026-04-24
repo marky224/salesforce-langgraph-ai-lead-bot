@@ -308,10 +308,21 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             logger.exception("Stream failed for thread %s", thread_id)
             yield f"data: {_sse_json({'error': 'Stream interrupted. Please try again.'})}\n\n"
 
+        # Fetch the final checkpointed state so we can return the current
+        # lead_data snapshot — the frontend uses this to render a live
+        # "contact info collected so far" panel during lead capture.
+        lead_data: dict[str, Any] = {}
+        try:
+            snapshot = await graph.aget_state(config)
+            if snapshot and snapshot.values:
+                lead_data = snapshot.values.get("lead_data", {}) or {}
+        except Exception:
+            logger.warning("Failed to fetch final state for thread %s", thread_id, exc_info=True)
+
         # Send completion event
         is_complete = final_stage == ConversationStage.COMPLETE
         yield (
-            f"data: {_sse_json({'done': True, 'thread_id': thread_id, 'stage': final_stage.value, 'is_complete': is_complete, 'lead_id': lead_id})}\n\n"
+            f"data: {_sse_json({'done': True, 'thread_id': thread_id, 'stage': final_stage.value, 'is_complete': is_complete, 'lead_id': lead_id, 'lead_data': lead_data})}\n\n"
         )
 
         logger.info(
