@@ -164,18 +164,38 @@ def route_after_router(state: GraphState) -> str:
             logger.warning("Unrecognised stage '%s', falling back to discovery", stage)
             return NODE_DISCOVERY
 
-    # Hard guard: if we have the visitor's name but no company, don't let the
-    # LLM router skip to confirmation — go back to lead_capture to ask for it.
-    # Only applies when name is present (conversation progressed enough to ask);
-    # early-exit flows with only an email are allowed to proceed as-is.
+    # Hard guard: if we have the visitor's name but either email or company
+    # is missing, don't let the LLM router skip to confirmation — go back to
+    # lead_capture to ask for whatever's missing.  Only applies when name is
+    # present (conversation progressed enough to ask); early-exit flows with
+    # only an email are allowed to proceed as-is.
     if stage == ConversationStage.CONFIRMATION:
         lead_data = state.get("lead_data", {})
         has_name = lead_data.get("first_name") or lead_data.get("last_name")
-        if has_name and not lead_data.get("company"):
+        if has_name and (not lead_data.get("email") or not lead_data.get("company")):
+            missing = []
+            if not lead_data.get("email"):
+                missing.append("email")
+            if not lead_data.get("company"):
+                missing.append("company")
             logger.info(
-                "Edge: router wanted confirmation but company name is missing → lead_capture"
+                "Edge: router wanted confirmation but %s missing → lead_capture",
+                "+".join(missing),
             )
             return NODE_LEAD_CAPTURE
+
+    # Hard guard: if the router picks lead_capture but name + email + company
+    # are already captured, force confirmation. Phone is optional and a decline
+    # would otherwise keep the flow stuck in lead_capture forever, so the lead
+    # never gets submitted to Salesforce.
+    if stage == ConversationStage.LEAD_CAPTURE:
+        lead_data = state.get("lead_data", {})
+        has_name = lead_data.get("first_name") or lead_data.get("last_name")
+        if has_name and lead_data.get("email") and lead_data.get("company"):
+            logger.info(
+                "Edge: router picked lead_capture but required fields (name+email+company) captured → confirmation"
+            )
+            return NODE_CONFIRMATION
 
     node = _STAGE_TO_NODE.get(stage, NODE_DISCOVERY)
     logger.info("Edge: router → %s (stage=%s)", node, stage.value)

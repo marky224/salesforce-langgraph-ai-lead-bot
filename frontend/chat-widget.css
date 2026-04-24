@@ -216,6 +216,56 @@
 }
 
 /* ---------------------------------------------------------------------------
+   Lead Fields Panel (live snapshot of captured contact info)
+   --------------------------------------------------------------------------- */
+
+#mm-lead-fields {
+  padding: 10px 14px;
+  background: var(--mm-surface-raised);
+  border-top: 1px solid var(--mm-border);
+  font-size: 12.5px;
+  color: var(--mm-text);
+  flex-shrink: 0;
+  animation: mm-banner-slide 0.25s ease;
+}
+
+.mm-lf-heading {
+  font-family: var(--mm-font-heading);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mm-text-muted);
+  margin-bottom: 6px;
+}
+
+.mm-lf-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  line-height: 1.45;
+  padding: 1px 0;
+}
+
+.mm-lf-label {
+  min-width: 62px;
+  color: var(--mm-text-muted);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.mm-lf-value {
+  color: var(--mm-text);
+  word-break: break-word;
+  min-height: 1em;
+}
+
+.mm-lf-value.empty::after {
+  content: '—';
+  color: var(--mm-border);
+}
+
+/* ---------------------------------------------------------------------------
    Completion Banner
    --------------------------------------------------------------------------- */
 
