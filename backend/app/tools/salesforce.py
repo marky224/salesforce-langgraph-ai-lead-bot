@@ -177,6 +177,28 @@ async def _run_sync(func: Any, *args: Any, **kwargs: Any) -> Any:
     return await loop.run_in_executor(None, lambda: func(*args, **kwargs))
 
 
+async def _sf_call_with_retry(operation: Any) -> Any:
+    """
+    Invoke a Salesforce operation, refreshing the cached client and retrying
+    once if the session has expired.
+
+    ``operation`` is a callable that takes a ``Salesforce`` client and returns
+    the sync API result. It is invoked inside a thread pool via ``_run_sync``.
+    The client is fetched via ``_get_sf_client()`` on each attempt so a retry
+    picks up a freshly authenticated client after ``reset_sf_client()``.
+    """
+    from simple_salesforce.exceptions import SalesforceExpiredSession
+
+    try:
+        return await _run_sync(lambda: operation(_get_sf_client()))
+    except SalesforceExpiredSession:
+        logger.warning(
+            "Salesforce session expired; clearing cached client and retrying"
+        )
+        reset_sf_client()
+        return await _run_sync(lambda: operation(_get_sf_client()))
+
+
 # ---------------------------------------------------------------------------
 # Lead creation
 # ---------------------------------------------------------------------------
@@ -215,8 +237,6 @@ async def create_lead(
     SalesforceError
         If the API call fails.
     """
-    sf = _get_sf_client()
-
     # --- Build core fields ---
     payload: dict[str, Any] = {
         "LeadSource": "Web Chat",
@@ -276,7 +296,7 @@ async def create_lead(
     )
     logger.debug("Lead payload: %s", payload)
 
-    result = await _run_sync(sf.Lead.create, payload)
+    result = await _sf_call_with_retry(lambda sf: sf.Lead.create(payload))
 
     if not result.get("success"):
         errors = result.get("errors", [])
@@ -319,8 +339,6 @@ async def create_transcript_task(
     SalesforceError
         If the API call fails.
     """
-    sf = _get_sf_client()
-
     if subject is None:
         subject = f"AI Chat Transcript - {date.today().isoformat()}"
 
@@ -336,7 +354,7 @@ async def create_transcript_task(
     logger.info("Creating Salesforce Task for Lead %s: %s", lead_id, subject)
     logger.debug("Task payload: %s", payload)
 
-    result = await _run_sync(sf.Task.create, payload)
+    result = await _sf_call_with_retry(lambda sf: sf.Task.create(payload))
 
     if not result.get("success"):
         errors = result.get("errors", [])
@@ -347,10 +365,10 @@ async def create_transcript_task(
 
     # --- Update Lead with the transcript Task ID ---
     try:
-        await _run_sync(
-            sf.Lead.update,
-            lead_id,
-            {"Chat_Transcript_ID__c": task_id},
+        await _sf_call_with_retry(
+            lambda sf: sf.Lead.update(
+                lead_id, {"Chat_Transcript_ID__c": task_id}
+            )
         )
         logger.info("Lead %s updated with Chat_Transcript_ID__c: %s", lead_id, task_id)
     except Exception:
@@ -376,8 +394,8 @@ async def verify_connection() -> dict[str, Any]:
     health checks and startup verification.
     """
     try:
+        limits = await _sf_call_with_retry(lambda sf: sf.limits())
         sf = _get_sf_client()
-        limits = await _run_sync(lambda: sf.limits())
 
         daily_api = limits.get("DailyApiRequests", {})
         return {
@@ -417,8 +435,9 @@ async def delete_record(sobject: str, record_id: str) -> bool:
         True if deletion succeeded.
     """
     try:
-        sf = _get_sf_client()
-        await _run_sync(getattr(sf, sobject).delete, record_id)
+        await _sf_call_with_retry(
+            lambda sf: getattr(sf, sobject).delete(record_id)
+        )
         logger.info("Deleted %s record: %s", sobject, record_id)
         return True
     except Exception:
