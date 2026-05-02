@@ -1,15 +1,8 @@
 """
 Lead scoring and qualification tools for the AI Sales Lead Bot.
 
-Provides a **deterministic** scoring engine that applies the same rubric
-defined in ``prompts.SCORING_PROMPT`` without requiring an LLM call.
-This serves as:
-
-- The primary scorer when you want fast, predictable, zero-cost scoring.
-- A fallback if the LLM-based scoring node fails or times out.
-- A validation reference to compare against LLM-generated scores.
-
-The scoring rubric awards up to 100 points across six dimensions:
+Provides the canonical deterministic scoring engine used by the graph's
+scoring node. The rubric awards up to 100 points across six dimensions:
 budget (25), timeline (20), company size (15), decision-maker (15),
 pain points (15), and contact completeness (10).
 
@@ -41,31 +34,32 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Scoring tables (mirror the rubric in prompts.SCORING_PROMPT)
+# Scoring tables — canonical rubric. High tiers saturate (mid-market scores
+# the same as enterprise) which fits the consulting-lead use case.
 # ---------------------------------------------------------------------------
 
 _BUDGET_SCORES: dict[str, int] = {
     BudgetRange.OVER_100K.value: 25,
-    BudgetRange.FIFTY_TO_HUNDRED_K.value: 20,
-    BudgetRange.TEN_TO_FIFTY_K.value: 15,
+    BudgetRange.FIFTY_TO_HUNDRED_K.value: 25,
+    BudgetRange.TEN_TO_FIFTY_K.value: 18,
     BudgetRange.UNDER_10K.value: 10,
     BudgetRange.UNKNOWN.value: 0,
 }
 
 _TIMELINE_SCORES: dict[str, int] = {
     Timeline.IMMEDIATE.value: 20,
-    Timeline.ONE_TO_THREE_MONTHS.value: 15,
-    Timeline.THREE_TO_SIX_MONTHS.value: 10,
-    Timeline.SIX_PLUS_MONTHS.value: 5,
-    Timeline.JUST_EXPLORING.value: 2,
+    Timeline.ONE_TO_THREE_MONTHS.value: 18,
+    Timeline.THREE_TO_SIX_MONTHS.value: 14,
+    Timeline.SIX_PLUS_MONTHS.value: 8,
+    Timeline.JUST_EXPLORING.value: 3,
     Timeline.UNKNOWN.value: 0,
 }
 
 _COMPANY_SIZE_SCORES: dict[str, int] = {
     CompanySize.ENTERPRISE.value: 15,
-    CompanySize.LARGE.value: 12,
-    CompanySize.MEDIUM.value: 10,
-    CompanySize.SMALL.value: 7,
+    CompanySize.LARGE.value: 15,
+    CompanySize.MEDIUM.value: 12,
+    CompanySize.SMALL.value: 8,
     CompanySize.MICRO.value: 4,
     CompanySize.UNKNOWN.value: 0,
 }

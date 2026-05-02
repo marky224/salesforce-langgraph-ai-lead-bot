@@ -59,11 +59,11 @@ class TestComputeLeadScore:
         assert result["score"] == 0
         assert result["priority"] == "Low"
 
-    def test_medium_priority_boundary(self):
-        """Score of exactly 40 should be Medium."""
+    def test_medium_priority(self):
+        """A mid-tier mix should land in the Medium priority band (40-69)."""
         result = compute_lead_score(
             qualification_data={
-                "budget_range": "$10K-$50K",  # 15
+                "budget_range": "$10K-$50K",  # 18
                 "timeline": "Immediate",       # 20
                 "company_size": "Unknown",
                 "decision_maker": False,       # 5
@@ -71,7 +71,7 @@ class TestComputeLeadScore:
             },
             lead_data={},
         )
-        assert result["score"] == 40
+        assert result["score"] == 43
         assert result["priority"] == "Medium"
 
     def test_high_priority_boundary(self):
@@ -92,8 +92,8 @@ class TestComputeLeadScore:
     def test_each_budget_tier(self):
         for budget, expected in [
             ("Under $10K", 10),
-            ("$10K-$50K", 15),
-            ("$50K-$100K", 20),
+            ("$10K-$50K", 18),
+            ("$50K-$100K", 25),
             ("$100K+", 25),
             ("Unknown", 0),
         ]:
@@ -109,10 +109,10 @@ class TestComputeLeadScore:
     def test_each_timeline_tier(self):
         for timeline, expected in [
             ("Immediate", 20),
-            ("1-3 months", 15),
-            ("3-6 months", 10),
-            ("6+ months", 5),
-            ("Just exploring", 2),
+            ("1-3 months", 18),
+            ("3-6 months", 14),
+            ("6+ months", 8),
+            ("Just exploring", 3),
             ("Unknown", 0),
         ]:
             result = compute_lead_score(
