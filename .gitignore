@@ -59,6 +59,9 @@ out/
 # IDE — VS Code
 .vscode/
 
+# Claude Code — personal/local settings (per-contributor permissions)
+.claude/settings.local.json
+
 # IDE — general
 *.swp
 *.swo
