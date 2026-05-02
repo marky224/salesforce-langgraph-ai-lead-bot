@@ -164,36 +164,49 @@ def route_after_router(state: GraphState) -> str:
             logger.warning("Unrecognised stage '%s', falling back to discovery", stage)
             return NODE_DISCOVERY
 
-    # Hard guard: if we have the visitor's name but either email or company
-    # is missing, don't let the LLM router skip to confirmation — go back to
+    # Hard guard: if we have the visitor's name but a required field is
+    # missing, don't let the LLM router skip to confirmation — go back to
     # lead_capture to ask for whatever's missing.  Only applies when name is
     # present (conversation progressed enough to ask); early-exit flows with
     # only an email are allowed to proceed as-is.
     if stage == ConversationStage.CONFIRMATION:
         lead_data = state.get("lead_data", {})
         has_name = lead_data.get("first_name") or lead_data.get("last_name")
-        if has_name and (not lead_data.get("email") or not lead_data.get("company")):
+        title_ok = _title_satisfied(state)
+        if has_name and (
+            not lead_data.get("email")
+            or not lead_data.get("company")
+            or not title_ok
+        ):
             missing = []
             if not lead_data.get("email"):
                 missing.append("email")
             if not lead_data.get("company"):
                 missing.append("company")
+            if not title_ok:
+                missing.append("title")
             logger.info(
                 "Edge: router wanted confirmation but %s missing → lead_capture",
                 "+".join(missing),
             )
             return NODE_LEAD_CAPTURE
 
-    # Hard guard: if the router picks lead_capture but name + email + company
-    # are already captured, force confirmation. Phone is optional and a decline
-    # would otherwise keep the flow stuck in lead_capture forever, so the lead
-    # never gets submitted to Salesforce.
+    # Hard guard: if the router picks lead_capture but name + title + email +
+    # company are already captured (or title has had its one explicit ask),
+    # force confirmation.  Phone stays optional, and title is bounded by the
+    # title_capture_attempts counter so a visitor who declines doesn't trap
+    # the conversation in lead_capture forever.
     if stage == ConversationStage.LEAD_CAPTURE:
         lead_data = state.get("lead_data", {})
         has_name = lead_data.get("first_name") or lead_data.get("last_name")
-        if has_name and lead_data.get("email") and lead_data.get("company"):
+        if (
+            has_name
+            and lead_data.get("email")
+            and lead_data.get("company")
+            and _title_satisfied(state)
+        ):
             logger.info(
-                "Edge: router picked lead_capture but required fields (name+email+company) captured → confirmation"
+                "Edge: router picked lead_capture but required fields (name+title+email+company) satisfied → confirmation"
             )
             return NODE_CONFIRMATION
 
@@ -313,6 +326,23 @@ def route_entry_point(state: GraphState) -> str:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _title_satisfied(state: GraphState) -> bool:
+    """
+    Title is satisfied when either:
+    - the visitor has provided one (``lead_data.title`` is set), or
+    - the lead_capture node has already made one explicit ask for title
+      (``title_capture_attempts >= 1``).
+
+    The counter mechanism prevents a visitor who declines to share their
+    title from trapping the conversation in lead_capture forever — title
+    is required, but bounded by a one-shot retry.
+    """
+    lead_data = state.get("lead_data", {})
+    if lead_data.get("title"):
+        return True
+    return state.get("title_capture_attempts", 0) >= 1
+
 
 def _latest_message_is_affirmative(state: GraphState) -> bool:
     """
