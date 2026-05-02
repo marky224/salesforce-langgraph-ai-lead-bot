@@ -322,60 +322,55 @@ class TestExtractionNode:
 # ---------------------------------------------------------------------------
 
 class TestScoringNode:
-    """Tests for scoring_node."""
+    """scoring_node — deterministic score + LLM transcript summary."""
 
     @pytest.mark.asyncio
-    async def test_returns_score_and_breakdown(self, conversation_state, mock_llm):
-        mock_llm.ainvoke.return_value = MagicMock(
-            content=json.dumps({
-                "score": 72,
-                "breakdown": {"budget": 20, "timeline": 15, "company_size": 10},
-                "rationale": "Strong lead with clear budget and timeline.",
-            })
-        )
+    async def test_returns_zero_for_empty_data(self, conversation_state, mock_llm):
+        mock_llm.ainvoke.return_value = MagicMock(content="Summary prose.")
 
         result = await scoring_node(conversation_state)
 
-        assert result["lead_score"] == 72
-        assert result["lead_score_breakdown"]["budget"] == 20
+        assert result["lead_score"] == 0
+        assert "budget" in result["lead_score_breakdown"]
 
     @pytest.mark.asyncio
-    async def test_clamps_score_to_valid_range(self, conversation_state, mock_llm):
-        mock_llm.ainvoke.return_value = MagicMock(
-            content=json.dumps({"score": 150, "breakdown": {}})
-        )
+    async def test_scores_perfect_lead(self, conversation_state, mock_llm):
+        mock_llm.ainvoke.return_value = MagicMock(content="Summary prose.")
+        conversation_state["qualification_data"] = {
+            "budget_range": "$100K+",
+            "timeline": "Immediate",
+            "company_size": "1000+",
+            "decision_maker": True,
+            "pain_points": ["a", "b", "c"],
+        }
+        conversation_state["lead_data"] = {
+            "first_name": "S",
+            "last_name": "C",
+            "email": "s@a.com",
+            "company": "A",
+            "phone": "1",
+        }
 
         result = await scoring_node(conversation_state)
+
         assert result["lead_score"] == 100
 
     @pytest.mark.asyncio
-    async def test_handles_negative_score(self, conversation_state, mock_llm):
-        mock_llm.ainvoke.return_value = MagicMock(
-            content=json.dumps({"score": -5, "breakdown": {}})
-        )
-
-        result = await scoring_node(conversation_state)
-        assert result["lead_score"] == 0
-
-    @pytest.mark.asyncio
-    async def test_handles_invalid_json(self, conversation_state, mock_llm):
-        mock_llm.ainvoke.return_value = MagicMock(content="not valid json")
-
-        result = await scoring_node(conversation_state)
-        assert result["lead_score"] == 0
-
-    @pytest.mark.asyncio
     async def test_generates_transcript_summary(self, conversation_state, mock_llm):
-        # First call: scoring JSON, second call: transcript summary prose
-        mock_llm.ainvoke.side_effect = [
-            MagicMock(content=json.dumps({"score": 50, "breakdown": {}})),
-            MagicMock(content="Prospect is evaluating CRM solutions with a clear budget."),
-        ]
+        mock_llm.ainvoke.return_value = MagicMock(content="Summary prose.")
 
         result = await scoring_node(conversation_state)
 
-        assert "transcript_summary" in result
-        assert result["transcript_summary"] == "Prospect is evaluating CRM solutions with a clear budget."
+        assert result["transcript_summary"] == "Summary prose."
+
+    @pytest.mark.asyncio
+    async def test_makes_single_llm_call(self, conversation_state, mock_llm):
+        mock_llm.ainvoke.return_value = MagicMock(content="Summary prose.")
+
+        await scoring_node(conversation_state)
+
+        # Score is deterministic; only the transcript summary uses the LLM.
+        assert mock_llm.ainvoke.call_count == 1
 
 
 # ---------------------------------------------------------------------------

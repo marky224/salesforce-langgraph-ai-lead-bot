@@ -36,7 +36,6 @@ from app.graph.prompts import (
     PERSONA,
     QUALIFICATION_PROMPT,
     ROUTER_PROMPT,
-    SCORING_PROMPT,
     TRANSCRIPT_SUMMARY_PROMPT,
     format_known_info,
     format_transcript,
@@ -45,6 +44,7 @@ from app.graph.prompts import (
 )
 from app.graph.state import GraphState
 from app.models.schemas import ConversationStage
+from app.tools.qualification import compute_lead_score
 
 logger = logging.getLogger(__name__)
 
@@ -456,34 +456,24 @@ async def scoring_node(state: GraphState) -> dict:
     Compute a 0-100 lead quality score from qualification + contact data,
     and generate the transcript summary for the Salesforce Description field.
 
-    The transcript summary is generated here (not in confirmation_node) so
-    that it never gets streamed to the frontend — this node is excluded from
-    the streaming conversational node list.
+    Scoring is deterministic — see compute_lead_score in tools.qualification.
+    The transcript summary is LLM-generated and produced here (not in
+    confirmation_node) so it never streams to the frontend.
     """
     logger.info("Node: scoring")
 
-    prompt = SCORING_PROMPT.format(
-        qualification_json=json.dumps(_gs(state, "qualification_data"), indent=2),
-        lead_json=json.dumps(_gs(state, "lead_data"), indent=2),
+    score_result = compute_lead_score(
+        qualification_data=_gs(state, "qualification_data"),
+        lead_data=_gs(state, "lead_data"),
     )
-    raw = await _invoke_llm(prompt, [])
-    parsed = _safe_parse_json(raw)
 
-    score = parsed.get("score", 0)
-    breakdown = parsed.get("breakdown", {})
-
-    # Clamp score to valid range
-    score = max(0, min(100, int(score)))
-
-    # Generate transcript summary for Salesforce Description field.
-    # Done here so it is never streamed to the frontend.
     transcript = format_transcript(state.get("messages", []))
     summary_prompt = TRANSCRIPT_SUMMARY_PROMPT.format(transcript=transcript)
     summary = await _invoke_llm(summary_prompt, [])
 
     return {
-        "lead_score": score,
-        "lead_score_breakdown": breakdown,
+        "lead_score": score_result["score"],
+        "lead_score_breakdown": score_result["breakdown"],
         "transcript_summary": summary,
     }
 

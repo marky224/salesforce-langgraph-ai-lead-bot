@@ -2,10 +2,13 @@
 End-to-end conversation tests.
 
 Uses a content-based mock LLM that inspects the system prompt to decide
-what type of response to return (extraction JSON, router JSON, scoring
-JSON, or conversational text).  This is resilient to changes in graph
-routing order — the mock doesn't care about call sequence, only about
-what the graph is asking for.
+what type of response to return (extraction JSON, router JSON, or
+conversational text).  This is resilient to changes in graph routing
+order — the mock doesn't care about call sequence, only about what the
+graph is asking for.
+
+Scoring is deterministic (see app.tools.qualification.compute_lead_score),
+so the mock does not produce scores — assertions exercise the real scorer.
 """
 
 from __future__ import annotations
@@ -31,7 +34,6 @@ class ContentBasedMockLLM:
 
     For extraction prompts → returns extraction JSON
     For router prompts → returns routing JSON
-    For scoring prompts → returns scoring JSON
     For conversational prompts → returns appropriate text
 
     The ``extraction_data`` dict is consumed in order — each extraction
@@ -42,11 +44,9 @@ class ContentBasedMockLLM:
         self,
         extraction_responses: list[dict] | None = None,
         router_responses: list[dict] | None = None,
-        score: int = 50,
     ):
         self._extraction_queue = list(extraction_responses or [])
         self._router_queue = list(router_responses or [])
-        self._score = score
         self._call_count = 0
 
     async def ainvoke(self, messages, **kwargs):
@@ -74,14 +74,6 @@ class ContentBasedMockLLM:
             if self._router_queue:
                 return json.dumps(self._router_queue.pop(0))
             return json.dumps({"next_stage": "discovery", "reasoning": "default"})
-
-        # Scoring prompt
-        if "lead scoring engine" in prompt_lower:
-            return json.dumps({
-                "score": self._score,
-                "breakdown": {"budget": 15, "timeline": 15, "contact_completeness": 7},
-                "rationale": "Test score.",
-            })
 
         # Transcript summary prompt
         if "summarise the following sales chat" in prompt_lower:
@@ -156,7 +148,6 @@ class TestFullConversationFlow:
                 # Turn 5: lead_capture → confirmation
                 {"next_stage": "confirmation", "reasoning": "Have all contact info"},
             ],
-            score=67,
         )
         set_llm(mock_llm)
 
@@ -207,13 +198,16 @@ class TestFullConversationFlow:
         assert result.get("salesforce_lead_id") == "00Q000TEST00001"
         assert result.get("salesforce_task_id") == "00T000TEST00001"
         assert result.get("stage") == ConversationStage.COMPLETE
-        assert result.get("lead_score") == 67
+        # Deterministic score: 18 (budget $10K-$50K) + 18 (timeline 1-3mo)
+        # + 8 (size 11-50) + 15 (decision maker) + 5 (1 pain point)
+        # + 7 (name+email+company, no phone) = 71
+        assert result.get("lead_score") == 71
 
         # Verify Salesforce was called
         mock_salesforce.Lead.create.assert_called_once()
         lead_payload = mock_salesforce.Lead.create.call_args[0][0]
         assert lead_payload["LeadSource"] == "Web Chat"
-        assert lead_payload["Lead_Score__c"] == 67
+        assert lead_payload["Lead_Score__c"] == 71
 
 
 # ---------------------------------------------------------------------------
@@ -236,7 +230,6 @@ class TestEarlyExitFlow:
                 {"next_stage": "lead_capture", "reasoning": "User leaving"},
                 {"next_stage": "confirmation", "reasoning": "Got email"},
             ],
-            score=7,
         )
         set_llm(mock_llm)
 
@@ -282,7 +275,6 @@ class TestSalesforceFailure:
             router_responses=[
                 {"next_stage": "confirmation", "reasoning": "Have contact info"},
             ],
-            score=50,
         )
         set_llm(mock_llm)
 
