@@ -96,7 +96,6 @@ _STATE_DEFAULTS: dict[str, Any] = {
     "salesforce_lead_id": None,
     "salesforce_task_id": None,
     "retry_count": 0,
-    "title_capture_attempts": 0,
     "error": None,
 }
 
@@ -313,26 +312,10 @@ async def lead_capture_node(state: GraphState) -> dict:
     )
     reply = await _invoke_llm(prompt, list(state.get("messages", [])))
 
-    result: dict[str, Any] = {
+    return {
         "messages": [AIMessage(content=reply)],
         "stage": ConversationStage.LEAD_CAPTURE,
     }
-
-    # Count this turn as a "title ask" only when title is the *only* required
-    # field still missing — that's when the LLM is unambiguously being directed
-    # to ask for title.  After one such turn the routing guards stop blocking
-    # on title, so a visitor who declines to share doesn't stall the flow.
-    ld = _gs(state, "lead_data")
-    has_name = ld.get("first_name") or ld.get("last_name")
-    if (
-        has_name
-        and ld.get("email")
-        and ld.get("company")
-        and not ld.get("title")
-    ):
-        result["title_capture_attempts"] = _gs(state, "title_capture_attempts") + 1
-
-    return result
 
 
 async def confirmation_node(state: GraphState) -> dict:

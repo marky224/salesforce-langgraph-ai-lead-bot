@@ -457,8 +457,7 @@ doubt, concern, hesitation, or a negative reaction.
 - lead_capture: Collecting name, job title, email, company, phone.  Move here \
 once we have at least 2 qualification fields filled AND the visitor seems engaged.
 - confirmation: Summarising and confirming.  Move here once lead contact \
-info is substantially complete (at minimum: name + job title + email + \
-company).
+info is substantially complete (at minimum: name + email + company).
 - complete: Conversation is finished.  Only after confirmation has been given.
 
 RULES:
