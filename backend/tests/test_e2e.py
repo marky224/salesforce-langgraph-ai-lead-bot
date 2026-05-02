@@ -130,8 +130,8 @@ class TestFullConversationFlow:
                 {"qualification_data": {"company_size": "11-50"}},
                 # Turn 3: user shares budget + timeline
                 {"qualification_data": {"budget_range": "$10K-$50K", "timeline": "1-3 months", "decision_maker": True}},
-                # Turn 4: user shares name + title
-                {"lead_data": {"first_name": "Sarah", "last_name": "Chen", "title": "VP of Operations"}},
+                # Turn 4: user shares name
+                {"lead_data": {"first_name": "Sarah", "last_name": "Chen"}},
                 # Turn 5: user shares email + company
                 {"lead_data": {"email": "sarah@acme.com", "company": "Acme Corp"}},
                 # Turn 6: user confirms (empty extraction)
