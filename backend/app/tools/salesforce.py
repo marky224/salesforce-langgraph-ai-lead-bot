@@ -281,8 +281,7 @@ async def create_lead(
         pain_text = "; ".join(qd["pain_points"])
         payload["Pain_Points__c"] = pain_text[:32000]
 
-    if lead_score > 0:
-        payload["Lead_Score__c"] = lead_score
+    payload["Lead_Score__c"] = lead_score
 
     if description:
         payload["Description"] = description[:32000]
