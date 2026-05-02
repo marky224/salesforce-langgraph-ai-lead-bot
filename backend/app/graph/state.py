@@ -89,13 +89,6 @@ class GraphState(TypedDict, total=False):
         Number of soft re-engagement attempts when the user tries
         to exit early.  Capped at 1 to avoid being pushy.
 
-    title_capture_attempts : int
-        Number of times the lead_capture node has run while title was
-        the only required field still missing.  Used by the routing
-        guards to break out of lead_capture after one explicit ask,
-        so a visitor who declines to share a title doesn't stall
-        the conversation indefinitely.
-
     error : str | None
         Human-readable error message if something goes wrong in an
         external call (LLM, Salesforce).  Checked by the error node.
@@ -129,7 +122,6 @@ class GraphState(TypedDict, total=False):
 
     # --- Control flow helpers ----------------------------------------------
     retry_count: int
-    title_capture_attempts: int
     error: Optional[str]
 
 
@@ -164,6 +156,5 @@ def create_initial_state() -> GraphState:
         salesforce_lead_id=None,
         salesforce_task_id=None,
         retry_count=0,
-        title_capture_attempts=0,
         error=None,
     )
