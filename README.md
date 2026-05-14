@@ -15,7 +15,7 @@ An end-to-end AI sales lead generation system that qualifies prospects through n
 
 ## Live Demo
 
-**Try it now** — visit [markandrewmarquez.com](https://markandrewmarquez.com) and click the chat bubble in the bottom-right corner to talk to TARS.
+**Try it now** — visit [markandrewmarquez.com](https://markandrewmarquez.com/portfolio/salesforce-langgraph-ai-lead-bot/) and click the chat bubble in the bottom-right corner to talk to TARS.
 
 **Swagger UI** — explore the API at [salesforce-langgraph-ai-lead-bot...azurecontainerapps.io/docs](https://salesforce-langgraph-ai-lead-bot.purplesky-0949fcd0.centralus.azurecontainerapps.io/docs)
 
@@ -23,7 +23,7 @@ An end-to-end AI sales lead generation system that qualifies prospects through n
 
 ### Chat Widget — TARS Greeting
 
-The floating chat bubble on [markandrewmarquez.com](https://markandrewmarquez.com). Click it and TARS introduces itself with a warm opening question.
+The floating chat bubble on [markandrewmarquez.com](https://markandrewmarquez.com/portfolio/salesforce-langgraph-ai-lead-bot/). Click it and TARS introduces itself with a warm opening question.
 
 ![TARS chatbot greeting on markandrewmarquez.com](images/tars-demo-screenshot.jpg)
 
