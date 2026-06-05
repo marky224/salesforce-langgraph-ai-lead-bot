@@ -97,3 +97,8 @@ yarn.lock
 salesforce/agentscript/force-app/main/default/bots/
 salesforce/agentscript/force-app/main/default/genAiPlannerBundles/
 salesforce/agentscript/temp/
+
+# ==========================================
+# Private — local-only notes & handoffs (never publish)
+# ==========================================
+_private/
