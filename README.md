@@ -7,7 +7,7 @@
 [![Azure Container Apps](https://img.shields.io/badge/Azure-Container%20Apps-0078D4?logo=microsoft-azure&logoColor=white)](https://azure.microsoft.com/en-us/products/container-apps)
 [![Azure Static Web Apps](https://img.shields.io/badge/Azure-Static%20Web%20Apps-0078D4?logo=microsoft-azure&logoColor=white)](https://azure.microsoft.com/en-us/products/app-service/static)
 [![Tests](https://img.shields.io/badge/Tests-63%20passing-brightgreen?logo=pytest&logoColor=white)](backend/tests/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
 
 An end-to-end AI sales lead generation system that qualifies prospects through natural conversation and automatically creates enriched records in Salesforce — with intelligent follow-up powered by Agentforce.
 
@@ -378,7 +378,7 @@ curl -X POST https://salesforce-langgraph-ai-lead-bot.purplesky-0949fcd0.central
 
 ## License
 
-[MIT](LICENSE)
+This software is **proprietary** — all rights reserved. No license is granted to use, copy, modify, or distribute it without prior written permission of the copyright holder; see [LICENSE](LICENSE) for the full terms.
 
 ---
 
