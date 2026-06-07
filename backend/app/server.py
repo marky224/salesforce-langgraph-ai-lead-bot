@@ -28,7 +28,7 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -302,10 +302,8 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                             if isinstance(raw_stage, ConversationStage):
                                 final_stage = raw_stage
                             elif isinstance(raw_stage, str):
-                                try:
+                                with suppress(ValueError):
                                     final_stage = ConversationStage(raw_stage)
-                                except ValueError:
-                                    pass
                         if "salesforce_lead_id" in output and output["salesforce_lead_id"]:
                             lead_id = output["salesforce_lead_id"]
 
