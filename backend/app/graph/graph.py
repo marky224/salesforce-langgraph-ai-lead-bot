@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import logging
 
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 
@@ -72,13 +73,13 @@ logger = logging.getLogger(__name__)
 # Graph builder
 # ---------------------------------------------------------------------------
 
-def build_graph(checkpointer: MemorySaver | None = None) -> StateGraph:
+def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> StateGraph:
     """
     Construct and compile the full conversation graph.
 
     Parameters
     ----------
-    checkpointer : MemorySaver | None
+    checkpointer : BaseCheckpointSaver | None
         State persistence backend.  When ``None`` a default in-memory
         ``MemorySaver`` is created — suitable for single-process
         deployments and local development.  For production with multiple
