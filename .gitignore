@@ -62,6 +62,9 @@ out/
 # Claude Code — personal/local settings (per-contributor permissions)
 .claude/settings.local.json
 
+# Claude Code — project guidance, kept local (intentionally NOT published to GitHub)
+/CLAUDE.md
+
 # IDE — general
 *.swp
 *.swo
