@@ -26,7 +26,6 @@ from app.models.schemas import (
     BudgetRange,
     CompanySize,
     LeadPriority,
-    LeadScore,
     Timeline,
 )
 

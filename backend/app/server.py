@@ -27,8 +27,9 @@ from __future__ import annotations
 
 import logging
 import uuid
-from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager, suppress
+from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -38,8 +39,12 @@ from langchain_core.messages import AIMessage, HumanMessage
 from app.config import configure_logging, get_llm, get_settings
 from app.graph.graph import build_graph
 from app.graph.nodes import set_llm
-from app.graph.state import create_initial_state
-from app.models.schemas import ChatRequest, ChatResponse, ConversationStage, HealthResponse
+from app.models.schemas import (
+    ChatRequest,
+    ChatResponse,
+    ConversationStage,
+    HealthResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -195,12 +200,12 @@ async def chat(request: ChatRequest) -> ChatResponse:
     try:
         # Run the graph for one full turn
         result = await graph.ainvoke(graph_input, config=config)
-    except Exception:
+    except Exception as err:
         logger.exception("Graph invocation failed for thread %s", thread_id)
         raise HTTPException(
             status_code=500,
             detail="An error occurred processing your message. Please try again.",
-        )
+        ) from err
 
     # Extract the latest AI message
     reply = _extract_latest_ai_reply(result)
@@ -297,10 +302,8 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                             if isinstance(raw_stage, ConversationStage):
                                 final_stage = raw_stage
                             elif isinstance(raw_stage, str):
-                                try:
+                                with suppress(ValueError):
                                     final_stage = ConversationStage(raw_stage)
-                                except ValueError:
-                                    pass
                         if "salesforce_lead_id" in output and output["salesforce_lead_id"]:
                             lead_id = output["salesforce_lead_id"]
 
@@ -366,12 +369,12 @@ async def chat_init() -> dict[str, Any]:
             {"messages": []},
             config=config,
         )
-    except Exception:
+    except Exception as err:
         logger.exception("Greeting generation failed for thread %s", thread_id)
         raise HTTPException(
             status_code=500,
             detail="Failed to start conversation. Please try again.",
-        )
+        ) from err
 
     greeting = _extract_latest_ai_reply(result)
 

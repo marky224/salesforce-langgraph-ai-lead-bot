@@ -24,7 +24,7 @@ from __future__ import annotations
 import logging
 from enum import Enum
 from functools import lru_cache
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -70,7 +70,7 @@ class Settings(BaseSettings):
         default=LLMProvider.ANTHROPIC,
         description="Which LLM backend to use: anthropic | openai | groq | xai",
     )
-    llm_model: Optional[str] = Field(
+    llm_model: str | None = Field(
         default=None,
         description=(
             "Override the default model for the chosen provider. "
@@ -85,10 +85,10 @@ class Settings(BaseSettings):
     )
 
     # Provider API keys (only the active provider's key is required)
-    anthropic_api_key: Optional[SecretStr] = None
-    openai_api_key: Optional[SecretStr] = None
-    groq_api_key: Optional[SecretStr] = None
-    xai_api_key: Optional[SecretStr] = None
+    anthropic_api_key: SecretStr | None = None
+    openai_api_key: SecretStr | None = None
+    groq_api_key: SecretStr | None = None
+    xai_api_key: SecretStr | None = None
 
     # --- Salesforce --------------------------------------------------------
 
@@ -96,19 +96,19 @@ class Settings(BaseSettings):
         default="https://login.salesforce.com",
         description="Salesforce instance URL",
     )
-    sf_client_id: Optional[SecretStr] = Field(
+    sf_client_id: SecretStr | None = Field(
         default=None, description="Connected App consumer key"
     )
-    sf_client_secret: Optional[SecretStr] = Field(
+    sf_client_secret: SecretStr | None = Field(
         default=None, description="Connected App consumer secret"
     )
-    sf_username: Optional[str] = Field(
+    sf_username: str | None = Field(
         default=None, description="Salesforce integration user"
     )
-    sf_password: Optional[SecretStr] = Field(
+    sf_password: SecretStr | None = Field(
         default=None, description="Salesforce password"
     )
-    sf_security_token: Optional[SecretStr] = Field(
+    sf_security_token: SecretStr | None = Field(
         default=None, description="Salesforce security token"
     )
 
@@ -143,7 +143,7 @@ class Settings(BaseSettings):
     @property
     def active_api_key(self) -> SecretStr:
         """Return the API key for the currently configured provider."""
-        key_map: dict[LLMProvider, Optional[SecretStr]] = {
+        key_map: dict[LLMProvider, SecretStr | None] = {
             LLMProvider.ANTHROPIC: self.anthropic_api_key,
             LLMProvider.OPENAI: self.openai_api_key,
             LLMProvider.GROQ: self.groq_api_key,

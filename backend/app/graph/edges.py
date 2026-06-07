@@ -32,10 +32,6 @@ from __future__ import annotations
 
 import logging
 
-from app.graph.prompts import (
-    get_missing_contact_fields,
-    get_missing_qualification_fields,
-)
 from app.graph.state import GraphState
 from app.models.schemas import ConversationStage
 
@@ -365,10 +361,7 @@ def _latest_message_is_affirmative(state: GraphState) -> bool:
             # Fallback: if the message is very short (1-3 words) and
             # doesn't contain a negative, treat it as affirmative.
             # Covers things like "cool", "nice", "done", thumbs-up text.
-            if len(text.split()) <= 3 and not any(n in text for n in negatives):
-                return True
-
-            return False
+            return len(text.split()) <= 3 and not any(n in text for n in negatives)
 
     return False
 
