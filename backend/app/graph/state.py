@@ -18,12 +18,11 @@ Key design decisions:
 from __future__ import annotations
 
 import operator
-from typing import Annotated, Any, Optional, TypedDict
+from typing import Annotated, Any, TypedDict
 
 from langchain_core.messages import AnyMessage
 
 from app.models.schemas import ConversationStage
-
 
 # ---------------------------------------------------------------------------
 # Reducer helpers
@@ -117,12 +116,12 @@ class GraphState(TypedDict, total=False):
     transcript_summary: str
 
     # --- Salesforce integration --------------------------------------------
-    salesforce_lead_id: Optional[str]
-    salesforce_task_id: Optional[str]
+    salesforce_lead_id: str | None
+    salesforce_task_id: str | None
 
     # --- Control flow helpers ----------------------------------------------
     retry_count: int
-    error: Optional[str]
+    error: str | None
 
 
 # ---------------------------------------------------------------------------

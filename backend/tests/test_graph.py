@@ -12,7 +12,7 @@ network access.  Each test verifies that the node:
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
@@ -34,7 +34,6 @@ from app.graph.nodes import (
 )
 from app.graph.state import create_initial_state
 from app.models.schemas import ConversationStage
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

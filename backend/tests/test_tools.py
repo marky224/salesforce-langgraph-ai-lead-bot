@@ -7,7 +7,7 @@ Salesforce tests mock the simple_salesforce client.
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -16,7 +16,6 @@ from app.tools.qualification import (
     compute_lead_score,
     generate_qualification_summary,
 )
-
 
 # ---------------------------------------------------------------------------
 # Qualification scoring tests
