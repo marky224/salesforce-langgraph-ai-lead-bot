@@ -105,3 +105,18 @@ salesforce/agentscript/temp/
 # Private — local-only notes & handoffs (never publish)
 # ==========================================
 _private/
+
+# ==========================================
+# Deploy / integration how-to docs — local-only (never publish)
+# ==========================================
+backend/DEPLOY.md
+backend/REDEPLOY.md
+frontend/INTEGRATION.md
+salesforce/connected-app-setup.md
+salesforce/custom-fields.md
+salesforce/agentscript/agentscript-deployment.md
+salesforce/agentforce/agent-setup.md
+salesforce/agentforce/agent-instructions.md
+salesforce/agentforce/agent-topics.md
+salesforce/flows/flow-setup.md
+salesforce/flows/Lead_Created_Flow.md

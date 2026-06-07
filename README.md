@@ -227,9 +227,7 @@ salesforce-langgraph-ai-lead-bot/
 │   │   └── test_e2e.py              # 3 end-to-end conversation tests
 │   ├── Dockerfile
 │   ├── docker-compose.yml
-│   ├── requirements.txt
-│   ├── DEPLOY.md                    # Full Azure deployment guide
-│   └── REDEPLOY.md                  # Quick redeploy workflow
+│   └── requirements.txt
 │
 ├── frontend/
 │   ├── widget.js                    # nlux chat widget + SSE adapter
@@ -237,89 +235,21 @@ salesforce-langgraph-ai-lead-bot/
 │   ├── tars-avatar.svg              # Custom TARS robot avatar
 │   ├── staticwebapp.config.json     # CORS headers for cross-origin loading
 │   ├── index.html                   # Standalone demo page
-│   ├── embed-snippet.html           # Minimal code for GitHub Pages
-│   └── INTEGRATION.md              # Widget integration guide with real URLs
+│   └── embed-snippet.html           # Minimal code for GitHub Pages
 │
 └── salesforce/
-    ├── connected-app-setup.md       # OAuth Connected App configuration
-    ├── custom-fields.md             # 6 custom Lead fields
     ├── deploy/                      # Apex classes (SFDX project)
     │   └── force-app/main/default/classes/
     │       ├── ProcessWebChatLead.cls       # Consolidated Agentforce action
     │       ├── ProcessWebChatLeadTest.cls   # Test class (12/12 passing)
     │       └── ...
-    ├── agentscript/                 # Agent Script CLI workflow
-    │   ├── agentscript-deployment.md        # CLI-first deploy guide
-    │   ├── sfdx-project.json
-    │   └── force-app/main/default/aiAuthoringBundles/
-    │       └── Lead_Qualification_Follow_Up_Agent/
-    │           ├── Lead_Qualification_Follow_Up_Agent.agent
-    │           └── Lead_Qualification_Follow_Up_Agent.aiAuthoringBundle-meta.xml
-    ├── agentforce/
-    │   ├── agent-instructions.md    # Agent system prompt
-    │   ├── agent-topics.md          # 4 agent topics + instructions
-    │   └── agent-setup.md           # UI-based setup walkthrough
-    └── flows/
-        ├── Lead_Created_Flow.md     # Flow specification
-        └── flow-setup.md            # Flow setup walkthrough
+    └── agentscript/                 # Agent Script CLI workflow
+        ├── sfdx-project.json
+        └── force-app/main/default/aiAuthoringBundles/
+            └── Lead_Qualification_Follow_Up_Agent/
+                ├── Lead_Qualification_Follow_Up_Agent.agent
+                └── Lead_Qualification_Follow_Up_Agent.aiAuthoringBundle-meta.xml
 ```
-
----
-
-## Setup
-
-### Prerequisites
-
-- Python 3.12+
-- Docker (for containerized deployment)
-- A Salesforce Developer Edition org ([free signup](https://developer.salesforce.com/signup))
-- An API key for at least one LLM provider
-- An Azure subscription (for deployment)
-
-### 1. Clone and configure
-
-```bash
-git clone https://github.com/marky224/salesforce-langgraph-ai-lead-bot.git
-cd salesforce-langgraph-ai-lead-bot
-cp .env.example .env
-# Edit .env with your API keys and Salesforce credentials
-```
-
-### 2. Set up Salesforce
-
-Follow these guides in order:
-
-1. [Custom Fields](salesforce/custom-fields.md) — create the 6 custom fields on the Lead object
-2. [Connected App](salesforce/connected-app-setup.md) — set up OAuth authentication
-3. [Record-Triggered Flow](salesforce/flows/flow-setup.md) — create the automation flow
-4. Agentforce Agent — configure via [UI setup](salesforce/agentforce/agent-setup.md) or [Agent Script CLI](salesforce/agentscript/agentscript-deployment.md)
-
-### 3. Run locally
-
-```bash
-cd backend
-pip install -r requirements.txt
-uvicorn app.server:app --reload --port 8000
-```
-
-The API is now running at `http://localhost:8000`. Visit `http://localhost:8000/docs` for the interactive Swagger UI.
-
-### 4. Test the chat widget
-
-Open `frontend/index.html` in a browser (or use VS Code Live Server). The chat bubble should appear in the bottom-right corner. Click it to start a conversation with TARS.
-
-### 5. Run tests
-
-```bash
-cd backend
-pytest tests/ -v
-```
-
-All 63 tests should pass in under 2 seconds.
-
-### 6. Deploy
-
-See [DEPLOY.md](backend/DEPLOY.md) for full Azure Container Apps + Static Web Apps deployment instructions, or [REDEPLOY.md](backend/REDEPLOY.md) for the quick redeploy workflow.
 
 ---
 
