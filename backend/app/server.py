@@ -27,8 +27,9 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator
+from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -38,8 +39,12 @@ from langchain_core.messages import AIMessage, HumanMessage
 from app.config import configure_logging, get_llm, get_settings
 from app.graph.graph import build_graph
 from app.graph.nodes import set_llm
-from app.graph.state import create_initial_state
-from app.models.schemas import ChatRequest, ChatResponse, ConversationStage, HealthResponse
+from app.models.schemas import (
+    ChatRequest,
+    ChatResponse,
+    ConversationStage,
+    HealthResponse,
+)
 
 logger = logging.getLogger(__name__)
 

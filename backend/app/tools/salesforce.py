@@ -34,9 +34,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import date, datetime
+from datetime import date
 from functools import lru_cache
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +72,7 @@ def _get_sf_client() -> Any:
         ) from exc
 
     import requests
+
     from app.config import get_settings
 
     s = get_settings()
@@ -313,7 +314,7 @@ async def create_lead(
 async def create_transcript_task(
     lead_id: str,
     transcript: str,
-    subject: Optional[str] = None,
+    subject: str | None = None,
 ) -> str:
     """
     Create a Task record linked to a Lead containing the chat transcript.
