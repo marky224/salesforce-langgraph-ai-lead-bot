@@ -200,12 +200,12 @@ async def chat(request: ChatRequest) -> ChatResponse:
     try:
         # Run the graph for one full turn
         result = await graph.ainvoke(graph_input, config=config)
-    except Exception:
+    except Exception as err:
         logger.exception("Graph invocation failed for thread %s", thread_id)
         raise HTTPException(
             status_code=500,
             detail="An error occurred processing your message. Please try again.",
-        )
+        ) from err
 
     # Extract the latest AI message
     reply = _extract_latest_ai_reply(result)
@@ -371,12 +371,12 @@ async def chat_init() -> dict[str, Any]:
             {"messages": []},
             config=config,
         )
-    except Exception:
+    except Exception as err:
         logger.exception("Greeting generation failed for thread %s", thread_id)
         raise HTTPException(
             status_code=500,
             detail="Failed to start conversation. Please try again.",
-        )
+        ) from err
 
     greeting = _extract_latest_ai_reply(result)
 
