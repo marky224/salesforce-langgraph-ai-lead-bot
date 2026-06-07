@@ -37,6 +37,7 @@ from fastapi.responses import StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage
 
 from app.config import configure_logging, get_llm, get_settings
+from app.graph.checkpointer import open_checkpointer
 from app.graph.graph import build_graph
 from app.graph.nodes import set_llm
 from app.models.schemas import (
@@ -101,11 +102,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.exception("Failed to initialise LLM — chat will not work")
         raise
 
-    # Compile graph
-    _graph = build_graph()
-    logger.info("LangGraph compiled and ready")
+    # Open the checkpointer (Postgres if DATABASE_URL set, else MemorySaver) and
+    # keep it open for the whole process so the DB connection lives for the
+    # app's lifetime.
+    async with open_checkpointer(settings) as checkpointer:
+        _graph = build_graph(checkpointer=checkpointer)
+        logger.info("LangGraph compiled and ready")
 
-    yield
+        yield
 
     # --- Shutdown ---
     logger.info("Shutting down AI Sales Lead Bot")
