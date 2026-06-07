@@ -7,6 +7,8 @@ pydantic-settings>=2.7.0,<3.0
 # LangGraph / LangChain
 langgraph>=0.4.0,<1.0
 langchain-core>=0.3.0,<1.0
+langgraph-checkpoint-postgres==3.0.5   # durable Postgres checkpointer (Neon); keep on 3.0.x — 3.1.0+ needs langgraph-checkpoint>=4 which breaks langgraph 0.6.x
+psycopg[binary]==3.2.*                  # async driver; binary extra → no libpq in slim image
 
 # LLM providers (uncomment the one you need)
 # langchain-anthropic>=0.3.0,<1.0   # For Anthropic (Claude)
