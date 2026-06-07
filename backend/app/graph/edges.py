@@ -32,10 +32,6 @@ from __future__ import annotations
 
 import logging
 
-from app.graph.prompts import (
-    get_missing_contact_fields,
-    get_missing_qualification_fields,
-)
 from app.graph.state import GraphState
 from app.models.schemas import ConversationStage
 

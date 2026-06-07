@@ -23,7 +23,6 @@ from app.graph.graph import build_graph
 from app.graph.nodes import set_llm
 from app.models.schemas import ConversationStage
 
-
 # ---------------------------------------------------------------------------
 # Content-based mock LLM
 # ---------------------------------------------------------------------------

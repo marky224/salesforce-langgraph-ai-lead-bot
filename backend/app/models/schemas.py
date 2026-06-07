@@ -11,10 +11,8 @@ from __future__ import annotations
 
 import enum
 from datetime import date, datetime
-from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field, computed_field
-
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -84,12 +82,12 @@ class LeadData(BaseModel):
     every field is optional until the lead-capture stage.
     """
 
-    first_name: Optional[str] = Field(default=None, max_length=40, description="Prospect's first name")
-    last_name: Optional[str] = Field(default=None, max_length=80, description="Prospect's last name")
-    email: Optional[EmailStr] = Field(default=None, description="Business email address")
-    company: Optional[str] = Field(default=None, max_length=255, description="Company or organisation name")
-    phone: Optional[str] = Field(default=None, max_length=40, description="Phone number (any format)")
-    title: Optional[str] = Field(default=None, max_length=128, description="Job title / role")
+    first_name: str | None = Field(default=None, max_length=40, description="Prospect's first name")
+    last_name: str | None = Field(default=None, max_length=80, description="Prospect's last name")
+    email: EmailStr | None = Field(default=None, description="Business email address")
+    company: str | None = Field(default=None, max_length=255, description="Company or organisation name")
+    phone: str | None = Field(default=None, max_length=40, description="Phone number (any format)")
+    title: str | None = Field(default=None, max_length=128, description="Job title / role")
 
     @computed_field
     @property
@@ -110,7 +108,7 @@ class LeadData(BaseModel):
 
         Only includes fields that have been captured (non-None).
         """
-        mapping: dict[str, Optional[str]] = {
+        mapping: dict[str, str | None] = {
             "FirstName": self.first_name,
             "LastName": self.last_name,
             "Email": self.email,
@@ -135,8 +133,8 @@ class QualificationData(BaseModel):
     timeline: Timeline = Field(default=Timeline.UNKNOWN, description="Purchase-readiness timeline")
     company_size: CompanySize = Field(default=CompanySize.UNKNOWN, description="Employee-count bracket")
     pain_points: list[str] = Field(default_factory=list, description="List of pain points surfaced in conversation")
-    decision_maker: Optional[bool] = Field(default=None, description="True if the prospect is a decision-maker")
-    current_solution: Optional[str] = Field(default=None, max_length=500, description="Tools/solutions currently in use")
+    decision_maker: bool | None = Field(default=None, description="True if the prospect is a decision-maker")
+    current_solution: str | None = Field(default=None, max_length=500, description="Tools/solutions currently in use")
     goals: list[str] = Field(default_factory=list, description="Desired outcomes mentioned by the prospect")
 
     def to_salesforce_fields(self) -> dict:
@@ -250,7 +248,7 @@ class ChatRequest(BaseModel):
     """Inbound chat message from the frontend widget."""
 
     message: str = Field(min_length=1, max_length=4000, description="User's message text")
-    thread_id: Optional[str] = Field(default=None, description="Conversation thread ID for state continuity")
+    thread_id: str | None = Field(default=None, description="Conversation thread ID for state continuity")
 
 
 class ChatResponse(BaseModel):
@@ -260,7 +258,7 @@ class ChatResponse(BaseModel):
     thread_id: str = Field(description="Thread ID (return to client for subsequent requests)")
     stage: ConversationStage = Field(description="Current conversation stage")
     is_complete: bool = Field(default=False, description="True when the conversation has ended")
-    lead_id: Optional[str] = Field(default=None, description="Salesforce Lead ID once created")
+    lead_id: str | None = Field(default=None, description="Salesforce Lead ID once created")
 
 
 class HealthResponse(BaseModel):
