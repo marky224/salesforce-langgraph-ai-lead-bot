@@ -6,7 +6,7 @@
 [![Salesforce](https://img.shields.io/badge/Salesforce-Agentforce-00A1E0?logo=salesforce&logoColor=white)](https://www.salesforce.com)
 [![Azure Container Apps](https://img.shields.io/badge/Azure-Container%20Apps-0078D4?logo=microsoft-azure&logoColor=white)](https://azure.microsoft.com/en-us/products/container-apps)
 [![Azure Static Web Apps](https://img.shields.io/badge/Azure-Static%20Web%20Apps-0078D4?logo=microsoft-azure&logoColor=white)](https://azure.microsoft.com/en-us/products/app-service/static)
-[![Tests](https://img.shields.io/badge/Tests-63%20passing-brightgreen?logo=pytest&logoColor=white)](backend/tests/)
+[![Tests](https://img.shields.io/badge/Tests-66%20passing-brightgreen?logo=pytest&logoColor=white)](backend/tests/)
 [![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
 
 An end-to-end AI sales lead generation system that qualifies prospects through natural conversation and automatically creates enriched records in Salesforce — with intelligent follow-up powered by Agentforce.
@@ -222,6 +222,7 @@ salesforce-langgraph-ai-lead-bot/
 │   │       └── schemas.py           # Pydantic models + enums
 │   ├── tests/
 │   │   ├── conftest.py
+│   │   ├── test_contracts.py        # 3 enum/score-table contract guards
 │   │   ├── test_graph.py            # 39 node unit tests
 │   │   ├── test_tools.py            # 21 tool + scoring tests
 │   │   └── test_e2e.py              # 3 end-to-end conversation tests
