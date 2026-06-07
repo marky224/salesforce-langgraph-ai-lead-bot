@@ -150,6 +150,35 @@ az containerapp update `
     LOG_LEVEL=INFO
 ```
 
+### Durable persistence (Neon Postgres)
+
+The bot persists conversation state via a LangGraph checkpointer. Without
+`DATABASE_URL` it uses an in-memory `MemorySaver` — fine locally, but state is
+lost on every Container App cold start / scale-to-zero. For durable,
+multi-replica conversations, point it at a free Neon Postgres database:
+
+1. Create a Neon project (free tier) and open **Connection Details**.
+2. Copy the **direct** (non-pooled) connection string. ⚠️ Do **not** use the
+   pooled PgBouncer endpoint — it breaks the psycopg3 prepared statements the
+   saver relies on.
+3. Store it as a secret and wire it in:
+
+```powershell
+az containerapp secret set `
+  --name $APP_NAME `
+  --resource-group $RESOURCE_GROUP `
+  --secrets database-url="<your-Neon-DIRECT-connection-string>"
+
+az containerapp update `
+  --name $APP_NAME `
+  --resource-group $RESOURCE_GROUP `
+  --set-env-vars DATABASE_URL=secretref:database-url
+```
+
+The checkpointer creates its tables automatically on first boot (idempotent —
+no migration step). Note: Neon scale-to-zero adds ~0.5–1s on the first DB touch
+after idle, stacking with the container cold start.
+
 ### 10. Verify
 
 ```powershell

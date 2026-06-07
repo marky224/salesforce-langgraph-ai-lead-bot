@@ -112,6 +112,17 @@ class Settings(BaseSettings):
         default=None, description="Salesforce security token"
     )
 
+    # --- Persistence -------------------------------------------------------
+
+    database_url: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Postgres connection string for the durable LangGraph checkpointer "
+            "(use Neon's direct / non-pooled endpoint). When unset, an in-memory "
+            "MemorySaver is used — fine for local dev and the test suite."
+        ),
+    )
+
     # --- Server / deployment -----------------------------------------------
 
     backend_url: str = Field(
