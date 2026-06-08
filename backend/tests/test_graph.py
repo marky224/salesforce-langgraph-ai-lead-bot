@@ -17,6 +17,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
+from app.graph.edges import NODE_EXTRACTION, NODE_TURN_CAP, route_entry_point
+from app.graph.graph import build_graph
 from app.graph.nodes import (
     _merge_dict,
     _safe_parse_json,
@@ -31,6 +33,7 @@ from app.graph.nodes import (
     router_node,
     scoring_node,
     set_llm,
+    turn_cap_node,
 )
 from app.graph.state import create_initial_state
 from app.models.schemas import ConversationStage
@@ -452,3 +455,76 @@ class TestErrorNode:
 
         result = await error_node(base_state)
         assert result["error"] is None
+
+
+# ---------------------------------------------------------------------------
+# Turn-cap node + entry guard tests (abuse protection, PR 2 C2)
+# ---------------------------------------------------------------------------
+
+class TestTurnCapNode:
+    """turn_cap_node — fixed reply, no LLM call."""
+
+    @pytest.mark.asyncio
+    async def test_returns_fixed_message(self, base_state):
+        result = await turn_cap_node(base_state)
+        assert len(result["messages"]) == 1
+        assert isinstance(result["messages"][0], AIMessage)
+        assert "wrap up" in result["messages"][0].content.lower()
+
+    @pytest.mark.asyncio
+    async def test_makes_no_llm_call(self, base_state, mock_llm):
+        await turn_cap_node(base_state)
+        mock_llm.ainvoke.assert_not_called()
+
+
+class TestTurnCapRouting:
+    """route_entry_point caps runaway threads before any LLM work."""
+
+    @staticmethod
+    def _state_with_n_messages(n: int):
+        state = create_initial_state()
+        state["messages"] = [
+            HumanMessage(content=f"msg {i}") if i % 2 == 0
+            else AIMessage(content=f"reply {i}")
+            for i in range(n)
+        ]
+        return state
+
+    def test_routes_to_turn_cap_at_or_past_cap(self, monkeypatch):
+        monkeypatch.setenv("MAX_THREAD_MESSAGES", "4")
+        from app.config import get_settings
+
+        get_settings.cache_clear()
+        assert route_entry_point(self._state_with_n_messages(5)) == NODE_TURN_CAP
+
+    def test_routes_to_extraction_under_cap(self, monkeypatch):
+        monkeypatch.setenv("MAX_THREAD_MESSAGES", "40")
+        from app.config import get_settings
+
+        get_settings.cache_clear()
+        assert route_entry_point(self._state_with_n_messages(5)) == NODE_EXTRACTION
+
+    @pytest.mark.asyncio
+    async def test_full_graph_blocks_past_cap(self, monkeypatch, mock_llm):
+        monkeypatch.setenv("MAX_THREAD_MESSAGES", "2")
+        from app.config import get_settings
+
+        get_settings.cache_clear()
+
+        graph = build_graph()
+        config = {"configurable": {"thread_id": "turncap-graph-001"}}
+
+        # Greeting turn — leaves one AI message in state.
+        await graph.ainvoke({"messages": []}, config=config)
+        mock_llm.ainvoke.reset_mock()
+
+        # The next human message pushes the thread to the cap → turn_cap fires.
+        result = await graph.ainvoke(
+            {"messages": [HumanMessage(content="hello")]},
+            config=config,
+        )
+
+        mock_llm.ainvoke.assert_not_called()
+        last = result["messages"][-1]
+        assert isinstance(last, AIMessage)
+        assert "wrap up" in last.content.lower()

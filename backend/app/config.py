@@ -151,6 +151,14 @@ class Settings(BaseSettings):
             "(e.g. '20/minute'). Keyed off the real client IP."
         ),
     )
+    max_thread_messages: int = Field(
+        default=60,
+        ge=2,
+        description=(
+            "Total messages allowed on one thread before the graph "
+            "short-circuits to a polite close with no further LLM calls."
+        ),
+    )
 
     # --- Computed helpers --------------------------------------------------
 

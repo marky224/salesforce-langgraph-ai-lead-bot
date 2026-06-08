@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import logging
 
+from app.config import get_settings
 from app.graph.state import GraphState
 from app.models.schemas import ConversationStage
 
@@ -52,6 +53,7 @@ NODE_ROUTER = "router"
 NODE_SCORING = "scoring"
 NODE_SALESFORCE = "salesforce"
 NODE_ERROR = "error"
+NODE_TURN_CAP = "turn_cap"
 
 # LangGraph special targets
 END = "__end__"
@@ -302,6 +304,12 @@ def route_entry_point(state: GraphState) -> str:
         logger.info("Edge: entry → greeting (no human messages yet)")
         return NODE_GREETING
 
+    # Abuse guard: cap runaway threads before any extraction / LLM work.
+    cap = get_settings().max_thread_messages
+    if len(messages) >= cap:
+        logger.info("Edge: entry → turn_cap (%d messages >= cap %d)", len(messages), cap)
+        return NODE_TURN_CAP
+
     logger.info("Edge: entry → extraction (processing new human message)")
     return NODE_EXTRACTION
 
@@ -374,7 +382,7 @@ def get_all_route_destinations() -> dict[str, list[str]]:
     requires the set of possible target nodes upfront for validation.
     """
     return {
-        "route_entry_point": [NODE_GREETING, NODE_EXTRACTION],
+        "route_entry_point": [NODE_GREETING, NODE_EXTRACTION, NODE_TURN_CAP],
         "route_after_extraction": [
             NODE_ERROR,
             NODE_SCORING,

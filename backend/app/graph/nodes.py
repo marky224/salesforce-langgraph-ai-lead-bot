@@ -610,3 +610,26 @@ async def error_node(state: GraphState) -> dict:
         "messages": [AIMessage(content=reply)],
         "error": None,
     }
+
+
+# ---------------------------------------------------------------------------
+# Turn-cap node (abuse guard)
+# ---------------------------------------------------------------------------
+
+async def turn_cap_node(state: GraphState) -> dict:
+    """
+    Politely end a runaway thread.
+
+    Fires from the entry point when a thread exceeds
+    ``settings.max_thread_messages``.  Appends one fixed message and makes no
+    LLM call, so a hammered thread can't keep driving model usage.  Leaves
+    ``stage`` unchanged, so it re-fires on each further message.
+    """
+    logger.info("Node: turn_cap (thread message cap reached)")
+
+    reply = (
+        "Thanks for the great conversation! We've covered a lot here, so I'm "
+        "going to wrap up this chat for now. Our team will follow up with you "
+        "soon — and you're always welcome to start a fresh chat anytime."
+    )
+    return {"messages": [AIMessage(content=reply)]}
