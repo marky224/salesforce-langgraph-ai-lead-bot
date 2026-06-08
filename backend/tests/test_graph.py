@@ -20,6 +20,9 @@ from langchain_core.messages import AIMessage, HumanMessage
 from app.graph.edges import NODE_EXTRACTION, NODE_TURN_CAP, route_entry_point
 from app.graph.graph import build_graph
 from app.graph.nodes import (
+    _ExtractedLead,
+    _ExtractionResult,
+    _RouterDecision,
     _merge_dict,
     _safe_parse_json,
     confirmation_node,
@@ -29,6 +32,7 @@ from app.graph.nodes import (
     greeting_node,
     lead_capture_node,
     objection_handler_node,
+    get_parse_failure_count,
     qualification_node,
     router_node,
     scoring_node,
@@ -528,3 +532,90 @@ class TestTurnCapRouting:
         last = result["messages"][-1]
         assert isinstance(last, AIMessage)
         assert "wrap up" in last.content.lower()
+
+
+# ---------------------------------------------------------------------------
+# Structured-output tests (abuse... PR 3 C3)
+# ---------------------------------------------------------------------------
+
+def _enable_structured(monkeypatch):
+    monkeypatch.setenv("LLM_STRUCTURED_OUTPUT", "true")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
+
+def _structured_llm(structured_result, fallback_content="{}"):
+    """Mock LLM whose with_structured_output(schema).ainvoke returns a value."""
+    llm = MagicMock()
+    structured = MagicMock()
+    structured.ainvoke = AsyncMock(return_value=structured_result)
+    llm.with_structured_output = MagicMock(return_value=structured)
+    llm.ainvoke = AsyncMock(return_value=MagicMock(content=fallback_content))
+    return llm
+
+
+class TestStructuredOutput:
+    """extraction/router use with_structured_output when enabled, with fallback."""
+
+    @pytest.mark.asyncio
+    async def test_extraction_uses_structured_when_enabled(self, monkeypatch, conversation_state):
+        _enable_structured(monkeypatch)
+        llm = _structured_llm(
+            _ExtractionResult(lead_data=_ExtractedLead(email="s@acme.com", company="Acme"))
+        )
+        set_llm(llm)
+
+        result = await extraction_node(conversation_state)
+
+        assert result["lead_data"]["email"] == "s@acme.com"
+        assert result["lead_data"]["company"] == "Acme"
+        llm.with_structured_output.assert_called_once()
+        llm.ainvoke.assert_not_called()  # structured path — no plain call
+
+    @pytest.mark.asyncio
+    async def test_router_uses_structured_when_enabled(self, monkeypatch, conversation_state):
+        _enable_structured(monkeypatch)
+        llm = _structured_llm(_RouterDecision(next_stage="qualification", reasoning="need budget"))
+        set_llm(llm)
+
+        result = await router_node(conversation_state)
+
+        assert result["stage"] == ConversationStage.QUALIFICATION
+        llm.with_structured_output.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_json_on_structured_error(self, monkeypatch, conversation_state):
+        _enable_structured(monkeypatch)
+        llm = MagicMock()
+        structured = MagicMock()
+        structured.ainvoke = AsyncMock(side_effect=RuntimeError("provider has no tool support"))
+        llm.with_structured_output = MagicMock(return_value=structured)
+        llm.ainvoke = AsyncMock(
+            return_value=MagicMock(content=json.dumps({"lead_data": {"email": "fb@x.com"}}))
+        )
+        set_llm(llm)
+
+        result = await extraction_node(conversation_state)
+
+        # Fell back to _invoke_llm + _safe_parse_json.
+        assert result["lead_data"]["email"] == "fb@x.com"
+        llm.ainvoke.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_disabled_by_default_uses_json_path(self, conversation_state, mock_llm):
+        # No flag set → structured output off → plain ainvoke + JSON parse.
+        mock_llm.ainvoke.return_value = MagicMock(
+            content=json.dumps({"lead_data": {"email": "json@x.com"}})
+        )
+
+        result = await extraction_node(conversation_state)
+
+        assert result["lead_data"]["email"] == "json@x.com"
+        mock_llm.with_structured_output.assert_not_called()
+
+
+def test_parse_failure_metric_increments():
+    before = get_parse_failure_count()
+    _safe_parse_json("definitely not json")
+    assert get_parse_failure_count() == before + 1

@@ -93,6 +93,14 @@ class Settings(BaseSettings):
         ge=0,
         description="Bounded retries on transient LLM errors (provider SDK handles backoff).",
     )
+    llm_structured_output: bool = Field(
+        default=False,
+        description=(
+            "Use the provider's native with_structured_output for extraction/"
+            "routing. Off by default; falls back to JSON parsing on any error. "
+            "Verify the active provider supports it before enabling."
+        ),
+    )
 
     # Provider API keys (only the active provider's key is required)
     anthropic_api_key: SecretStr | None = None
