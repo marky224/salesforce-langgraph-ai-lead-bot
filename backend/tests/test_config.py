@@ -36,3 +36,43 @@ def test_llm_timeout_and_retries_env_override(monkeypatch):
 
     assert llm.request_timeout == 12.5
     assert llm.max_retries == 5
+
+
+# ---------------------------------------------------------------------------
+# Observability: JSON logs + tracing flag (PR 4, C3)
+# ---------------------------------------------------------------------------
+
+def test_build_formatter_selects_json_vs_text():
+    from app.config import _build_formatter
+    from app.logging_ctx import JsonLogFormatter
+
+    assert isinstance(_build_formatter("json"), JsonLogFormatter)
+    assert isinstance(_build_formatter("JSON"), JsonLogFormatter)  # case-insensitive
+    assert not isinstance(_build_formatter("text"), JsonLogFormatter)
+
+
+def test_json_formatter_emits_structured_fields():
+    import json
+    import logging
+
+    from app.logging_ctx import JsonLogFormatter
+
+    record = logging.LogRecord("app.x", logging.INFO, __file__, 1, "hello", None, None)
+    record.request_id = "req-1"
+    record.thread_id = "thread-9"
+    out = json.loads(JsonLogFormatter().format(record))
+
+    assert out["message"] == "hello"
+    assert out["level"] == "INFO"
+    assert out["logger"] == "app.x"
+    assert out["request_id"] == "req-1"
+    assert out["thread_id"] == "thread-9"
+
+
+def test_tracing_flag_parsed_from_env(monkeypatch):
+    monkeypatch.setenv("LANGCHAIN_TRACING_V2", "true")
+
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    assert get_settings().langchain_tracing_v2 is True

@@ -29,6 +29,8 @@ from typing import Any
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.logging_ctx import JsonLogFormatter, RequestContextFilter
+
 logger = logging.getLogger(__name__)
 
 
@@ -159,6 +161,21 @@ class Settings(BaseSettings):
     log_level: str = Field(
         default="INFO",
         description="Python logging level",
+    )
+    log_format: str = Field(
+        default="text",
+        description=(
+            "Log output format: 'text' (human-readable) or 'json' (structured, "
+            "one object per line — for Azure Log Analytics)."
+        ),
+    )
+    langchain_tracing_v2: bool = Field(
+        default=False,
+        description=(
+            "Mirror of the LANGCHAIN_TRACING_V2 env var. LangSmith tracing is "
+            "automatic when this + LANGCHAIN_API_KEY are set; we only log it at "
+            "startup — no tracing package dependency is added."
+        ),
     )
     app_version: str = Field(
         default="0.1.0",
@@ -416,19 +433,34 @@ def _build_xai(model: str, temperature: float, s: Settings) -> Any:
 # Logging configuration
 # ---------------------------------------------------------------------------
 
+def _build_formatter(log_format: str) -> logging.Formatter:
+    """Return the JSON formatter when ``log_format == 'json'``, else the text one."""
+    if log_format.lower() == "json":
+        return JsonLogFormatter()
+    return logging.Formatter(
+        fmt="%(asctime)s | %(levelname)-8s | %(name)s | "
+        "req=%(request_id)s thread=%(thread_id)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+
 def configure_logging() -> None:
     """
     Set up structured logging for the application.
 
     Call once at startup from ``server.py``.
     """
-    log_level = get_settings().log_level.upper()
+    settings = get_settings()
+    log_level = settings.log_level.upper()
+    level = getattr(logging, log_level, logging.INFO)
 
-    logging.basicConfig(
-        level=getattr(logging, log_level, logging.INFO),
-        format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+    # One handler that injects request_id/thread_id (via the context filter) and
+    # formats every line with them. force=True replaces any handler a prior
+    # configure_logging() / uvicorn left behind, so the config is deterministic.
+    handler = logging.StreamHandler()
+    handler.addFilter(RequestContextFilter())
+    handler.setFormatter(_build_formatter(settings.log_format))
+    logging.basicConfig(level=level, handlers=[handler], force=True)
 
     # Quieten noisy third-party loggers
     for noisy in ("httpx", "httpcore", "urllib3", "asyncio"):
