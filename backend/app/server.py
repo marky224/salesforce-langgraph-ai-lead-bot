@@ -38,11 +38,14 @@ from langchain_core.messages import AIMessage, HumanMessage
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+from starlette.datastructures import Headers, MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.config import configure_logging, get_llm, get_settings
 from app.graph.checkpointer import open_checkpointer
 from app.graph.graph import build_graph
 from app.graph.nodes import set_llm
+from app.logging_ctx import request_id_var, thread_id_var
 from app.models.schemas import (
     ChatRequest,
     ChatResponse,
@@ -89,6 +92,41 @@ async def _rate_limit_exceeded_handler(
             )
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Request context (correlation IDs for tracing)
+# ---------------------------------------------------------------------------
+
+class RequestContextMiddleware:
+    """
+    Stamp each request with a correlation id.
+
+    Reads an inbound ``X-Request-ID`` (or mints one), publishes it plus a reset
+    ``thread_id`` into the logging contextvars, and echoes ``X-Request-ID`` on
+    the response.  Implemented as raw ASGI (not ``BaseHTTPMiddleware``) so it
+    runs in the request's own context — the contextvars stay visible to the
+    route and the SSE generator — and never buffers the streaming response body.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request_id = Headers(scope=scope).get("x-request-id") or str(uuid.uuid4())
+        request_id_var.set(request_id)
+        thread_id_var.set("-")  # cleared per request; chat handlers set the real thread
+
+        async def send_with_request_id(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                MutableHeaders(scope=message)["X-Request-ID"] = request_id
+            await send(message)
+
+        await self.app(scope, receive, send_with_request_id)
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +225,9 @@ app.add_middleware(
 )
 logger.info("CORS origins: %s", settings.cors_origin_list)
 
+# --- Request context (added last → outermost, so every request is stamped) ---
+app.add_middleware(RequestContextMiddleware)
+
 
 # ---------------------------------------------------------------------------
 # Endpoints
@@ -234,6 +275,7 @@ async def chat(request: Request, payload: ChatRequest) -> ChatResponse:
     """
     graph = _get_graph()
     thread_id = payload.thread_id or str(uuid.uuid4())
+    thread_id_var.set(thread_id)
 
     logger.info(
         "Chat request: thread=%s, message=%.80s",
@@ -300,6 +342,7 @@ async def chat_stream(request: Request, payload: ChatRequest) -> StreamingRespon
     """
     graph = _get_graph()
     thread_id = payload.thread_id or str(uuid.uuid4())
+    thread_id_var.set(thread_id)
 
     logger.info(
         "Stream request: thread=%s, message=%.80s",
@@ -410,6 +453,7 @@ async def chat_init(request: Request) -> dict[str, Any]:
     """
     graph = _get_graph()
     thread_id = str(uuid.uuid4())
+    thread_id_var.set(thread_id)
 
     logger.info("Initialising new conversation: thread=%s", thread_id)
 

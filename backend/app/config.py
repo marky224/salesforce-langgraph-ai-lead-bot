@@ -29,6 +29,8 @@ from typing import Any
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.logging_ctx import RequestContextFilter
+
 logger = logging.getLogger(__name__)
 
 
@@ -423,12 +425,21 @@ def configure_logging() -> None:
     Call once at startup from ``server.py``.
     """
     log_level = get_settings().log_level.upper()
+    level = getattr(logging, log_level, logging.INFO)
 
-    logging.basicConfig(
-        level=getattr(logging, log_level, logging.INFO),
-        format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+    # One handler that injects request_id/thread_id (via the context filter) and
+    # formats every line with them. force=True replaces any handler a prior
+    # configure_logging() / uvicorn left behind, so the config is deterministic.
+    handler = logging.StreamHandler()
+    handler.addFilter(RequestContextFilter())
+    handler.setFormatter(
+        logging.Formatter(
+            fmt="%(asctime)s | %(levelname)-8s | %(name)s | "
+            "req=%(request_id)s thread=%(thread_id)s | %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
     )
+    logging.basicConfig(level=level, handlers=[handler], force=True)
 
     # Quieten noisy third-party loggers
     for noisy in ("httpx", "httpcore", "urllib3", "asyncio"):
