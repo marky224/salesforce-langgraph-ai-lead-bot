@@ -79,6 +79,11 @@ def _get_llm() -> Any:
     return _llm
 
 
+def is_llm_ready() -> bool:
+    """True once set_llm() has injected a model — used by the readiness probe."""
+    return _llm is not None
+
+
 # Default values for state keys that might not exist after checkpoint restore
 _STATE_DEFAULTS: dict[str, Any] = {
     "lead_data": {},

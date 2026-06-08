@@ -96,3 +96,27 @@ def test_supplied_request_id_is_echoed(client):
     rid = "req-abc-123"
     resp = client.get("/health", headers={"X-Request-ID": rid})
     assert resp.headers.get("X-Request-ID") == rid
+
+
+# ---------------------------------------------------------------------------
+# Liveness vs readiness (PR 4, C2)
+# ---------------------------------------------------------------------------
+
+def test_readiness_ready_when_graph_and_llm_present(client):
+    resp = client.get("/health/ready")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "ready"
+    assert body["checks"]["graph"] is True
+    assert body["checks"]["llm"] is True
+
+
+def test_readiness_degraded_when_graph_missing(client, monkeypatch):
+    from app import server
+
+    monkeypatch.setattr(server, "_graph", None)
+    resp = client.get("/health/ready")
+    assert resp.status_code == 503
+    body = resp.json()
+    assert body["status"] == "degraded"
+    assert body["checks"]["graph"] is False

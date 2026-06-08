@@ -44,7 +44,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from app.config import configure_logging, get_llm, get_settings
 from app.graph.checkpointer import open_checkpointer
 from app.graph.graph import build_graph
-from app.graph.nodes import set_llm
+from app.graph.nodes import is_llm_ready, set_llm
 from app.logging_ctx import request_id_var, thread_id_var
 from app.models.schemas import (
     ChatRequest,
@@ -242,6 +242,41 @@ async def health_check() -> HealthResponse:
     Salesforce connection if credentials are configured.
     """
     return HealthResponse(version=get_settings().app_version)
+
+
+@app.get("/health/ready", tags=["system"])
+async def readiness_check() -> JSONResponse:
+    """
+    Readiness probe (distinct from ``/health`` liveness).
+
+    Reports whether the app can actually serve a turn: graph compiled, LLM
+    injected, and — only when a durable checkpointer is configured — the DB
+    reachable.  The DB probe just reads checkpoint state for a sentinel thread;
+    it makes no LLM call, so it costs no tokens.  200 ready / 503 degraded.
+    """
+    settings = get_settings()
+    checks: dict[str, bool] = {
+        "graph": _graph is not None,
+        "llm": is_llm_ready(),
+    }
+
+    if settings.database_url:
+        db_ok = False
+        if _graph is not None:
+            try:
+                await _graph.aget_state(
+                    {"configurable": {"thread_id": "health-probe"}}
+                )
+                db_ok = True
+            except Exception:
+                logger.warning("Readiness DB probe failed", exc_info=True)
+        checks["database"] = db_ok
+
+    ready = all(checks.values())
+    return JSONResponse(
+        status_code=200 if ready else 503,
+        content={"status": "ready" if ready else "degraded", "checks": checks},
+    )
 
 
 @app.get("/health/salesforce", tags=["system"])
