@@ -105,6 +105,7 @@ def mock_salesforce():
     """Mock all Salesforce API calls."""
     with patch("app.tools.salesforce._get_sf_client") as mock_client:
         sf = MagicMock()
+        sf.query.return_value = {"totalSize": 0, "records": []}  # dedup miss → create
         sf.Lead.create.return_value = {"success": True, "id": "00Q000TEST00001"}
         sf.Task.create.return_value = {"success": True, "id": "00T000TEST00001"}
         sf.Lead.update.return_value = None
@@ -279,6 +280,7 @@ class TestSalesforceFailure:
 
         with patch("app.tools.salesforce._get_sf_client") as mock_client:
             sf = MagicMock()
+            sf.query.return_value = {"records": []}  # dedup miss → create is reached
             sf.Lead.create.side_effect = ConnectionError("Salesforce unreachable")
             mock_client.return_value = sf
 

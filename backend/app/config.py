@@ -142,6 +142,24 @@ class Settings(BaseSettings):
         description="Application version string",
     )
 
+    # --- Abuse protection --------------------------------------------------
+
+    rate_limit: str = Field(
+        default="20/minute",
+        description=(
+            "Per-IP rate limit for the chat endpoints, in slowapi syntax "
+            "(e.g. '20/minute'). Keyed off the real client IP."
+        ),
+    )
+    max_thread_messages: int = Field(
+        default=60,
+        ge=2,
+        description=(
+            "Total messages allowed on one thread before the graph "
+            "short-circuits to a polite close with no further LLM calls."
+        ),
+    )
+
     # --- Computed helpers --------------------------------------------------
 
     @property

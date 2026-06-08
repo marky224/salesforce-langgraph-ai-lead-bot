@@ -43,6 +43,7 @@ from app.graph.edges import (
     NODE_ROUTER,
     NODE_SALESFORCE,
     NODE_SCORING,
+    NODE_TURN_CAP,
     route_after_conversation_node,
     route_after_error,
     route_after_extraction,
@@ -63,6 +64,7 @@ from app.graph.nodes import (
     router_node,
     salesforce_node,
     scoring_node,
+    turn_cap_node,
 )
 from app.graph.state import GraphState
 
@@ -121,7 +123,10 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> StateGraph:
     graph.add_node(NODE_SALESFORCE, salesforce_node)
     graph.add_node(NODE_ERROR, error_node)
 
-    logger.debug("Registered %d nodes", 11)
+    # Abuse guard
+    graph.add_node(NODE_TURN_CAP, turn_cap_node)
+
+    logger.debug("Registered %d nodes", 12)
 
     # ------------------------------------------------------------------
     # 2. Set conditional entry point
@@ -135,6 +140,7 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> StateGraph:
         {
             NODE_GREETING: NODE_GREETING,
             NODE_EXTRACTION: NODE_EXTRACTION,
+            NODE_TURN_CAP: NODE_TURN_CAP,
         },
     )
 
@@ -225,11 +231,14 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> StateGraph:
         },
     )
 
+    # --- Turn cap → end (abuse guard terminates the turn) ---
+    graph.add_edge(NODE_TURN_CAP, END)
+
     # ------------------------------------------------------------------
     # 4. Compile with checkpointer
     # ------------------------------------------------------------------
 
     compiled = graph.compile(checkpointer=checkpointer)
-    logger.info("Graph compiled successfully with %d nodes", 11)
+    logger.info("Graph compiled successfully with %d nodes", 12)
 
     return compiled
