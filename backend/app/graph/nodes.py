@@ -480,19 +480,31 @@ async def salesforce_node(state: GraphState) -> dict:
     try:
         # Late import — the tools module depends on config which may not
         # be available during testing / import time.
-        from app.tools.salesforce import create_lead, create_transcript_task
+        from app.tools.salesforce import (
+            create_lead,
+            create_transcript_task,
+            find_lead_by_email,
+        )
 
         # Build the full transcript text
         transcript_text = format_transcript(state.get("messages", []))
 
-        # Create Lead
-        lead_id = await create_lead(
-            lead_data=_gs(state, "lead_data"),
-            qualification_data=_gs(state, "qualification_data"),
-            lead_score=_gs(state, "lead_score"),
-            description=state.get("transcript_summary", ""),
-        )
-        logger.info("Salesforce Lead created: %s", lead_id)
+        # Dedup: reuse an existing Lead for this email rather than creating a
+        # duplicate (repeat visitors / retries shouldn't spam the CRM). The
+        # transcript Task still attaches; the org side owns Rating/derivation.
+        lead_data = _gs(state, "lead_data")
+        existing_id = await find_lead_by_email(lead_data.get("email"))
+        if existing_id:
+            lead_id = existing_id
+            logger.info("Reusing existing Salesforce Lead %s (dedup by email)", lead_id)
+        else:
+            lead_id = await create_lead(
+                lead_data=lead_data,
+                qualification_data=_gs(state, "qualification_data"),
+                lead_score=_gs(state, "lead_score"),
+                description=state.get("transcript_summary", ""),
+            )
+            logger.info("Salesforce Lead created: %s", lead_id)
 
         # Create Task with transcript
         task_id = await create_transcript_task(

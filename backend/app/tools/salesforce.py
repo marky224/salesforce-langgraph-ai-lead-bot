@@ -201,6 +201,36 @@ async def _sf_call_with_retry(operation: Any) -> Any:
 
 
 # ---------------------------------------------------------------------------
+# Lead lookup (dedup)
+# ---------------------------------------------------------------------------
+
+async def find_lead_by_email(email: str | None) -> str | None:
+    """
+    Return the Id of an existing Lead with this email, or None.
+
+    Lets the bot reuse a Lead for repeat visitors / retried turns instead of
+    creating duplicates.  Most recently created Lead wins if several share the
+    email.  Offloaded through the same retry wrapper as the write calls.
+    """
+    if not email:
+        return None
+
+    from simple_salesforce import format_soql
+
+    soql = format_soql(
+        "SELECT Id FROM Lead WHERE Email = {email} ORDER BY CreatedDate DESC LIMIT 1",
+        email=email,
+    )
+    result = await _sf_call_with_retry(lambda sf: sf.query(soql))
+    records = result.get("records", [])
+    if records:
+        lead_id = records[0]["Id"]
+        logger.info("Found existing Lead %s for email %s", lead_id, email)
+        return lead_id
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Lead creation
 # ---------------------------------------------------------------------------
 

@@ -378,3 +378,88 @@ class TestSalesforceTools:
                     lead_id="00Q000000000001",
                     transcript="test",
                 )
+
+
+# ---------------------------------------------------------------------------
+# Lead dedup tests (PR 2 C3)
+# ---------------------------------------------------------------------------
+
+class TestFindLeadByEmail:
+    """find_lead_by_email returns an existing Lead Id or None."""
+
+    @pytest.mark.asyncio
+    async def test_returns_existing_id(self):
+        mock_sf = MagicMock()
+        mock_sf.query.return_value = {"records": [{"Id": "00Qexisting00001"}]}
+
+        with patch("app.tools.salesforce._get_sf_client", return_value=mock_sf):
+            from app.tools.salesforce import find_lead_by_email
+
+            assert await find_lead_by_email("dup@acme.com") == "00Qexisting00001"
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_not_found(self):
+        mock_sf = MagicMock()
+        mock_sf.query.return_value = {"records": []}
+
+        with patch("app.tools.salesforce._get_sf_client", return_value=mock_sf):
+            from app.tools.salesforce import find_lead_by_email
+
+            assert await find_lead_by_email("none@acme.com") is None
+
+    @pytest.mark.asyncio
+    async def test_empty_email_skips_query(self):
+        mock_sf = MagicMock()
+
+        with patch("app.tools.salesforce._get_sf_client", return_value=mock_sf):
+            from app.tools.salesforce import find_lead_by_email
+
+            assert await find_lead_by_email("") is None
+
+        mock_sf.query.assert_not_called()
+
+
+class TestSalesforceNodeDedup:
+    """salesforce_node reuses an existing Lead instead of creating a duplicate."""
+
+    @pytest.mark.asyncio
+    async def test_reuses_existing_lead(self):
+        from app.graph.nodes import salesforce_node
+        from app.graph.state import create_initial_state
+
+        mock_sf = MagicMock()
+        mock_sf.query.return_value = {"totalSize": 1, "records": [{"Id": "00Qexisting00001"}]}
+        mock_sf.Task.create.return_value = {"success": True, "id": "00Texisting00001"}
+        mock_sf.Lead.update.return_value = None
+
+        state = create_initial_state()
+        state["lead_data"] = {"last_name": "Chen", "email": "dup@acme.com", "company": "Acme"}
+
+        with patch("app.tools.salesforce._get_sf_client", return_value=mock_sf):
+            result = await salesforce_node(state)
+
+        # No duplicate Lead created; existing Id reused for the Task.
+        mock_sf.Lead.create.assert_not_called()
+        assert result["salesforce_lead_id"] == "00Qexisting00001"
+        assert result["salesforce_task_id"] == "00Texisting00001"
+        assert mock_sf.Task.create.call_args[0][0]["WhoId"] == "00Qexisting00001"
+
+    @pytest.mark.asyncio
+    async def test_creates_lead_when_no_duplicate(self):
+        from app.graph.nodes import salesforce_node
+        from app.graph.state import create_initial_state
+
+        mock_sf = MagicMock()
+        mock_sf.query.return_value = {"totalSize": 0, "records": []}
+        mock_sf.Lead.create.return_value = {"success": True, "id": "00Qnew00001"}
+        mock_sf.Task.create.return_value = {"success": True, "id": "00Tnew00001"}
+        mock_sf.Lead.update.return_value = None
+
+        state = create_initial_state()
+        state["lead_data"] = {"last_name": "New", "email": "fresh@acme.com", "company": "Acme"}
+
+        with patch("app.tools.salesforce._get_sf_client", return_value=mock_sf):
+            result = await salesforce_node(state)
+
+        mock_sf.Lead.create.assert_called_once()
+        assert result["salesforce_lead_id"] == "00Qnew00001"
