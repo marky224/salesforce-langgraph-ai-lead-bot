@@ -1,29 +1,31 @@
+# Production runtime dependencies (installed into the Docker image).
+# Pinned to exact versions for reproducible builds. Dev/test/tooling deps live
+# in requirements-dev.txt and are NOT baked into the image.
+
 # Core framework
-fastapi>=0.115.0,<1.0
-uvicorn[standard]>=0.32.0,<1.0
-pydantic>=2.10.0,<3.0
-pydantic-settings>=2.7.0,<3.0
+fastapi==0.136.3
+uvicorn[standard]==0.49.0
+pydantic==2.13.4
+pydantic-settings==2.14.1
 
 # LangGraph / LangChain
-langgraph>=0.4.0,<1.0
-langchain-core>=0.3.0,<1.0
+langgraph==0.6.11
+langchain-core==0.3.86
 langgraph-checkpoint-postgres==3.0.5   # durable Postgres checkpointer (Neon); keep on 3.0.x — 3.1.0+ needs langgraph-checkpoint>=4 which breaks langgraph 0.6.x
-psycopg[binary]==3.2.*                  # async driver; binary extra → no libpq in slim image
+psycopg[binary]==3.2.13                 # async driver; binary extra → no libpq in slim image
 
-# LLM providers (uncomment the one you need)
-# langchain-anthropic>=0.3.0,<1.0   # For Anthropic (Claude)
-langchain-openai>=0.3.0,<1.0        # For OpenAI (GPT-4o) or xAI (Grok)
-# langchain-groq>=0.2.0,<1.0        # For Groq (Llama/Mixtral)
+# LLM provider — only langchain-openai is bundled. It serves BOTH OpenAI and
+# xAI/Grok (xAI is OpenAI-compatible); prod runs xAI Grok. anthropic and groq
+# are intentionally NOT installed: LLM_PROVIDER=anthropic|groq fails fast at
+# startup with a clear ImportError (see app/config.py builders). To use one,
+# add the matching package (langchain-anthropic / langchain-groq).
+langchain-openai==0.3.35
 
 # Salesforce
-simple-salesforce>=1.12.0,<2.0
+simple-salesforce==1.12.9
 
 # Abuse protection (PR 2)
-slowapi>=0.1.9,<1.0
+slowapi==0.1.9
 
 # Email validation
-email-validator>=2.0.0,<3.0
-
-# Testing (dev only — excluded from Docker via .dockerignore)
-pytest>=8.0.0,<9.0
-pytest-asyncio>=0.24.0,<1.0
+email-validator==2.3.0
