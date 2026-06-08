@@ -222,7 +222,7 @@ settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
-    allow_credentials=True,
+    allow_credentials=False,  # widget sends no cookies/credentials; the API has no auth
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -244,7 +244,7 @@ async def health_check() -> HealthResponse:
     Returns the server version and timestamp.  Optionally checks the
     Salesforce connection if credentials are configured.
     """
-    return HealthResponse(version=get_settings().app_version)
+    return HealthResponse()  # version sourced from Settings.app_version (single source)
 
 
 @app.get("/health/ready", tags=["system"])
