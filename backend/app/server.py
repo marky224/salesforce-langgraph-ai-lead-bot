@@ -173,6 +173,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.app_version,
     )
 
+    if settings.langchain_tracing_v2:
+        logger.info("LangSmith tracing enabled (LANGCHAIN_TRACING_V2 detected)")
+
     # Initialise LLM
     try:
         llm = get_llm()

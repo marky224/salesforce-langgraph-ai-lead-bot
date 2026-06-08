@@ -10,6 +10,7 @@ loop handles sees its own values with no cross-talk.
 
 from __future__ import annotations
 
+import json
 import logging
 from contextvars import ContextVar
 
@@ -25,3 +26,20 @@ class RequestContextFilter(logging.Filter):
         record.request_id = request_id_var.get()
         record.thread_id = thread_id_var.get()
         return True
+
+
+class JsonLogFormatter(logging.Formatter):
+    """Emit one JSON object per log record (structured logs for Log Analytics)."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "request_id": getattr(record, "request_id", "-"),
+            "thread_id": getattr(record, "thread_id", "-"),
+        }
+        if record.exc_info:
+            payload["exc_info"] = self.formatException(record.exc_info)
+        return json.dumps(payload, default=str)
