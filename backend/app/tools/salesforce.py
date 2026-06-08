@@ -119,7 +119,9 @@ def _get_sf_client() -> Any:
             )
 
     # --- Attempt 2: OAuth2 Username-Password Flow via REST ---
-    password = s.sf_password.get_secret_value()
+    # sf_password is guaranteed present here: salesforce_configured (checked above)
+    # requires it, so mypy's None-narrowing is a false positive.
+    password = s.sf_password.get_secret_value()  # type: ignore[union-attr]
     security_token = (
         s.sf_security_token.get_secret_value()
         if s.sf_security_token

@@ -1,0 +1,40 @@
+# ---------------------------------------------------------------------------
+# Tooling config for the backend (lint + type-check only).
+#
+# This repo ships as a container image, not as a published package, so there is
+# no [build-system] / [project] table here. Runtime deps live in
+# backend/requirements.txt and dev/tooling deps in backend/requirements-dev.txt.
+# ---------------------------------------------------------------------------
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["backend/tests/perf"]  # untracked local scratch (see CLAUDE.md)
+
+[tool.ruff.lint]
+# The rule set the repo was already cleaned against in PR #8 — ruff's default
+# E,F plus I, UP, B, SIM, C4 — with pycodestyle warnings (W) added. RUF rules
+# and a `ruff format --check` gate are intentionally deferred to keep this PR
+# surgical; enabling them now would churn docstrings and reformat most files.
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "C4"]
+ignore = [
+    "E501",   # line length is not enforced (no formatter gate in CI)
+    "UP042",  # `class X(str, Enum)` is deliberate — every `.value` is isinstance-guarded
+              # and the Postgres serde + e2e substring routing rely on it (CLAUDE.md
+              # contracts #1/#4). StrEnum would change `str(enum)` semantics. Don't convert.
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]  # group app.* imports consistently (app lives under backend/)
+
+[tool.mypy]
+# Lenient first (no --strict): type the app package, treat third-party packages
+# as Any so CI goes green now; tighten later. Tests and tests/perf are out of
+# scope. Run from the repo root with a bare `mypy`.
+python_version = "3.12"
+mypy_path = "backend"
+packages = ["app"]
+ignore_missing_imports = true
+# Pydantic stacks @computed_field on @property, which mypy core can't model
+# (mypy #1362). Disable just that category rather than scattering inline ignores.
+disable_error_code = ["prop-decorator"]

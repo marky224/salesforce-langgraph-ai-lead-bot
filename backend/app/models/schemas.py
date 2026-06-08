@@ -10,9 +10,11 @@ and comprehensive docstrings.
 from __future__ import annotations
 
 import enum
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 from pydantic import BaseModel, EmailStr, Field, computed_field
+
+from app.config import get_settings
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -265,5 +267,5 @@ class HealthResponse(BaseModel):
     """Health-check endpoint response."""
 
     status: str = "ok"
-    version: str = "0.1.0"
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    version: str = Field(default_factory=lambda: get_settings().app_version)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))

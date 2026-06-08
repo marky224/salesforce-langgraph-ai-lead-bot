@@ -113,21 +113,6 @@ def route_after_extraction(state: GraphState) -> str:
         # Check if confirmation was accepted (not an objection)
         is_affirmative = _latest_message_is_affirmative(state)
 
-        # --- Debug: log the exact message and check result ---
-        from langchain_core.messages import HumanMessage as _HM
-        _latest = ""
-        for _m in reversed(state.get("messages", [])):
-            if isinstance(_m, _HM):
-                _latest = _m.content
-                break
-        logger.info(
-            "CONFIRMATION check: is_affirmative=%s, word_count=%d, message='%.120s'",
-            is_affirmative,
-            len(_latest.split()),
-            _latest,
-        )
-        # --- End debug ---
-
         if is_affirmative:
             logger.info("Edge: extraction → scoring (confirmation accepted)")
             return NODE_SCORING
