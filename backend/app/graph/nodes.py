@@ -692,7 +692,7 @@ async def error_node(state: GraphState) -> dict:
     """
     logger.warning("Node: error — %s", state.get("error", "Unknown error"))
 
-    error_msg = state.get("error", "")
+    error_msg = state.get("error") or ""
 
     if "Salesforce" in error_msg:
         reply = (

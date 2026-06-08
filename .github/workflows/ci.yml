@@ -52,3 +52,43 @@ jobs:
       - name: Run tests
         working-directory: backend
         run: pytest tests/ -v
+
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff==0.15.16  # version mirrors backend/requirements-dev.txt
+
+      - name: Run ruff
+        run: ruff check backend
+
+  types:
+    name: Types (mypy)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install mypy
+        run: pip install mypy==2.1.0  # version mirrors backend/requirements-dev.txt
+
+      - name: Run mypy
+        # Lenient config lives in pyproject.toml ([tool.mypy]); ignore_missing_imports
+        # means the app deps need not be installed for a type-only check.
+        run: mypy
