@@ -15,10 +15,12 @@ isolated from the others.
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
+from langgraph.checkpoint.memory import MemorySaver
 
 
 @pytest.fixture
@@ -33,6 +35,15 @@ def client(monkeypatch):
 
     from app import server
     from app.graph.nodes import set_llm
+
+    # Keep the FastAPI-layer tests hermetic even when a real DATABASE_URL is
+    # present in a local .env: force the in-memory saver so the lifespan doesn't
+    # connect to Postgres.
+    @asynccontextmanager
+    async def _memory_checkpointer(_settings):
+        yield MemorySaver()
+
+    monkeypatch.setattr(server, "open_checkpointer", _memory_checkpointer)
 
     with TestClient(server.app) as test_client:
         # Replace the real LLM the lifespan installed with a fast async mock so
