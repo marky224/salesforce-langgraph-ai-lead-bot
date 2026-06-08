@@ -31,10 +31,13 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager, suppress
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from app.config import configure_logging, get_llm, get_settings
 from app.graph.checkpointer import open_checkpointer
@@ -48,6 +51,45 @@ from app.models.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Rate limiting (abuse protection)
+# ---------------------------------------------------------------------------
+# Behind Azure Container Apps ingress, request.client.host is the proxy, so we
+# key off the first hop of X-Forwarded-For, falling back to the socket peer for
+# direct/local calls.
+
+def _client_ip(request: Request) -> str:
+    """Return the real client IP, honouring the X-Forwarded-For proxy header."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return get_remote_address(request)
+
+
+def _rate_limit() -> str:
+    """Current per-IP limit, read live so env/tests can override it."""
+    return get_settings().rate_limit
+
+
+limiter = Limiter(key_func=_client_ip)
+
+
+async def _rate_limit_exceeded_handler(
+    request: Request, exc: RateLimitExceeded
+) -> JSONResponse:
+    """Polite 429 in place of slowapi's default plain-text response."""
+    return JSONResponse(
+        status_code=429,
+        content={
+            "detail": (
+                "You're sending messages a little too quickly. "
+                "Please wait a moment and try again."
+            )
+        },
+    )
+
 
 # ---------------------------------------------------------------------------
 # Application state (populated at startup)
@@ -130,6 +172,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# --- Rate limiting ---
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # --- CORS ---
 settings = get_settings()
 app.add_middleware(
@@ -175,7 +221,8 @@ async def salesforce_health() -> dict[str, Any]:
 
 
 @app.post("/chat", response_model=ChatResponse, tags=["chat"])
-async def chat(request: ChatRequest) -> ChatResponse:
+@limiter.limit(_rate_limit)
+async def chat(request: Request, payload: ChatRequest) -> ChatResponse:
     """
     Synchronous chat endpoint.
 
@@ -186,19 +233,19 @@ async def chat(request: ChatRequest) -> ChatResponse:
     If no ``thread_id`` is provided, a new conversation is started.
     """
     graph = _get_graph()
-    thread_id = request.thread_id or str(uuid.uuid4())
+    thread_id = payload.thread_id or str(uuid.uuid4())
 
     logger.info(
         "Chat request: thread=%s, message=%.80s",
         thread_id,
-        request.message,
+        payload.message,
     )
 
     config = {"configurable": {"thread_id": thread_id}}
 
     # Build input — add the new human message
     graph_input = {
-        "messages": [HumanMessage(content=request.message)],
+        "messages": [HumanMessage(content=payload.message)],
     }
 
     try:
@@ -235,7 +282,8 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
 
 @app.post("/chat/stream", tags=["chat"])
-async def chat_stream(request: ChatRequest) -> StreamingResponse:
+@limiter.limit(_rate_limit)
+async def chat_stream(request: Request, payload: ChatRequest) -> StreamingResponse:
     """
     Streaming chat endpoint via Server-Sent Events (SSE).
 
@@ -251,17 +299,17 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         data: {"done": true, "thread_id": "abc", "stage": "discovery"}
     """
     graph = _get_graph()
-    thread_id = request.thread_id or str(uuid.uuid4())
+    thread_id = payload.thread_id or str(uuid.uuid4())
 
     logger.info(
         "Stream request: thread=%s, message=%.80s",
         thread_id,
-        request.message,
+        payload.message,
     )
 
     config = {"configurable": {"thread_id": thread_id}}
     graph_input = {
-        "messages": [HumanMessage(content=request.message)],
+        "messages": [HumanMessage(content=payload.message)],
     }
 
     async def event_generator() -> AsyncGenerator[str, None]:
@@ -351,7 +399,8 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
 
 
 @app.post("/chat/init", tags=["chat"])
-async def chat_init() -> dict[str, Any]:
+@limiter.limit(_rate_limit)
+async def chat_init(request: Request) -> dict[str, Any]:
     """
     Initialise a new conversation and return the greeting.
 

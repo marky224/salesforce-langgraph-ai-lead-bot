@@ -142,6 +142,16 @@ class Settings(BaseSettings):
         description="Application version string",
     )
 
+    # --- Abuse protection --------------------------------------------------
+
+    rate_limit: str = Field(
+        default="20/minute",
+        description=(
+            "Per-IP rate limit for the chat endpoints, in slowapi syntax "
+            "(e.g. '20/minute'). Keyed off the real client IP."
+        ),
+    )
+
     # --- Computed helpers --------------------------------------------------
 
     @property
