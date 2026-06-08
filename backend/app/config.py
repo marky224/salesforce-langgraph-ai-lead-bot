@@ -121,6 +121,11 @@ class Settings(BaseSettings):
     sf_security_token: SecretStr | None = Field(
         default=None, description="Salesforce security token"
     )
+    sf_request_timeout: float = Field(
+        default=30.0,
+        gt=0,
+        description="Timeout (seconds) for the Salesforce OAuth token HTTP calls.",
+    )
 
     # --- Persistence -------------------------------------------------------
 

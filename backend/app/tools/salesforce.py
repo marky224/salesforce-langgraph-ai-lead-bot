@@ -94,7 +94,7 @@ def _get_sf_client() -> Any:
                 "grant_type": "client_credentials",
                 "client_id": s.sf_client_id.get_secret_value(),
                 "client_secret": s.sf_client_secret.get_secret_value(),
-            })
+            }, timeout=s.sf_request_timeout)
             if resp.status_code == 200:
                 token_data = resp.json()
                 sf = Salesforce(
@@ -138,7 +138,7 @@ def _get_sf_client() -> Any:
         "password": f"{password}{security_token}",
     }
 
-    resp = requests.post(token_url, data=token_payload)
+    resp = requests.post(token_url, data=token_payload, timeout=s.sf_request_timeout)
 
     if resp.status_code != 200:
         error_data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {"error": resp.text}
