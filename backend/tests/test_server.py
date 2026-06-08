@@ -15,11 +15,15 @@ isolated from the others.
 
 from __future__ import annotations
 
+import itertools
+import json
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
+from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import MemorySaver
 
 
@@ -120,3 +124,107 @@ def test_readiness_degraded_when_graph_missing(client, monkeypatch):
     body = resp.json()
     assert body["status"] == "degraded"
     assert body["checks"]["graph"] is False
+
+
+# ---------------------------------------------------------------------------
+# Chat endpoints — happy path, thread continuity, SSE shape, 500s (PR 5, C3)
+# ---------------------------------------------------------------------------
+# The `client` fixture installs a plain AsyncMock LLM (every reply is "hello").
+# A first /chat turn deterministically routes extraction → discovery (the
+# GREETING stage short-circuits past the router), so `stage` is predictable.
+
+
+def _parse_sse(text: str) -> list[dict]:
+    """Parse an SSE response body into the list of JSON `data:` payloads."""
+    events = []
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("data:"):
+            events.append(json.loads(line[len("data:"):].strip()))
+    return events
+
+
+def test_chat_returns_reply_and_thread(client):
+    headers = {"X-Forwarded-For": "203.0.113.20"}
+    resp = client.post("/chat", json={"message": "hi"}, headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["reply"] == "hello"          # the mocked LLM's content
+    assert body["thread_id"]                 # a fresh uuid was minted
+    assert body["stage"] == "discovery"      # first turn always lands in discovery
+    assert body["is_complete"] is False
+    assert body["lead_id"] is None
+
+
+def test_chat_continues_same_thread(client):
+    headers = {"X-Forwarded-For": "203.0.113.21"}
+    first = client.post("/chat", json={"message": "hi"}, headers=headers)
+    thread_id = first.json()["thread_id"]
+
+    second = client.post(
+        "/chat", json={"message": "tell me more", "thread_id": thread_id}, headers=headers
+    )
+    assert second.status_code == 200
+    assert second.json()["thread_id"] == thread_id
+
+
+def test_chat_stream_emits_tokens_and_done_event(client):
+    from app.graph.nodes import set_llm
+
+    # A streaming-capable fake so astream_events emits on_chat_model_stream; an
+    # infinite cycle feeds the multiple per-turn LLM calls (extraction + node).
+    set_llm(
+        GenericFakeChatModel(
+            messages=itertools.cycle([AIMessage(content="Hello there friend")])
+        )
+    )
+
+    resp = client.post(
+        "/chat/stream", json={"message": "hi"}, headers={"X-Forwarded-For": "203.0.113.22"}
+    )
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/event-stream")
+
+    events = _parse_sse(resp.text)
+    token_events = [e for e in events if "token" in e]
+    done_events = [e for e in events if e.get("done")]
+
+    # The server forwards tokens only from conversational nodes (discovery here),
+    # so the streamed text is the node's full reply.
+    assert token_events, "expected at least one token event"
+    assert "".join(e["token"] for e in token_events) == "Hello there friend"
+    assert not any("error" in e for e in events)
+
+    # Exactly one terminal frame, carrying the full SSE 'done' contract (CLAUDE.md #2).
+    assert len(done_events) == 1
+    done = done_events[0]
+    for key in ("thread_id", "stage", "is_complete", "lead_id", "lead_data"):
+        assert key in done
+    assert done["stage"] == "discovery"
+    assert done["is_complete"] is False
+
+
+def test_chat_returns_500_when_graph_errors(client, monkeypatch):
+    from app import server
+
+    broken = MagicMock()
+    broken.ainvoke = AsyncMock(side_effect=RuntimeError("boom"))
+    monkeypatch.setattr(server, "_graph", broken)
+
+    resp = client.post(
+        "/chat", json={"message": "hi"}, headers={"X-Forwarded-For": "203.0.113.23"}
+    )
+    assert resp.status_code == 500
+    assert "error occurred" in resp.json()["detail"].lower()
+
+
+def test_chat_init_returns_500_when_graph_errors(client, monkeypatch):
+    from app import server
+
+    broken = MagicMock()
+    broken.ainvoke = AsyncMock(side_effect=RuntimeError("boom"))
+    monkeypatch.setattr(server, "_graph", broken)
+
+    resp = client.post("/chat/init", headers={"X-Forwarded-For": "203.0.113.24"})
+    assert resp.status_code == 500
+    assert "failed to start" in resp.json()["detail"].lower()
