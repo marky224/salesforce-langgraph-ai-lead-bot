@@ -111,6 +111,9 @@ async def _invoke_llm(system_prompt: str, messages: list) -> str:
     assistant's reply as a plain string.
 
     Works with any LangChain chat model (Anthropic, OpenAI, Groq, xAI).
+    Per-call timeout and bounded retries are enforced at the model layer
+    (see ``config.get_llm`` — ``llm_timeout_seconds`` / ``llm_max_retries``),
+    so every node call funnelling through here inherits them.
     """
     llm = _get_llm()
     full_messages = [SystemMessage(content=system_prompt)] + messages

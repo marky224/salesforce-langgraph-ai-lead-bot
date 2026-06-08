@@ -83,6 +83,16 @@ class Settings(BaseSettings):
         le=2.0,
         description="Sampling temperature for the LLM.",
     )
+    llm_timeout_seconds: float = Field(
+        default=60.0,
+        gt=0,
+        description="Per-call timeout (seconds) for LLM requests. Kills hung calls.",
+    )
+    llm_max_retries: int = Field(
+        default=2,
+        ge=0,
+        description="Bounded retries on transient LLM errors (provider SDK handles backoff).",
+    )
 
     # Provider API keys (only the active provider's key is required)
     anthropic_api_key: SecretStr | None = None
@@ -312,6 +322,8 @@ def _build_anthropic(model: str, temperature: float, s: Settings) -> Any:
         temperature=temperature,
         anthropic_api_key=s.anthropic_api_key.get_secret_value(),
         max_tokens=1024,
+        timeout=s.llm_timeout_seconds,
+        max_retries=s.llm_max_retries,
     )
 
 
@@ -332,6 +344,8 @@ def _build_openai(model: str, temperature: float, s: Settings) -> Any:
         model=model,
         temperature=temperature,
         api_key=s.openai_api_key.get_secret_value(),
+        timeout=s.llm_timeout_seconds,
+        max_retries=s.llm_max_retries,
     )
 
 
@@ -352,6 +366,8 @@ def _build_groq(model: str, temperature: float, s: Settings) -> Any:
         model=model,
         temperature=temperature,
         groq_api_key=s.groq_api_key.get_secret_value(),
+        timeout=s.llm_timeout_seconds,
+        max_retries=s.llm_max_retries,
     )
 
 
@@ -378,6 +394,8 @@ def _build_xai(model: str, temperature: float, s: Settings) -> Any:
         temperature=temperature,
         api_key=s.xai_api_key.get_secret_value(),
         base_url="https://api.x.ai/v1",
+        timeout=s.llm_timeout_seconds,
+        max_retries=s.llm_max_retries,
     )
 
 
