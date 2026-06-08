@@ -25,7 +25,9 @@ import logging
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from pydantic import BaseModel, Field
 
+from app.config import get_settings
 from app.graph.prompts import (
     CONFIRMATION_PROMPT,
     DISCOVERY_PROMPT,
@@ -105,12 +107,61 @@ def _gs(state: GraphState, key: str) -> Any:
     return state.get(key, _STATE_DEFAULTS.get(key))
 
 
+# ---------------------------------------------------------------------------
+# Structured-output schemas (opt-in via settings.llm_structured_output)
+# ---------------------------------------------------------------------------
+# Lenient ``str`` fields on purpose: a provider quirk shouldn't trip Pydantic
+# validation (which would force a fallback). Downstream code already normalizes
+# enums (e.g. the scorer's table lookups, the router's ConversationStage cast).
+
+class _ExtractedLead(BaseModel):
+    first_name: str | None = None
+    last_name: str | None = None
+    email: str | None = None
+    company: str | None = None
+    phone: str | None = None
+    title: str | None = None
+
+
+class _ExtractedQualification(BaseModel):
+    budget_range: str | None = None
+    timeline: str | None = None
+    company_size: str | None = None
+    pain_points: list[str] = Field(default_factory=list)
+    decision_maker: bool | None = None
+    current_solution: str | None = None
+    goals: list[str] = Field(default_factory=list)
+
+
+class _ExtractionResult(BaseModel):
+    lead_data: _ExtractedLead | None = None
+    qualification_data: _ExtractedQualification | None = None
+    objections: list[str] = Field(default_factory=list)
+
+
+class _RouterDecision(BaseModel):
+    next_stage: str
+    reasoning: str = ""
+
+
+# Lightweight parse-failure metric (PR 4 will wire real observability).
+_parse_failure_count = 0
+
+
+def get_parse_failure_count() -> int:
+    """Return the running count of LLM JSON parse failures."""
+    return _parse_failure_count
+
+
 async def _invoke_llm(system_prompt: str, messages: list) -> str:
     """
     Send a system prompt + message history to the LLM and return the
     assistant's reply as a plain string.
 
     Works with any LangChain chat model (Anthropic, OpenAI, Groq, xAI).
+    Per-call timeout and bounded retries are enforced at the model layer
+    (see ``config.get_llm`` — ``llm_timeout_seconds`` / ``llm_max_retries``),
+    so every node call funnelling through here inherits them.
     """
     llm = _get_llm()
     full_messages = [SystemMessage(content=system_prompt)] + messages
@@ -161,8 +212,44 @@ def _safe_parse_json(text: str) -> dict:
     try:
         return json.loads(cleaned)
     except (json.JSONDecodeError, ValueError):
-        logger.warning("Failed to parse LLM JSON output: %.200s", text)
+        global _parse_failure_count  # noqa: PLW0603
+        _parse_failure_count += 1
+        logger.warning(
+            "Failed to parse LLM JSON output (count=%d): %.200s",
+            _parse_failure_count,
+            text,
+        )
         return {}
+
+
+async def _invoke_structured(
+    system_prompt: str, messages: list, schema: type[BaseModel]
+) -> dict:
+    """
+    Structured LLM call with a graceful fallback.
+
+    When ``settings.llm_structured_output`` is enabled, use the provider's
+    ``with_structured_output(schema)``; on ANY error fall back to the plain-text
+    ``_invoke_llm`` + ``_safe_parse_json`` path.  Returns a plain dict either way,
+    so callers don't need to know which path produced it.
+    """
+    if get_settings().llm_structured_output:
+        try:
+            structured = _get_llm().with_structured_output(schema)
+            result = await structured.ainvoke(
+                [SystemMessage(content=system_prompt)] + messages
+            )
+            if isinstance(result, BaseModel):
+                return result.model_dump(exclude_none=True)
+            if isinstance(result, dict):
+                return result
+        except Exception:
+            logger.warning(
+                "Structured output failed; falling back to JSON parse", exc_info=True
+            )
+
+    raw = await _invoke_llm(system_prompt, messages)
+    return _safe_parse_json(raw)
 
 def _merge_dict(base: dict, updates: dict) -> dict:
     """
@@ -400,8 +487,7 @@ async def extraction_node(state: GraphState) -> dict:
         transcript=transcript,
         current_data=current_data,
     )
-    raw = await _invoke_llm(prompt, [])
-    extracted = _safe_parse_json(raw)
+    extracted = await _invoke_structured(prompt, [], _ExtractionResult)
 
     if not extracted:
         logger.debug("Extraction returned empty — no new data in latest message.")
@@ -410,13 +496,13 @@ async def extraction_node(state: GraphState) -> dict:
     result: dict[str, Any] = {}
 
     # Merge lead data
-    if "lead_data" in extracted and isinstance(extracted["lead_data"], dict):
+    if extracted.get("lead_data") and isinstance(extracted["lead_data"], dict):
         result["lead_data"] = _merge_dict(
             _gs(state, "lead_data"), extracted["lead_data"]
         )
 
     # Merge qualification data
-    if "qualification_data" in extracted and isinstance(extracted["qualification_data"], dict):
+    if extracted.get("qualification_data") and isinstance(extracted["qualification_data"], dict):
         result["qualification_data"] = _merge_dict(
             _gs(state, "qualification_data"), extracted["qualification_data"]
         )
@@ -561,8 +647,7 @@ async def router_node(state: GraphState) -> dict:
         latest_message=latest_message,
         retry_count=state.get("retry_count", 0),
     )
-    raw = await _invoke_llm(prompt, [])
-    parsed = _safe_parse_json(raw)
+    parsed = await _invoke_structured(prompt, [], _RouterDecision)
 
     next_stage_str = parsed.get("next_stage", "discovery")
     reasoning = parsed.get("reasoning", "")

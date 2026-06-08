@@ -463,3 +463,99 @@ class TestSalesforceNodeDedup:
 
         mock_sf.Lead.create.assert_called_once()
         assert result["salesforce_lead_id"] == "00Qnew00001"
+
+
+# ---------------------------------------------------------------------------
+# Salesforce auth timeout tests (PR 3 C2)
+# ---------------------------------------------------------------------------
+
+class _FakeResp:
+    """Minimal stand-in for a requests.Response from the OAuth token endpoint."""
+
+    def __init__(self, status_code: int, payload: dict):
+        self.status_code = status_code
+        self._payload = payload
+        self.headers = {"content-type": "application/json"}
+        self.text = ""
+
+    def json(self):
+        return self._payload
+
+
+def _set_sf_creds(monkeypatch):
+    monkeypatch.setenv("SF_CLIENT_ID", "cid")
+    monkeypatch.setenv("SF_CLIENT_SECRET", "csec")
+    monkeypatch.setenv("SF_USERNAME", "user@example.com")
+    monkeypatch.setenv("SF_PASSWORD", "pw")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
+
+_TOKEN_OK = {"instance_url": "https://example.my.salesforce.com", "access_token": "tok"}
+
+
+class TestSalesforceAuthTimeout:
+    """Both OAuth token POSTs must pass a timeout so auth can't hang forever."""
+
+    def test_client_credentials_post_has_timeout(self, monkeypatch):
+        _set_sf_creds(monkeypatch)
+        import requests
+
+        timeouts: list = []
+
+        def fake_post(url, data=None, timeout=None, **kw):
+            timeouts.append(timeout)
+            return _FakeResp(200, _TOKEN_OK)
+
+        monkeypatch.setattr(requests, "post", fake_post)
+
+        from app.tools.salesforce import _get_sf_client, reset_sf_client
+
+        reset_sf_client()
+        _get_sf_client()
+        assert timeouts == [30.0]
+
+    def test_password_flow_post_has_timeout(self, monkeypatch):
+        _set_sf_creds(monkeypatch)
+        import requests
+
+        timeouts: list = []
+
+        def fake_post(url, data=None, timeout=None, **kw):
+            timeouts.append(timeout)
+            # First (client-credentials) call fails → fall through to password flow.
+            if len(timeouts) == 1:
+                return _FakeResp(400, {"error": "unsupported_grant_type"})
+            return _FakeResp(200, _TOKEN_OK)
+
+        monkeypatch.setattr(requests, "post", fake_post)
+
+        from app.tools.salesforce import _get_sf_client, reset_sf_client
+
+        reset_sf_client()
+        _get_sf_client()
+        assert timeouts == [30.0, 30.0]
+
+    def test_timeout_env_override(self, monkeypatch):
+        _set_sf_creds(monkeypatch)
+        monkeypatch.setenv("SF_REQUEST_TIMEOUT", "7")
+        from app.config import get_settings
+
+        get_settings.cache_clear()
+
+        import requests
+
+        timeouts: list = []
+
+        def fake_post(url, data=None, timeout=None, **kw):
+            timeouts.append(timeout)
+            return _FakeResp(200, _TOKEN_OK)
+
+        monkeypatch.setattr(requests, "post", fake_post)
+
+        from app.tools.salesforce import _get_sf_client, reset_sf_client
+
+        reset_sf_client()
+        _get_sf_client()
+        assert timeouts == [7.0]
