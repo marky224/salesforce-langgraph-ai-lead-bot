@@ -12,6 +12,7 @@ network access.  Each test verifies that the node:
 from __future__ import annotations
 
 import json
+import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -20,8 +21,10 @@ from langchain_core.messages import AIMessage, HumanMessage
 from app.graph.edges import NODE_EXTRACTION, NODE_TURN_CAP, route_entry_point
 from app.graph.graph import build_graph
 from app.graph.nodes import (
+    _compute_cost_usd,
     _ExtractedLead,
     _ExtractionResult,
+    _invoke_llm,
     _merge_dict,
     _RouterDecision,
     _safe_parse_json,
@@ -619,3 +622,62 @@ def test_parse_failure_metric_increments():
     before = get_parse_failure_count()
     _safe_parse_json("definitely not json")
     assert get_parse_failure_count() == before + 1
+
+
+# ---------------------------------------------------------------------------
+# LLM call telemetry (PR A — token / cost / latency capture)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_invoke_llm_emits_llm_call_event_with_cost(caplog):
+    """A priced model logs node, model, token counts, and computed USD cost."""
+    response = AIMessage(
+        content="hi there",
+        usage_metadata={"input_tokens": 1000, "output_tokens": 500, "total_tokens": 1500},
+        response_metadata={"model_name": "grok-4.20-0309-reasoning"},
+    )
+    llm = MagicMock()
+    llm.ainvoke = AsyncMock(return_value=response)
+    set_llm(llm)
+
+    with caplog.at_level(logging.INFO, logger="app.graph.nodes"):
+        out = await _invoke_llm("system", [HumanMessage(content="hello")], node="discovery")
+
+    assert out == "hi there"
+    event = next(r.llm_call for r in caplog.records if hasattr(r, "llm_call"))
+    assert event["node"] == "discovery"
+    assert event["model"] == "grok-4.20-0309-reasoning"
+    assert event["input_tokens"] == 1000
+    assert event["output_tokens"] == 500
+    assert event["total_tokens"] == 1500
+    # 1000/1e6 * 1.25 + 500/1e6 * 2.50 = 0.00125 + 0.00125
+    assert event["cost_usd"] == pytest.approx(0.0025)
+    assert event["latency_ms"] >= 0
+
+
+@pytest.mark.asyncio
+async def test_invoke_llm_unknown_model_logs_tokens_without_cost(caplog):
+    """An unlisted model still logs tokens but reports no cost."""
+    response = AIMessage(
+        content="ok",
+        usage_metadata={"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+        response_metadata={"model_name": "some-unlisted-model"},
+    )
+    llm = MagicMock()
+    llm.ainvoke = AsyncMock(return_value=response)
+    set_llm(llm)
+
+    with caplog.at_level(logging.INFO, logger="app.graph.nodes"):
+        await _invoke_llm("system", [HumanMessage(content="hi")], node="router")
+
+    event = next(r.llm_call for r in caplog.records if hasattr(r, "llm_call"))
+    assert event["node"] == "router"
+    assert event["input_tokens"] == 10
+    assert event["cost_usd"] is None
+
+
+def test_compute_cost_usd_known_and_unknown():
+    """Direct unit check of the price-table lookup and the None fallback."""
+    assert _compute_cost_usd("grok-4.20-0309-reasoning", 1_000_000, 1_000_000) == pytest.approx(3.75)
+    assert _compute_cost_usd("mystery-model", 1000, 1000) is None

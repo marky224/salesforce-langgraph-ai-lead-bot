@@ -172,10 +172,24 @@ class Settings(BaseSettings):
     langchain_tracing_v2: bool = Field(
         default=False,
         description=(
-            "Mirror of the LANGCHAIN_TRACING_V2 env var. LangSmith tracing is "
-            "automatic when this + LANGCHAIN_API_KEY are set; we only log it at "
-            "startup — no tracing package dependency is added."
+            "Legacy LangSmith on-switch (env LANGCHAIN_TRACING_V2). Prefer "
+            "langsmith_tracing; either one enables tracing (see tracing_enabled)."
         ),
+    )
+    langsmith_tracing: bool = Field(
+        default=False,
+        description=(
+            "Canonical LangSmith on-switch (env LANGSMITH_TRACING). When on, an "
+            "email-masking LangChainTracer is attached to every graph run."
+        ),
+    )
+    langsmith_api_key: SecretStr | None = Field(
+        default=None,
+        description="LangSmith API key (env LANGSMITH_API_KEY). Required to upload traces.",
+    )
+    langsmith_project: str | None = Field(
+        default=None,
+        description="LangSmith project name (env LANGSMITH_PROJECT). Defaults to LangSmith's default.",
     )
     app_version: str = Field(
         default="0.1.0",
@@ -206,6 +220,11 @@ class Settings(BaseSettings):
     def cors_origin_list(self) -> list[str]:
         """Parse the comma-separated ``cors_origins`` string into a list."""
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def tracing_enabled(self) -> bool:
+        """True if either the canonical or legacy LangSmith tracing flag is set."""
+        return self.langsmith_tracing or self.langchain_tracing_v2
 
     # --- Convenience -------------------------------------------------------
 
@@ -376,6 +395,7 @@ def _build_openai(model: str, temperature: float, s: Settings) -> Any:
         api_key=s.openai_api_key.get_secret_value(),
         timeout=s.llm_timeout_seconds,
         max_retries=s.llm_max_retries,
+        stream_usage=True,  # surface usage_metadata on streamed (astream_events) calls
     )
 
 
@@ -426,6 +446,7 @@ def _build_xai(model: str, temperature: float, s: Settings) -> Any:
         base_url="https://api.x.ai/v1",
         timeout=s.llm_timeout_seconds,
         max_retries=s.llm_max_retries,
+        stream_usage=True,  # surface usage_metadata on streamed (astream_events) calls
     )
 
 

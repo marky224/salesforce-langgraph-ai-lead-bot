@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -158,7 +159,71 @@ def get_parse_failure_count() -> int:
     return _parse_failure_count
 
 
-async def _invoke_llm(system_prompt: str, messages: list) -> str:
+# ---------------------------------------------------------------------------
+# LLM call telemetry (token / cost / latency capture)
+# ---------------------------------------------------------------------------
+
+# USD per 1M tokens, keyed by a model-name substring. Only models we actually
+# run are listed; an unknown model logs tokens with ``cost_usd=None``. Extend
+# when PR B's A/B picks a model.
+_MODEL_PRICING: dict[str, tuple[float, float]] = {
+    "grok-4.20-0309-reasoning": (1.25, 2.50),  # (input_per_1m, output_per_1m)
+}
+
+
+def _compute_cost_usd(model: str, input_tokens: int, output_tokens: int) -> float | None:
+    """USD cost for one call, or ``None`` if the model isn't in the price table."""
+    for key, (in_price, out_price) in _MODEL_PRICING.items():
+        if key in model:
+            return round(input_tokens / 1e6 * in_price + output_tokens / 1e6 * out_price, 6)
+    return None
+
+
+def _log_llm_call(node: str, response: Any, latency_ms: int) -> None:
+    """
+    Emit one structured ``llm_call`` event: which node called the model, the
+    model name, latency, token counts, and computed USD cost.
+
+    Defensive: ``usage_metadata`` is ``None`` on a streamed call unless the model
+    was built with ``stream_usage=True`` (see config.py), and a test fake may omit
+    it — either way we log zero tokens / no cost rather than raise. The JSON log
+    formatter surfaces the ``llm_call`` payload as queryable fields (Log
+    Analytics); text mode renders the readable one-liner.
+    """
+    usage = getattr(response, "usage_metadata", None)
+    if not isinstance(usage, dict):
+        usage = {}
+    meta = getattr(response, "response_metadata", None)
+    model = meta.get("model_name", "unknown") if isinstance(meta, dict) else "unknown"
+
+    input_tokens = usage.get("input_tokens") or 0
+    output_tokens = usage.get("output_tokens") or 0
+    total_tokens = usage.get("total_tokens") or (input_tokens + output_tokens)
+    cost_usd = _compute_cost_usd(model, input_tokens, output_tokens)
+
+    logger.info(
+        "llm_call node=%s model=%s latency_ms=%d in=%d out=%d cost_usd=%s",
+        node,
+        model,
+        latency_ms,
+        input_tokens,
+        output_tokens,
+        cost_usd,
+        extra={
+            "llm_call": {
+                "node": node,
+                "model": model,
+                "latency_ms": latency_ms,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": total_tokens,
+                "cost_usd": cost_usd,
+            }
+        },
+    )
+
+
+async def _invoke_llm(system_prompt: str, messages: list, *, node: str) -> str:
     """
     Send a system prompt + message history to the LLM and return the
     assistant's reply as a plain string.
@@ -166,17 +231,20 @@ async def _invoke_llm(system_prompt: str, messages: list) -> str:
     Works with any LangChain chat model (Anthropic, OpenAI, Groq, xAI).
     Per-call timeout and bounded retries are enforced at the model layer
     (see ``config.get_llm`` — ``llm_timeout_seconds`` / ``llm_max_retries``),
-    so every node call funnelling through here inherits them.
+    so every node call funnelling through here inherits them.  Every call emits
+    an ``llm_call`` telemetry event (token / cost / latency) tagged with ``node``.
     """
     llm = _get_llm()
     full_messages = [SystemMessage(content=system_prompt)] + messages
 
+    start = time.perf_counter()
     try:
         response = await llm.ainvoke(full_messages)
-        return response.content
     except Exception:
         logger.exception("LLM invocation failed")
         raise
+    _log_llm_call(node, response, int((time.perf_counter() - start) * 1000))
+    return response.content
 
 
 def _safe_parse_json(text: str) -> dict:
@@ -228,7 +296,7 @@ def _safe_parse_json(text: str) -> dict:
 
 
 async def _invoke_structured(
-    system_prompt: str, messages: list, schema: type[BaseModel]
+    system_prompt: str, messages: list, schema: type[BaseModel], *, node: str
 ) -> dict:
     """
     Structured LLM call with a graceful fallback.
@@ -253,7 +321,7 @@ async def _invoke_structured(
                 "Structured output failed; falling back to JSON parse", exc_info=True
             )
 
-    raw = await _invoke_llm(system_prompt, messages)
+    raw = await _invoke_llm(system_prompt, messages, node=node)
     return _safe_parse_json(raw)
 
 def _merge_dict(base: dict, updates: dict) -> dict:
@@ -291,7 +359,7 @@ async def greeting_node(state: GraphState) -> dict:
     logger.info("Node: greeting")
 
     prompt = GREETING_PROMPT.format(persona=PERSONA)
-    reply = await _invoke_llm(prompt, list(state.get("messages", [])))
+    reply = await _invoke_llm(prompt, list(state.get("messages", [])), node="greeting")
 
     return {
         "messages": [AIMessage(content=reply)],
@@ -317,7 +385,7 @@ async def discovery_node(state: GraphState) -> dict:
         transcript=transcript,
         known_info=known_info,
     )
-    reply = await _invoke_llm(prompt, list(state.get("messages", [])))
+    reply = await _invoke_llm(prompt, list(state.get("messages", [])), node="discovery")
 
     return {
         "messages": [AIMessage(content=reply)],
@@ -344,7 +412,7 @@ async def qualification_node(state: GraphState) -> dict:
         known_info=known_info,
         missing_fields=", ".join(missing) if missing else "All fields captured.",
     )
-    reply = await _invoke_llm(prompt, list(state.get("messages", [])))
+    reply = await _invoke_llm(prompt, list(state.get("messages", [])), node="qualification")
 
     return {
         "messages": [AIMessage(content=reply)],
@@ -375,7 +443,7 @@ async def objection_handler_node(state: GraphState) -> dict:
         transcript=transcript,
         objection=latest_human,
     )
-    reply = await _invoke_llm(prompt, list(state.get("messages", [])))
+    reply = await _invoke_llm(prompt, list(state.get("messages", [])), node="objection_handling")
 
     return {
         "messages": [AIMessage(content=reply)],
@@ -402,7 +470,7 @@ async def lead_capture_node(state: GraphState) -> dict:
         known_info=known_info,
         missing_contact_fields=", ".join(missing) if missing else "All contact info captured.",
     )
-    reply = await _invoke_llm(prompt, list(state.get("messages", [])))
+    reply = await _invoke_llm(prompt, list(state.get("messages", [])), node="lead_capture")
 
     return {
         "messages": [AIMessage(content=reply)],
@@ -454,7 +522,7 @@ async def confirmation_node(state: GraphState) -> dict:
         lead_summary=contact_summary,
         qualification_summary="\n".join(qual_parts) if qual_parts else "Limited info collected.",
     )
-    reply = await _invoke_llm(prompt, list(state.get("messages", [])))
+    reply = await _invoke_llm(prompt, list(state.get("messages", [])), node="confirmation")
 
     return {
         "messages": [AIMessage(content=reply)],
@@ -492,7 +560,7 @@ async def extraction_node(state: GraphState) -> dict:
         transcript=transcript,
         current_data=current_data,
     )
-    extracted = await _invoke_structured(prompt, [], _ExtractionResult)
+    extracted = await _invoke_structured(prompt, [], _ExtractionResult, node="extraction")
 
     if not extracted:
         logger.debug("Extraction returned empty — no new data in latest message.")
@@ -543,7 +611,7 @@ async def scoring_node(state: GraphState) -> dict:
 
     transcript = format_transcript(state.get("messages", []))
     summary_prompt = TRANSCRIPT_SUMMARY_PROMPT.format(transcript=transcript)
-    summary = await _invoke_llm(summary_prompt, [])
+    summary = await _invoke_llm(summary_prompt, [], node="scoring")
 
     return {
         "lead_score": score_result["score"],
@@ -652,7 +720,7 @@ async def router_node(state: GraphState) -> dict:
         latest_message=latest_message,
         retry_count=state.get("retry_count", 0),
     )
-    parsed = await _invoke_structured(prompt, [], _RouterDecision)
+    parsed = await _invoke_structured(prompt, [], _RouterDecision, node="router")
 
     next_stage_str = parsed.get("next_stage", "discovery")
     reasoning = parsed.get("reasoning", "")

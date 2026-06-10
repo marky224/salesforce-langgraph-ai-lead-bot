@@ -52,6 +52,7 @@ from app.models.schemas import (
     ConversationStage,
     HealthResponse,
 )
+from app.tracing import build_tracer
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +135,8 @@ class RequestContextMiddleware:
 # ---------------------------------------------------------------------------
 
 _graph = None
+_tracer: Any | None = None
+_trace_base: dict[str, Any] = {"metadata": {}, "tags": ["tars"]}
 
 
 def _get_graph():
@@ -161,7 +164,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     On shutdown:
     - Log a clean shutdown message.
     """
-    global _graph  # noqa: PLW0603
+    global _graph, _trace_base, _tracer  # noqa: PLW0603
 
     # --- Startup ---
     configure_logging()
@@ -173,9 +176,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.app_version,
     )
 
-    if settings.langchain_tracing_v2:
-        logger.info("LangSmith tracing enabled (LANGCHAIN_TRACING_V2 detected)")
-
     # Initialise LLM
     try:
         llm = get_llm()
@@ -184,6 +184,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception:
         logger.exception("Failed to initialise LLM — chat will not work")
         raise
+
+    # Static trace metadata stamped on every graph run (session_id added per
+    # request in _run_config). Resolved from the live model so it matches reality.
+    model = getattr(llm, "model_name", None) or settings.llm_model or "unknown"
+    _trace_base = {
+        "metadata": {"provider": settings.llm_provider.value, "model": model},
+        "tags": ["tars"],
+    }
+    _tracer = build_tracer(settings)
 
     # Open the checkpointer (Postgres if DATABASE_URL set, else MemorySaver) and
     # keep it open for the whole process so the DB connection lives for the
@@ -321,7 +330,7 @@ async def chat(request: Request, payload: ChatRequest) -> ChatResponse:
         payload.message,
     )
 
-    config = {"configurable": {"thread_id": thread_id}}
+    config = _run_config(thread_id)
 
     # Build input — add the new human message
     graph_input = {
@@ -388,7 +397,7 @@ async def chat_stream(request: Request, payload: ChatRequest) -> StreamingRespon
         payload.message,
     )
 
-    config = {"configurable": {"thread_id": thread_id}}
+    config = _run_config(thread_id)
     graph_input = {
         "messages": [HumanMessage(content=payload.message)],
     }
@@ -495,7 +504,7 @@ async def chat_init(request: Request) -> dict[str, Any]:
 
     logger.info("Initialising new conversation: thread=%s", thread_id)
 
-    config = {"configurable": {"thread_id": thread_id}}
+    config = _run_config(thread_id)
 
     # Invoke with empty messages — the entry point router will
     # detect no human messages and route to the greeting node.
@@ -523,6 +532,23 @@ async def chat_init(request: Request) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _run_config(thread_id: str) -> dict[str, Any]:
+    """
+    Build the per-run RunnableConfig: the checkpointer thread id plus trace
+    metadata/tags. ``session_id`` groups a conversation in LangSmith's Threads
+    view; provider/model/tags make runs filterable. All keys propagate to every
+    child run (nodes, LLM calls).
+    """
+    config: dict[str, Any] = {
+        "configurable": {"thread_id": thread_id},
+        "metadata": {**_trace_base["metadata"], "session_id": thread_id},
+        "tags": _trace_base["tags"],
+    }
+    if _tracer is not None:
+        config["callbacks"] = [_tracer]
+    return config
+
 
 def _extract_latest_ai_reply(result: dict) -> str:
     """

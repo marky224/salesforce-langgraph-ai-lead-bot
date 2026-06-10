@@ -228,3 +228,22 @@ def test_chat_init_returns_500_when_graph_errors(client, monkeypatch):
     resp = client.post("/chat/init", headers={"X-Forwarded-For": "203.0.113.24"})
     assert resp.status_code == 500
     assert "failed to start" in resp.json()["detail"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Trace metadata on graph runs (PR A2a)
+# ---------------------------------------------------------------------------
+
+
+def test_run_config_carries_trace_metadata(client):
+    from app import server
+
+    cfg = server._run_config("thread-xyz")
+    assert cfg["configurable"]["thread_id"] == "thread-xyz"
+    assert cfg["metadata"]["session_id"] == "thread-xyz"
+    assert cfg["metadata"]["provider"] == "openai"  # client fixture sets LLM_PROVIDER=openai
+    # model is whatever's configured (env/.env LLM_MODEL, else provider default) — assert it's
+    # carried, not its exact value, so the test stays hermetic across environments.
+    assert isinstance(cfg["metadata"]["model"], str) and cfg["metadata"]["model"]
+    assert cfg["tags"] == ["tars"]
+    assert "callbacks" not in cfg  # tracing off in tests → no tracer attached
