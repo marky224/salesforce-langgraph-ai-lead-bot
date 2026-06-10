@@ -52,6 +52,7 @@ from app.models.schemas import (
     ConversationStage,
     HealthResponse,
 )
+from app.tracing import build_tracer
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +135,7 @@ class RequestContextMiddleware:
 # ---------------------------------------------------------------------------
 
 _graph = None
+_tracer: Any | None = None
 _trace_base: dict[str, Any] = {"metadata": {}, "tags": ["tars"]}
 
 
@@ -162,7 +164,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     On shutdown:
     - Log a clean shutdown message.
     """
-    global _graph, _trace_base  # noqa: PLW0603
+    global _graph, _trace_base, _tracer  # noqa: PLW0603
 
     # --- Startup ---
     configure_logging()
@@ -173,9 +175,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.llm_provider.value,
         settings.app_version,
     )
-
-    if settings.langchain_tracing_v2:
-        logger.info("LangSmith tracing enabled (LANGCHAIN_TRACING_V2 detected)")
 
     # Initialise LLM
     try:
@@ -193,6 +192,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         "metadata": {"provider": settings.llm_provider.value, "model": model},
         "tags": ["tars"],
     }
+    _tracer = build_tracer(settings)
 
     # Open the checkpointer (Postgres if DATABASE_URL set, else MemorySaver) and
     # keep it open for the whole process so the DB connection lives for the
@@ -540,11 +540,14 @@ def _run_config(thread_id: str) -> dict[str, Any]:
     view; provider/model/tags make runs filterable. All keys propagate to every
     child run (nodes, LLM calls).
     """
-    return {
+    config: dict[str, Any] = {
         "configurable": {"thread_id": thread_id},
         "metadata": {**_trace_base["metadata"], "session_id": thread_id},
         "tags": _trace_base["tags"],
     }
+    if _tracer is not None:
+        config["callbacks"] = [_tracer]
+    return config
 
 
 def _extract_latest_ai_reply(result: dict) -> str:

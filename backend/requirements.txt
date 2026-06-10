@@ -11,6 +11,7 @@ pydantic-settings==2.14.1
 # LangGraph / LangChain
 langgraph==0.6.11
 langchain-core==0.3.86
+langsmith==0.8.9                        # tracing client; already transitive via langchain-core, pinned for reproducibility
 langgraph-checkpoint-postgres==3.0.5   # durable Postgres checkpointer (Neon); keep on 3.0.x — 3.1.0+ needs langgraph-checkpoint>=4 which breaks langgraph 0.6.x
 psycopg[binary]==3.2.13                 # async driver; binary extra → no libpq in slim image
 
