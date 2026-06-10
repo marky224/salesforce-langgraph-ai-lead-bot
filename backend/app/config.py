@@ -376,6 +376,7 @@ def _build_openai(model: str, temperature: float, s: Settings) -> Any:
         api_key=s.openai_api_key.get_secret_value(),
         timeout=s.llm_timeout_seconds,
         max_retries=s.llm_max_retries,
+        stream_usage=True,  # surface usage_metadata on streamed (astream_events) calls
     )
 
 
@@ -426,6 +427,7 @@ def _build_xai(model: str, temperature: float, s: Settings) -> Any:
         base_url="https://api.x.ai/v1",
         timeout=s.llm_timeout_seconds,
         max_retries=s.llm_max_retries,
+        stream_usage=True,  # surface usage_metadata on streamed (astream_events) calls
     )
 
 

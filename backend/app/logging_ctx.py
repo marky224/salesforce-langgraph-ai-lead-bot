@@ -40,6 +40,10 @@ class JsonLogFormatter(logging.Formatter):
             "request_id": getattr(record, "request_id", "-"),
             "thread_id": getattr(record, "thread_id", "-"),
         }
+        # Optional structured telemetry attached via logger(..., extra={"llm_call": {...}}).
+        llm_call = getattr(record, "llm_call", None)
+        if llm_call is not None:
+            payload["llm_call"] = llm_call
         if record.exc_info:
             payload["exc_info"] = self.formatException(record.exc_info)
         return json.dumps(payload, default=str)
