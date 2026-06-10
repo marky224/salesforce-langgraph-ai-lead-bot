@@ -84,8 +84,11 @@ def _get_sf_client() -> Any:
             "in your environment variables."
         )
 
-    login_domain = "test" if "sandbox" in s.sf_instance_url.lower() else "login"
-    token_url = f"https://{login_domain}.salesforce.com/services/oauth2/token"
+    # The OAuth2 token endpoint must be the org's My Domain: client-credentials is ONLY served
+    # there (login.salesforce.com returns invalid_grant "request not supported on this domain"),
+    # and username-password works there too. sf_instance_url IS the My Domain in prod, and falls
+    # back to the configured default (login.salesforce.com) when unset.
+    token_url = f"{s.sf_instance_url.rstrip('/')}/services/oauth2/token"
 
     # --- Attempt 1: OAuth2 Client Credentials Flow (server-to-server) ---
     if s.sf_client_id and s.sf_client_secret:
