@@ -1,0 +1,2534 @@
+interactions:
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a data extraction assistant.  Analyse
+      the conversation below and extract any NEW information revealed in the LATEST
+      MESSAGE from the visitor.\\n\\nFULL CONVERSATION:\\nTARS: What's been the biggest
+      headache lately?\\nVisitor: We're losing a ton of time to manual data entry.\\n\\nPREVIOUSLY
+      EXTRACTED DATA:\\n{\\n  \\\"lead_data\\\": {},\\n  \\\"qualification_data\\\":
+      {}\\n}\\n\\nINSTRUCTIONS:\\n- Only extract information that is NEW or UPDATED
+      in the latest visitor message.\\n- Do NOT re-extract information already present
+      in PREVIOUSLY EXTRACTED DATA.\\n- If the latest message contains no new extractable
+      information, return an empty JSON object {}.\\n- Be conservative about NAMES
+      and IDENTIFIERS \u2014 only extract information the visitor explicitly stated,
+      not inferences.\\n- For budget_range, map to one of: \\\"Under $10K\\\", \\\"$10K-$50K\\\",
+      \\\"$50K-$100K\\\", \\\"$100K+\\\", or \\\"Unknown\\\".\\n- For timeline, map
+      to one of: \\\"Immediate\\\", \\\"1-3 months\\\", \\\"3-6 months\\\", \\\"6+
+      months\\\", \\\"Just exploring\\\", or \\\"Unknown\\\".  Map any concrete future
+      reference to the nearest bucket instead of defaulting to \\\"Unknown\\\": \\\"Q3\\\"
+      / \\\"Q4\\\" / \\\"by end of year\\\" \u2192 \\\"3-6 months\\\" (or \\\"1-3
+      months\\\" if the current quarter is close); \\\"next quarter\\\" / \\\"this
+      summer\\\" / \\\"in a couple months\\\" \u2192 \\\"1-3 months\\\"; \\\"ASAP\\\"
+      / \\\"this month\\\" \u2192 \\\"Immediate\\\"; \\\"next year\\\" / \\\"sometime
+      in 2027\\\" \u2192 \\\"6+ months\\\".  Only use \\\"Unknown\\\" when the visitor
+      was genuinely non-committal (\\\"we'll see\\\", \\\"no rush\\\", \\\"haven't
+      thought about it\\\").\\n- For company_size, map to one of: \\\"1-10\\\", \\\"11-50\\\",
+      \\\"51-200\\\", \\\"201-1000\\\", \\\"1000+\\\", or \\\"Unknown\\\".\\n- For
+      decision_maker, use true / false / null.\\n- For pain_points, enumerate EACH
+      distinct problem as its own list item rather than consolidating into one entry.
+      \ If the visitor describes a 3-week ramp time, 20 IT hours per week of manual
+      work, and weak reporting \u2014 that is THREE pain points, not one \\\"bad onboarding\\\"
+      entry.  Capture measurable impacts (time lost, delays, costs) as separate items
+      from capability gaps (missing features, poor UX, integration issues).\\n- For
+      company, only extract a real company name (e.g. \\\"Acme Corp\\\", \\\"Google\\\").
+      Do NOT extract vague descriptions like \\\"a 400-employee company\\\", \\\"my
+      company\\\", or \\\"a mid-size firm\\\" \u2014 leave company as null if no actual
+      name was given.\\n\\nReturn ONLY a valid JSON object with the following structure
+      (include only fields that have new values):\\n\\n{\\n  \\\"lead_data\\\": {\\n
+      \   \\\"first_name\\\": \\\"string or null\\\",\\n    \\\"last_name\\\": \\\"string
+      or null\\\",\\n    \\\"email\\\": \\\"string or null\\\",\\n    \\\"company\\\":
+      \\\"string or null\\\",\\n    \\\"phone\\\": \\\"string or null\\\",\\n    \\\"title\\\":
+      \\\"string or null\\\"\\n  },\\n  \\\"qualification_data\\\": {\\n    \\\"budget_range\\\":
+      \\\"string or null\\\",\\n    \\\"timeline\\\": \\\"string or null\\\",\\n    \\\"company_size\\\":
+      \\\"string or null\\\",\\n    \\\"pain_points\\\": [\\\"new pain point\\\"],\\n
+      \   \\\"decision_maker\\\": true/false/null,\\n    \\\"current_solution\\\":
+      \\\"string or null\\\",\\n    \\\"goals\\\": [\\\"new goal\\\"]\\n  },\\n  \\\"objections\\\":
+      [\\\"any new concern or objection raised\\\"]\\n}\\n\\nOmit any top-level key
+      (lead_data, qualification_data, objections) if there is nothing new for that
+      category.  Omit individual fields within lead_data or qualification_data if
+      they were not mentioned.\\n\\nReturn ONLY the JSON \u2014 no explanation, no
+      markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '3480'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"3b76aebb-e07f-990a-a844-2384036e6b92","object":"chat.completion","created":1781205442,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{\n  \"qualification_data\":
+        {\n    \"pain_points\": [\"losing a ton of time to manual data entry\"]\n  }\n}","reasoning_content":"The
+        task is to extract NEW information from the latest visitor message.\nFirst,
+        the task is to extract NEW information from the latest visitor message. The
+        conversation is:\n\nTARS: What''s been the biggest headache lately?\n\nVisitor:
+        We''re losing a ton of time to manual data entry.\n\nPreviously extracted
+        data is empty: { \"lead_data\": {}, \"qualification_data\": {} }\n\nLatest
+        message: \" We''re losing a ton of time to manual data entry.\"\n\nThis reveals
+        a pain point: losing time to manual data entry.","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":917,"completion_tokens":27,"total_tokens":1616,"prompt_tokens_details":{"text_tokens":917,"audio_tokens":0,"image_tokens":0,"cached_tokens":128},"completion_tokens_details":{"reasoning_tokens":672,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":27593500},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a2f49c1ac8e579-IAH
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:17:25 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '1289'
+      traceparent:
+      - 00-04124a3d3b3b69826c1950582a8be56a-988f95e1000616b3-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '3527.6'
+      x-metrics-mean-itl-ms:
+      - '4.6'
+      x-metrics-ttft-ms:
+      - '259.3'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - 3b76aebb-e07f-990a-a844-2384036e6b92
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a data extraction assistant.  Analyse
+      the conversation below and extract any NEW information revealed in the LATEST
+      MESSAGE from the visitor.\\n\\nFULL CONVERSATION:\\nVisitor: We've got a $10K-$50K
+      budget, want it live in 1-3 months, and I'm the one who signs off.\\n\\nPREVIOUSLY
+      EXTRACTED DATA:\\n{\\n  \\\"lead_data\\\": {},\\n  \\\"qualification_data\\\":
+      {}\\n}\\n\\nINSTRUCTIONS:\\n- Only extract information that is NEW or UPDATED
+      in the latest visitor message.\\n- Do NOT re-extract information already present
+      in PREVIOUSLY EXTRACTED DATA.\\n- If the latest message contains no new extractable
+      information, return an empty JSON object {}.\\n- Be conservative about NAMES
+      and IDENTIFIERS \u2014 only extract information the visitor explicitly stated,
+      not inferences.\\n- For budget_range, map to one of: \\\"Under $10K\\\", \\\"$10K-$50K\\\",
+      \\\"$50K-$100K\\\", \\\"$100K+\\\", or \\\"Unknown\\\".\\n- For timeline, map
+      to one of: \\\"Immediate\\\", \\\"1-3 months\\\", \\\"3-6 months\\\", \\\"6+
+      months\\\", \\\"Just exploring\\\", or \\\"Unknown\\\".  Map any concrete future
+      reference to the nearest bucket instead of defaulting to \\\"Unknown\\\": \\\"Q3\\\"
+      / \\\"Q4\\\" / \\\"by end of year\\\" \u2192 \\\"3-6 months\\\" (or \\\"1-3
+      months\\\" if the current quarter is close); \\\"next quarter\\\" / \\\"this
+      summer\\\" / \\\"in a couple months\\\" \u2192 \\\"1-3 months\\\"; \\\"ASAP\\\"
+      / \\\"this month\\\" \u2192 \\\"Immediate\\\"; \\\"next year\\\" / \\\"sometime
+      in 2027\\\" \u2192 \\\"6+ months\\\".  Only use \\\"Unknown\\\" when the visitor
+      was genuinely non-committal (\\\"we'll see\\\", \\\"no rush\\\", \\\"haven't
+      thought about it\\\").\\n- For company_size, map to one of: \\\"1-10\\\", \\\"11-50\\\",
+      \\\"51-200\\\", \\\"201-1000\\\", \\\"1000+\\\", or \\\"Unknown\\\".\\n- For
+      decision_maker, use true / false / null.\\n- For pain_points, enumerate EACH
+      distinct problem as its own list item rather than consolidating into one entry.
+      \ If the visitor describes a 3-week ramp time, 20 IT hours per week of manual
+      work, and weak reporting \u2014 that is THREE pain points, not one \\\"bad onboarding\\\"
+      entry.  Capture measurable impacts (time lost, delays, costs) as separate items
+      from capability gaps (missing features, poor UX, integration issues).\\n- For
+      company, only extract a real company name (e.g. \\\"Acme Corp\\\", \\\"Google\\\").
+      Do NOT extract vague descriptions like \\\"a 400-employee company\\\", \\\"my
+      company\\\", or \\\"a mid-size firm\\\" \u2014 leave company as null if no actual
+      name was given.\\n\\nReturn ONLY a valid JSON object with the following structure
+      (include only fields that have new values):\\n\\n{\\n  \\\"lead_data\\\": {\\n
+      \   \\\"first_name\\\": \\\"string or null\\\",\\n    \\\"last_name\\\": \\\"string
+      or null\\\",\\n    \\\"email\\\": \\\"string or null\\\",\\n    \\\"company\\\":
+      \\\"string or null\\\",\\n    \\\"phone\\\": \\\"string or null\\\",\\n    \\\"title\\\":
+      \\\"string or null\\\"\\n  },\\n  \\\"qualification_data\\\": {\\n    \\\"budget_range\\\":
+      \\\"string or null\\\",\\n    \\\"timeline\\\": \\\"string or null\\\",\\n    \\\"company_size\\\":
+      \\\"string or null\\\",\\n    \\\"pain_points\\\": [\\\"new pain point\\\"],\\n
+      \   \\\"decision_maker\\\": true/false/null,\\n    \\\"current_solution\\\":
+      \\\"string or null\\\",\\n    \\\"goals\\\": [\\\"new goal\\\"]\\n  },\\n  \\\"objections\\\":
+      [\\\"any new concern or objection raised\\\"]\\n}\\n\\nOmit any top-level key
+      (lead_data, qualification_data, objections) if there is nothing new for that
+      category.  Omit individual fields within lead_data or qualification_data if
+      they were not mentioned.\\n\\nReturn ONLY the JSON \u2014 no explanation, no
+      markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '3472'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"342f1475-8a3f-94b5-8d3b-a6873d80cee0","object":"chat.completion","created":1781205445,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{\n  \"qualification_data\":
+        {\n    \"budget_range\": \"$10K-$50K\",\n    \"timeline\": \"1-3 months\",\n    \"decision_maker\":
+        true\n  }\n}","reasoning_content":"The task is to extract NEW information
+        from the LATEST MESSAGE from the visitor.\nFirst, the task is to extract NEW
+        information from the LATEST MESSAGE.","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":925,"completion_tokens":40,"total_tokens":1469,"prompt_tokens_details":{"text_tokens":925,"audio_tokens":0,"image_tokens":0,"cached_tokens":128},"completion_tokens_details":{"reasoning_tokens":504,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":23818500},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a2f4b2fed66b3a-DFW
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:17:28 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '965'
+      traceparent:
+      - 00-60c1048eb06b91ac09deb97aa7a000d3-e7f2484e000bad72-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '2793.5'
+      x-metrics-mean-itl-ms:
+      - '4.6'
+      x-metrics-ttft-ms:
+      - '259.5'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - 342f1475-8a3f-94b5-8d3b-a6873d80cee0
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a data extraction assistant.  Analyse
+      the conversation below and extract any NEW information revealed in the LATEST
+      MESSAGE from the visitor.\\n\\nFULL CONVERSATION:\\nTARS: When are you hoping
+      to have this solved?\\nVisitor: Ideally by Q4.\\n\\nPREVIOUSLY EXTRACTED DATA:\\n{\\n
+      \ \\\"lead_data\\\": {},\\n  \\\"qualification_data\\\": {}\\n}\\n\\nINSTRUCTIONS:\\n-
+      Only extract information that is NEW or UPDATED in the latest visitor message.\\n-
+      Do NOT re-extract information already present in PREVIOUSLY EXTRACTED DATA.\\n-
+      If the latest message contains no new extractable information, return an empty
+      JSON object {}.\\n- Be conservative about NAMES and IDENTIFIERS \u2014 only
+      extract information the visitor explicitly stated, not inferences.\\n- For budget_range,
+      map to one of: \\\"Under $10K\\\", \\\"$10K-$50K\\\", \\\"$50K-$100K\\\", \\\"$100K+\\\",
+      or \\\"Unknown\\\".\\n- For timeline, map to one of: \\\"Immediate\\\", \\\"1-3
+      months\\\", \\\"3-6 months\\\", \\\"6+ months\\\", \\\"Just exploring\\\", or
+      \\\"Unknown\\\".  Map any concrete future reference to the nearest bucket instead
+      of defaulting to \\\"Unknown\\\": \\\"Q3\\\" / \\\"Q4\\\" / \\\"by end of year\\\"
+      \u2192 \\\"3-6 months\\\" (or \\\"1-3 months\\\" if the current quarter is close);
+      \\\"next quarter\\\" / \\\"this summer\\\" / \\\"in a couple months\\\" \u2192
+      \\\"1-3 months\\\"; \\\"ASAP\\\" / \\\"this month\\\" \u2192 \\\"Immediate\\\";
+      \\\"next year\\\" / \\\"sometime in 2027\\\" \u2192 \\\"6+ months\\\".  Only
+      use \\\"Unknown\\\" when the visitor was genuinely non-committal (\\\"we'll
+      see\\\", \\\"no rush\\\", \\\"haven't thought about it\\\").\\n- For company_size,
+      map to one of: \\\"1-10\\\", \\\"11-50\\\", \\\"51-200\\\", \\\"201-1000\\\",
+      \\\"1000+\\\", or \\\"Unknown\\\".\\n- For decision_maker, use true / false
+      / null.\\n- For pain_points, enumerate EACH distinct problem as its own list
+      item rather than consolidating into one entry.  If the visitor describes a 3-week
+      ramp time, 20 IT hours per week of manual work, and weak reporting \u2014 that
+      is THREE pain points, not one \\\"bad onboarding\\\" entry.  Capture measurable
+      impacts (time lost, delays, costs) as separate items from capability gaps (missing
+      features, poor UX, integration issues).\\n- For company, only extract a real
+      company name (e.g. \\\"Acme Corp\\\", \\\"Google\\\"). Do NOT extract vague
+      descriptions like \\\"a 400-employee company\\\", \\\"my company\\\", or \\\"a
+      mid-size firm\\\" \u2014 leave company as null if no actual name was given.\\n\\nReturn
+      ONLY a valid JSON object with the following structure (include only fields that
+      have new values):\\n\\n{\\n  \\\"lead_data\\\": {\\n    \\\"first_name\\\":
+      \\\"string or null\\\",\\n    \\\"last_name\\\": \\\"string or null\\\",\\n
+      \   \\\"email\\\": \\\"string or null\\\",\\n    \\\"company\\\": \\\"string
+      or null\\\",\\n    \\\"phone\\\": \\\"string or null\\\",\\n    \\\"title\\\":
+      \\\"string or null\\\"\\n  },\\n  \\\"qualification_data\\\": {\\n    \\\"budget_range\\\":
+      \\\"string or null\\\",\\n    \\\"timeline\\\": \\\"string or null\\\",\\n    \\\"company_size\\\":
+      \\\"string or null\\\",\\n    \\\"pain_points\\\": [\\\"new pain point\\\"],\\n
+      \   \\\"decision_maker\\\": true/false/null,\\n    \\\"current_solution\\\":
+      \\\"string or null\\\",\\n    \\\"goals\\\": [\\\"new goal\\\"]\\n  },\\n  \\\"objections\\\":
+      [\\\"any new concern or objection raised\\\"]\\n}\\n\\nOmit any top-level key
+      (lead_data, qualification_data, objections) if there is nothing new for that
+      category.  Omit individual fields within lead_data or qualification_data if
+      they were not mentioned.\\n\\nReturn ONLY the JSON \u2014 no explanation, no
+      markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '3446'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"bf07eca1-f2e1-9a15-bf62-f97e4677d584","object":"chat.completion","created":1781205448,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{\n  \"qualification_data\":
+        {\n    \"timeline\": \"3-6 months\"\n  }\n}","reasoning_content":"The task
+        is to extract NEW information from the LATEST MESSAGE from the visitor.\n","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":913,"completion_tokens":20,"total_tokens":1358,"prompt_tokens_details":{"text_tokens":913,"audio_tokens":0,"image_tokens":0,"cached_tokens":64},"completion_tokens_details":{"reasoning_tokens":425,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":21865500},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a2f4c568dc69c5-DFW
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:17:30 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '825'
+      traceparent:
+      - 00-e325d2d81fee7c2fad44576d2a406b0e-af9f71bc000035c0-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '2079.1'
+      x-metrics-mean-itl-ms:
+      - '4.2'
+      x-metrics-ttft-ms:
+      - '161.5'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - bf07eca1-f2e1-9a15-bf62-f97e4677d584
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a data extraction assistant.  Analyse
+      the conversation below and extract any NEW information revealed in the LATEST
+      MESSAGE from the visitor.\\n\\nFULL CONVERSATION:\\nVisitor: Probably next quarter,
+      no firm date yet.\\n\\nPREVIOUSLY EXTRACTED DATA:\\n{\\n  \\\"lead_data\\\":
+      {},\\n  \\\"qualification_data\\\": {}\\n}\\n\\nINSTRUCTIONS:\\n- Only extract
+      information that is NEW or UPDATED in the latest visitor message.\\n- Do NOT
+      re-extract information already present in PREVIOUSLY EXTRACTED DATA.\\n- If
+      the latest message contains no new extractable information, return an empty
+      JSON object {}.\\n- Be conservative about NAMES and IDENTIFIERS \u2014 only
+      extract information the visitor explicitly stated, not inferences.\\n- For budget_range,
+      map to one of: \\\"Under $10K\\\", \\\"$10K-$50K\\\", \\\"$50K-$100K\\\", \\\"$100K+\\\",
+      or \\\"Unknown\\\".\\n- For timeline, map to one of: \\\"Immediate\\\", \\\"1-3
+      months\\\", \\\"3-6 months\\\", \\\"6+ months\\\", \\\"Just exploring\\\", or
+      \\\"Unknown\\\".  Map any concrete future reference to the nearest bucket instead
+      of defaulting to \\\"Unknown\\\": \\\"Q3\\\" / \\\"Q4\\\" / \\\"by end of year\\\"
+      \u2192 \\\"3-6 months\\\" (or \\\"1-3 months\\\" if the current quarter is close);
+      \\\"next quarter\\\" / \\\"this summer\\\" / \\\"in a couple months\\\" \u2192
+      \\\"1-3 months\\\"; \\\"ASAP\\\" / \\\"this month\\\" \u2192 \\\"Immediate\\\";
+      \\\"next year\\\" / \\\"sometime in 2027\\\" \u2192 \\\"6+ months\\\".  Only
+      use \\\"Unknown\\\" when the visitor was genuinely non-committal (\\\"we'll
+      see\\\", \\\"no rush\\\", \\\"haven't thought about it\\\").\\n- For company_size,
+      map to one of: \\\"1-10\\\", \\\"11-50\\\", \\\"51-200\\\", \\\"201-1000\\\",
+      \\\"1000+\\\", or \\\"Unknown\\\".\\n- For decision_maker, use true / false
+      / null.\\n- For pain_points, enumerate EACH distinct problem as its own list
+      item rather than consolidating into one entry.  If the visitor describes a 3-week
+      ramp time, 20 IT hours per week of manual work, and weak reporting \u2014 that
+      is THREE pain points, not one \\\"bad onboarding\\\" entry.  Capture measurable
+      impacts (time lost, delays, costs) as separate items from capability gaps (missing
+      features, poor UX, integration issues).\\n- For company, only extract a real
+      company name (e.g. \\\"Acme Corp\\\", \\\"Google\\\"). Do NOT extract vague
+      descriptions like \\\"a 400-employee company\\\", \\\"my company\\\", or \\\"a
+      mid-size firm\\\" \u2014 leave company as null if no actual name was given.\\n\\nReturn
+      ONLY a valid JSON object with the following structure (include only fields that
+      have new values):\\n\\n{\\n  \\\"lead_data\\\": {\\n    \\\"first_name\\\":
+      \\\"string or null\\\",\\n    \\\"last_name\\\": \\\"string or null\\\",\\n
+      \   \\\"email\\\": \\\"string or null\\\",\\n    \\\"company\\\": \\\"string
+      or null\\\",\\n    \\\"phone\\\": \\\"string or null\\\",\\n    \\\"title\\\":
+      \\\"string or null\\\"\\n  },\\n  \\\"qualification_data\\\": {\\n    \\\"budget_range\\\":
+      \\\"string or null\\\",\\n    \\\"timeline\\\": \\\"string or null\\\",\\n    \\\"company_size\\\":
+      \\\"string or null\\\",\\n    \\\"pain_points\\\": [\\\"new pain point\\\"],\\n
+      \   \\\"decision_maker\\\": true/false/null,\\n    \\\"current_solution\\\":
+      \\\"string or null\\\",\\n    \\\"goals\\\": [\\\"new goal\\\"]\\n  },\\n  \\\"objections\\\":
+      [\\\"any new concern or objection raised\\\"]\\n}\\n\\nOmit any top-level key
+      (lead_data, qualification_data, objections) if there is nothing new for that
+      category.  Omit individual fields within lead_data or qualification_data if
+      they were not mentioned.\\n\\nReturn ONLY the JSON \u2014 no explanation, no
+      markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '3424'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"bf8b1d09-2992-9702-af35-8b42ee4c0db7","object":"chat.completion","created":1781205450,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{\n  \"qualification_data\":
+        {\n    \"timeline\": \"1-3 months\"\n  }\n}","reasoning_content":"The task
+        is to extract NEW information from the latest visitor message: \"Probably
+        next quarter, no firm date yet.\"\n","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":905,"completion_tokens":20,"total_tokens":1337,"prompt_tokens_details":{"text_tokens":905,"audio_tokens":0,"image_tokens":0,"cached_tokens":128},"completion_tokens_details":{"reasoning_tokens":412,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":20768500},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a2f4d2feb73cfd-IAH
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:17:33 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '862'
+      traceparent:
+      - 00-27865718d32913d85c0081495fc695ab-075f6ad80000144d-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '2807.4'
+      x-metrics-mean-itl-ms:
+      - '6.0'
+      x-metrics-ttft-ms:
+      - '144.9'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - bf8b1d09-2992-9702-af35-8b42ee4c0db7
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a data extraction assistant.  Analyse
+      the conversation below and extract any NEW information revealed in the LATEST
+      MESSAGE from the visitor.\\n\\nFULL CONVERSATION:\\nVisitor: Honestly? We need
+      this fixed ASAP.\\n\\nPREVIOUSLY EXTRACTED DATA:\\n{\\n  \\\"lead_data\\\":
+      {},\\n  \\\"qualification_data\\\": {}\\n}\\n\\nINSTRUCTIONS:\\n- Only extract
+      information that is NEW or UPDATED in the latest visitor message.\\n- Do NOT
+      re-extract information already present in PREVIOUSLY EXTRACTED DATA.\\n- If
+      the latest message contains no new extractable information, return an empty
+      JSON object {}.\\n- Be conservative about NAMES and IDENTIFIERS \u2014 only
+      extract information the visitor explicitly stated, not inferences.\\n- For budget_range,
+      map to one of: \\\"Under $10K\\\", \\\"$10K-$50K\\\", \\\"$50K-$100K\\\", \\\"$100K+\\\",
+      or \\\"Unknown\\\".\\n- For timeline, map to one of: \\\"Immediate\\\", \\\"1-3
+      months\\\", \\\"3-6 months\\\", \\\"6+ months\\\", \\\"Just exploring\\\", or
+      \\\"Unknown\\\".  Map any concrete future reference to the nearest bucket instead
+      of defaulting to \\\"Unknown\\\": \\\"Q3\\\" / \\\"Q4\\\" / \\\"by end of year\\\"
+      \u2192 \\\"3-6 months\\\" (or \\\"1-3 months\\\" if the current quarter is close);
+      \\\"next quarter\\\" / \\\"this summer\\\" / \\\"in a couple months\\\" \u2192
+      \\\"1-3 months\\\"; \\\"ASAP\\\" / \\\"this month\\\" \u2192 \\\"Immediate\\\";
+      \\\"next year\\\" / \\\"sometime in 2027\\\" \u2192 \\\"6+ months\\\".  Only
+      use \\\"Unknown\\\" when the visitor was genuinely non-committal (\\\"we'll
+      see\\\", \\\"no rush\\\", \\\"haven't thought about it\\\").\\n- For company_size,
+      map to one of: \\\"1-10\\\", \\\"11-50\\\", \\\"51-200\\\", \\\"201-1000\\\",
+      \\\"1000+\\\", or \\\"Unknown\\\".\\n- For decision_maker, use true / false
+      / null.\\n- For pain_points, enumerate EACH distinct problem as its own list
+      item rather than consolidating into one entry.  If the visitor describes a 3-week
+      ramp time, 20 IT hours per week of manual work, and weak reporting \u2014 that
+      is THREE pain points, not one \\\"bad onboarding\\\" entry.  Capture measurable
+      impacts (time lost, delays, costs) as separate items from capability gaps (missing
+      features, poor UX, integration issues).\\n- For company, only extract a real
+      company name (e.g. \\\"Acme Corp\\\", \\\"Google\\\"). Do NOT extract vague
+      descriptions like \\\"a 400-employee company\\\", \\\"my company\\\", or \\\"a
+      mid-size firm\\\" \u2014 leave company as null if no actual name was given.\\n\\nReturn
+      ONLY a valid JSON object with the following structure (include only fields that
+      have new values):\\n\\n{\\n  \\\"lead_data\\\": {\\n    \\\"first_name\\\":
+      \\\"string or null\\\",\\n    \\\"last_name\\\": \\\"string or null\\\",\\n
+      \   \\\"email\\\": \\\"string or null\\\",\\n    \\\"company\\\": \\\"string
+      or null\\\",\\n    \\\"phone\\\": \\\"string or null\\\",\\n    \\\"title\\\":
+      \\\"string or null\\\"\\n  },\\n  \\\"qualification_data\\\": {\\n    \\\"budget_range\\\":
+      \\\"string or null\\\",\\n    \\\"timeline\\\": \\\"string or null\\\",\\n    \\\"company_size\\\":
+      \\\"string or null\\\",\\n    \\\"pain_points\\\": [\\\"new pain point\\\"],\\n
+      \   \\\"decision_maker\\\": true/false/null,\\n    \\\"current_solution\\\":
+      \\\"string or null\\\",\\n    \\\"goals\\\": [\\\"new goal\\\"]\\n  },\\n  \\\"objections\\\":
+      [\\\"any new concern or objection raised\\\"]\\n}\\n\\nOmit any top-level key
+      (lead_data, qualification_data, objections) if there is nothing new for that
+      category.  Omit individual fields within lead_data or qualification_data if
+      they were not mentioned.\\n\\nReturn ONLY the JSON \u2014 no explanation, no
+      markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '3418'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: "{\"id\":\"509bcb88-72e2-9edc-95f0-5ee0134f3a14\",\"object\":\"chat.completion\",\"created\":1781205453,\"model\":\"grok-4.20-0309-reasoning\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"{\\n
+        \ \\\"qualification_data\\\": {\\n    \\\"timeline\\\": \\\"Immediate\\\"\\n
+        \ }\\n}\",\"reasoning_content\":\"The task is to extract NEW information from
+        the LATEST MESSAGE from the visitor.\\n{\\n  \\\"lead_data\\\": {\\n    \\\"timeline\\\":
+        \\\"Immediate\\\"\\n  },\\n  \\\"qualification_data\\\": {}\\n}\\n\\n## Explanation\\n\\nThe
+        extraction process begins by scanning the visitor message \u201CHonestly?
+        We need this fixed ASAP.\",\"refusal\":null},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":904,\"completion_tokens\":17,\"total_tokens\":1435,\"prompt_tokens_details\":{\"text_tokens\":904,\"audio_tokens\":0,\"image_tokens\":0,\"cached_tokens\":64},\"completion_tokens_details\":{\"reasoning_tokens\":514,\"audio_tokens\":0,\"accepted_prediction_tokens\":0,\"rejected_prediction_tokens\":0},\"num_sources_used\":0,\"cost_in_usd_ticks\":23903000},\"system_fingerprint\":\"fp_f71d0178b0\",\"service_tier\":\"default\"}"
+    headers:
+      CF-RAY:
+      - a0a2f4e5283cc30b-IAH
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:17:36 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '1038'
+      traceparent:
+      - 00-c4ea37a62ebbda40a07908ff05d6489d-8a80fdd100071a37-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '2854.5'
+      x-metrics-mean-itl-ms:
+      - '4.9'
+      x-metrics-ttft-ms:
+      - '165.8'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - 509bcb88-72e2-9edc-95f0-5ee0134f3a14
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a data extraction assistant.  Analyse
+      the conversation below and extract any NEW information revealed in the LATEST
+      MESSAGE from the visitor.\\n\\nFULL CONVERSATION:\\nVisitor: Maybe sometime
+      next year, it's not urgent.\\n\\nPREVIOUSLY EXTRACTED DATA:\\n{\\n  \\\"lead_data\\\":
+      {},\\n  \\\"qualification_data\\\": {}\\n}\\n\\nINSTRUCTIONS:\\n- Only extract
+      information that is NEW or UPDATED in the latest visitor message.\\n- Do NOT
+      re-extract information already present in PREVIOUSLY EXTRACTED DATA.\\n- If
+      the latest message contains no new extractable information, return an empty
+      JSON object {}.\\n- Be conservative about NAMES and IDENTIFIERS \u2014 only
+      extract information the visitor explicitly stated, not inferences.\\n- For budget_range,
+      map to one of: \\\"Under $10K\\\", \\\"$10K-$50K\\\", \\\"$50K-$100K\\\", \\\"$100K+\\\",
+      or \\\"Unknown\\\".\\n- For timeline, map to one of: \\\"Immediate\\\", \\\"1-3
+      months\\\", \\\"3-6 months\\\", \\\"6+ months\\\", \\\"Just exploring\\\", or
+      \\\"Unknown\\\".  Map any concrete future reference to the nearest bucket instead
+      of defaulting to \\\"Unknown\\\": \\\"Q3\\\" / \\\"Q4\\\" / \\\"by end of year\\\"
+      \u2192 \\\"3-6 months\\\" (or \\\"1-3 months\\\" if the current quarter is close);
+      \\\"next quarter\\\" / \\\"this summer\\\" / \\\"in a couple months\\\" \u2192
+      \\\"1-3 months\\\"; \\\"ASAP\\\" / \\\"this month\\\" \u2192 \\\"Immediate\\\";
+      \\\"next year\\\" / \\\"sometime in 2027\\\" \u2192 \\\"6+ months\\\".  Only
+      use \\\"Unknown\\\" when the visitor was genuinely non-committal (\\\"we'll
+      see\\\", \\\"no rush\\\", \\\"haven't thought about it\\\").\\n- For company_size,
+      map to one of: \\\"1-10\\\", \\\"11-50\\\", \\\"51-200\\\", \\\"201-1000\\\",
+      \\\"1000+\\\", or \\\"Unknown\\\".\\n- For decision_maker, use true / false
+      / null.\\n- For pain_points, enumerate EACH distinct problem as its own list
+      item rather than consolidating into one entry.  If the visitor describes a 3-week
+      ramp time, 20 IT hours per week of manual work, and weak reporting \u2014 that
+      is THREE pain points, not one \\\"bad onboarding\\\" entry.  Capture measurable
+      impacts (time lost, delays, costs) as separate items from capability gaps (missing
+      features, poor UX, integration issues).\\n- For company, only extract a real
+      company name (e.g. \\\"Acme Corp\\\", \\\"Google\\\"). Do NOT extract vague
+      descriptions like \\\"a 400-employee company\\\", \\\"my company\\\", or \\\"a
+      mid-size firm\\\" \u2014 leave company as null if no actual name was given.\\n\\nReturn
+      ONLY a valid JSON object with the following structure (include only fields that
+      have new values):\\n\\n{\\n  \\\"lead_data\\\": {\\n    \\\"first_name\\\":
+      \\\"string or null\\\",\\n    \\\"last_name\\\": \\\"string or null\\\",\\n
+      \   \\\"email\\\": \\\"string or null\\\",\\n    \\\"company\\\": \\\"string
+      or null\\\",\\n    \\\"phone\\\": \\\"string or null\\\",\\n    \\\"title\\\":
+      \\\"string or null\\\"\\n  },\\n  \\\"qualification_data\\\": {\\n    \\\"budget_range\\\":
+      \\\"string or null\\\",\\n    \\\"timeline\\\": \\\"string or null\\\",\\n    \\\"company_size\\\":
+      \\\"string or null\\\",\\n    \\\"pain_points\\\": [\\\"new pain point\\\"],\\n
+      \   \\\"decision_maker\\\": true/false/null,\\n    \\\"current_solution\\\":
+      \\\"string or null\\\",\\n    \\\"goals\\\": [\\\"new goal\\\"]\\n  },\\n  \\\"objections\\\":
+      [\\\"any new concern or objection raised\\\"]\\n}\\n\\nOmit any top-level key
+      (lead_data, qualification_data, objections) if there is nothing new for that
+      category.  Omit individual fields within lead_data or qualification_data if
+      they were not mentioned.\\n\\nReturn ONLY the JSON \u2014 no explanation, no
+      markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '3426'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: "{\"id\":\"a02ad212-f7d1-94d4-8d7e-a68ee971db59\",\"object\":\"chat.completion\",\"created\":1781205456,\"model\":\"grok-4.20-0309-reasoning\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"{\\n
+        \ \\\"qualification_data\\\": {\\n    \\\"timeline\\\": \\\"6+ months\\\"\\n
+        \ }\\n}\",\"reasoning_content\":\"The task is to extract any NEW information
+        revealed in the LATEST MESSAGE from the visitor.\\n{\\\"lead_data\\\": {},
+        \\\"qualification_data\\\": {\\\"timeline\\\": \\\"6+ months\\\"}}\\n\\n##
+        Explanation\\n\\nThe visitor\u2019s statement \u201CMaybe sometime next year,
+        it\u2019s not urgent\u201D is processed by first isolating the concrete future
+        reference (\u201Csometime next year\u201D) from the softer qualifier (\u201Cit\u2019s
+        not urgent\u201D).\",\"refusal\":null},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":905,\"completion_tokens\":19,\"total_tokens\":1503,\"prompt_tokens_details\":{\"text_tokens\":905,\"audio_tokens\":0,\"image_tokens\":0,\"cached_tokens\":128},\"completion_tokens_details\":{\"reasoning_tokens\":579,\"audio_tokens\":0,\"accepted_prediction_tokens\":0,\"rejected_prediction_tokens\":0},\"num_sources_used\":0,\"cost_in_usd_ticks\":24918500},\"system_fingerprint\":\"fp_f71d0178b0\",\"service_tier\":\"default\"}"
+    headers:
+      CF-RAY:
+      - a0a2f4f7cd4266fb-DFW
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:17:39 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '1149'
+      traceparent:
+      - 00-330719c5e2de54f460ac55e8faa490b0-fe667c270006e999-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '3142.5'
+      x-metrics-mean-itl-ms:
+      - '4.9'
+      x-metrics-ttft-ms:
+      - '151.9'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - a02ad212-f7d1-94d4-8d7e-a68ee971db59
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a data extraction assistant.  Analyse
+      the conversation below and extract any NEW information revealed in the LATEST
+      MESSAGE from the visitor.\\n\\nFULL CONVERSATION:\\nVisitor: Eh, we'll see.
+      No rush, honestly.\\n\\nPREVIOUSLY EXTRACTED DATA:\\n{\\n  \\\"lead_data\\\":
+      {},\\n  \\\"qualification_data\\\": {}\\n}\\n\\nINSTRUCTIONS:\\n- Only extract
+      information that is NEW or UPDATED in the latest visitor message.\\n- Do NOT
+      re-extract information already present in PREVIOUSLY EXTRACTED DATA.\\n- If
+      the latest message contains no new extractable information, return an empty
+      JSON object {}.\\n- Be conservative about NAMES and IDENTIFIERS \u2014 only
+      extract information the visitor explicitly stated, not inferences.\\n- For budget_range,
+      map to one of: \\\"Under $10K\\\", \\\"$10K-$50K\\\", \\\"$50K-$100K\\\", \\\"$100K+\\\",
+      or \\\"Unknown\\\".\\n- For timeline, map to one of: \\\"Immediate\\\", \\\"1-3
+      months\\\", \\\"3-6 months\\\", \\\"6+ months\\\", \\\"Just exploring\\\", or
+      \\\"Unknown\\\".  Map any concrete future reference to the nearest bucket instead
+      of defaulting to \\\"Unknown\\\": \\\"Q3\\\" / \\\"Q4\\\" / \\\"by end of year\\\"
+      \u2192 \\\"3-6 months\\\" (or \\\"1-3 months\\\" if the current quarter is close);
+      \\\"next quarter\\\" / \\\"this summer\\\" / \\\"in a couple months\\\" \u2192
+      \\\"1-3 months\\\"; \\\"ASAP\\\" / \\\"this month\\\" \u2192 \\\"Immediate\\\";
+      \\\"next year\\\" / \\\"sometime in 2027\\\" \u2192 \\\"6+ months\\\".  Only
+      use \\\"Unknown\\\" when the visitor was genuinely non-committal (\\\"we'll
+      see\\\", \\\"no rush\\\", \\\"haven't thought about it\\\").\\n- For company_size,
+      map to one of: \\\"1-10\\\", \\\"11-50\\\", \\\"51-200\\\", \\\"201-1000\\\",
+      \\\"1000+\\\", or \\\"Unknown\\\".\\n- For decision_maker, use true / false
+      / null.\\n- For pain_points, enumerate EACH distinct problem as its own list
+      item rather than consolidating into one entry.  If the visitor describes a 3-week
+      ramp time, 20 IT hours per week of manual work, and weak reporting \u2014 that
+      is THREE pain points, not one \\\"bad onboarding\\\" entry.  Capture measurable
+      impacts (time lost, delays, costs) as separate items from capability gaps (missing
+      features, poor UX, integration issues).\\n- For company, only extract a real
+      company name (e.g. \\\"Acme Corp\\\", \\\"Google\\\"). Do NOT extract vague
+      descriptions like \\\"a 400-employee company\\\", \\\"my company\\\", or \\\"a
+      mid-size firm\\\" \u2014 leave company as null if no actual name was given.\\n\\nReturn
+      ONLY a valid JSON object with the following structure (include only fields that
+      have new values):\\n\\n{\\n  \\\"lead_data\\\": {\\n    \\\"first_name\\\":
+      \\\"string or null\\\",\\n    \\\"last_name\\\": \\\"string or null\\\",\\n
+      \   \\\"email\\\": \\\"string or null\\\",\\n    \\\"company\\\": \\\"string
+      or null\\\",\\n    \\\"phone\\\": \\\"string or null\\\",\\n    \\\"title\\\":
+      \\\"string or null\\\"\\n  },\\n  \\\"qualification_data\\\": {\\n    \\\"budget_range\\\":
+      \\\"string or null\\\",\\n    \\\"timeline\\\": \\\"string or null\\\",\\n    \\\"company_size\\\":
+      \\\"string or null\\\",\\n    \\\"pain_points\\\": [\\\"new pain point\\\"],\\n
+      \   \\\"decision_maker\\\": true/false/null,\\n    \\\"current_solution\\\":
+      \\\"string or null\\\",\\n    \\\"goals\\\": [\\\"new goal\\\"]\\n  },\\n  \\\"objections\\\":
+      [\\\"any new concern or objection raised\\\"]\\n}\\n\\nOmit any top-level key
+      (lead_data, qualification_data, objections) if there is nothing new for that
+      category.  Omit individual fields within lead_data or qualification_data if
+      they were not mentioned.\\n\\nReturn ONLY the JSON \u2014 no explanation, no
+      markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '3417'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: "{\"id\":\"ffda32a7-5d68-9aa6-b32b-9ebe43c26b98\",\"object\":\"chat.completion\",\"created\":1781205460,\"model\":\"grok-4.20-0309-reasoning\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"{\\n
+        \ \\\"qualification_data\\\": {\\n    \\\"timeline\\\": \\\"Unknown\\\"\\n
+        \ }\\n}\",\"reasoning_content\":\"The task is to extract NEW information from
+        the LATEST MESSAGE from the visitor.\\nFirst, the task is to extract NEW information
+        from the LATEST MESSAGE. Previously extracted data is empty: {\\\"lead_data\\\":
+        {}, \\\"qualification_data\\\": {}}\\n\\nThe latest message: \\\"Eh, we'll
+        see. No rush, honestly.\\\"\\n\\nInstructions: Only extract information that
+        is NEW or UPDATED in the latest visitor message. If no new extractable information,
+        return an empty JSON object {}.\\n\\nThe message is non-committal: \\\"we'll
+        see\\\", \\\"no rush\\\" \u2013 these are explicitly listed as reasons to
+        use \\\"Unknown\\\" for timeline.\\n\\nBut the instruction says: If the latest
+        message contains no new extractable information, return an empty JSON {}.\\n\\nThis
+        message doesn't explicitly give names, emails, budgets, etc. It's vague and
+        seems like a response indicating no immediate interest.\\n\\nIt says: Be conservative
+        about NAMES and IDENTIFIERS \u2014 only extract information the visitor explicitly
+        stated, not inferences.\\n\\nHere, no explicit statements of any data points.\",\"refusal\":null},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":906,\"completion_tokens\":17,\"total_tokens\":2053,\"prompt_tokens_details\":{\"text_tokens\":906,\"audio_tokens\":0,\"image_tokens\":0,\"cached_tokens\":128},\"completion_tokens_details\":{\"reasoning_tokens\":1130,\"audio_tokens\":0,\"accepted_prediction_tokens\":0,\"rejected_prediction_tokens\":0},\"num_sources_used\":0,\"cost_in_usd_ticks\":38656000},\"system_fingerprint\":\"fp_f71d0178b0\",\"service_tier\":\"default\"}"
+    headers:
+      CF-RAY:
+      - a0a2f50c18a7f08d-DFW
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:17:45 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '1779'
+      traceparent:
+      - 00-d5e7d6682686db4cda63e32a56f9ec0f-41fdd480000111ee-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '5551.3'
+      x-metrics-mean-itl-ms:
+      - '4.6'
+      x-metrics-ttft-ms:
+      - '257.7'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - ffda32a7-5d68-9aa6-b32b-9ebe43c26b98
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a data extraction assistant.  Analyse
+      the conversation below and extract any NEW information revealed in the LATEST
+      MESSAGE from the visitor.\\n\\nFULL CONVERSATION:\\nVisitor: We're a 400-employee
+      company looking to modernize.\\n\\nPREVIOUSLY EXTRACTED DATA:\\n{\\n  \\\"lead_data\\\":
+      {},\\n  \\\"qualification_data\\\": {}\\n}\\n\\nINSTRUCTIONS:\\n- Only extract
+      information that is NEW or UPDATED in the latest visitor message.\\n- Do NOT
+      re-extract information already present in PREVIOUSLY EXTRACTED DATA.\\n- If
+      the latest message contains no new extractable information, return an empty
+      JSON object {}.\\n- Be conservative about NAMES and IDENTIFIERS \u2014 only
+      extract information the visitor explicitly stated, not inferences.\\n- For budget_range,
+      map to one of: \\\"Under $10K\\\", \\\"$10K-$50K\\\", \\\"$50K-$100K\\\", \\\"$100K+\\\",
+      or \\\"Unknown\\\".\\n- For timeline, map to one of: \\\"Immediate\\\", \\\"1-3
+      months\\\", \\\"3-6 months\\\", \\\"6+ months\\\", \\\"Just exploring\\\", or
+      \\\"Unknown\\\".  Map any concrete future reference to the nearest bucket instead
+      of defaulting to \\\"Unknown\\\": \\\"Q3\\\" / \\\"Q4\\\" / \\\"by end of year\\\"
+      \u2192 \\\"3-6 months\\\" (or \\\"1-3 months\\\" if the current quarter is close);
+      \\\"next quarter\\\" / \\\"this summer\\\" / \\\"in a couple months\\\" \u2192
+      \\\"1-3 months\\\"; \\\"ASAP\\\" / \\\"this month\\\" \u2192 \\\"Immediate\\\";
+      \\\"next year\\\" / \\\"sometime in 2027\\\" \u2192 \\\"6+ months\\\".  Only
+      use \\\"Unknown\\\" when the visitor was genuinely non-committal (\\\"we'll
+      see\\\", \\\"no rush\\\", \\\"haven't thought about it\\\").\\n- For company_size,
+      map to one of: \\\"1-10\\\", \\\"11-50\\\", \\\"51-200\\\", \\\"201-1000\\\",
+      \\\"1000+\\\", or \\\"Unknown\\\".\\n- For decision_maker, use true / false
+      / null.\\n- For pain_points, enumerate EACH distinct problem as its own list
+      item rather than consolidating into one entry.  If the visitor describes a 3-week
+      ramp time, 20 IT hours per week of manual work, and weak reporting \u2014 that
+      is THREE pain points, not one \\\"bad onboarding\\\" entry.  Capture measurable
+      impacts (time lost, delays, costs) as separate items from capability gaps (missing
+      features, poor UX, integration issues).\\n- For company, only extract a real
+      company name (e.g. \\\"Acme Corp\\\", \\\"Google\\\"). Do NOT extract vague
+      descriptions like \\\"a 400-employee company\\\", \\\"my company\\\", or \\\"a
+      mid-size firm\\\" \u2014 leave company as null if no actual name was given.\\n\\nReturn
+      ONLY a valid JSON object with the following structure (include only fields that
+      have new values):\\n\\n{\\n  \\\"lead_data\\\": {\\n    \\\"first_name\\\":
+      \\\"string or null\\\",\\n    \\\"last_name\\\": \\\"string or null\\\",\\n
+      \   \\\"email\\\": \\\"string or null\\\",\\n    \\\"company\\\": \\\"string
+      or null\\\",\\n    \\\"phone\\\": \\\"string or null\\\",\\n    \\\"title\\\":
+      \\\"string or null\\\"\\n  },\\n  \\\"qualification_data\\\": {\\n    \\\"budget_range\\\":
+      \\\"string or null\\\",\\n    \\\"timeline\\\": \\\"string or null\\\",\\n    \\\"company_size\\\":
+      \\\"string or null\\\",\\n    \\\"pain_points\\\": [\\\"new pain point\\\"],\\n
+      \   \\\"decision_maker\\\": true/false/null,\\n    \\\"current_solution\\\":
+      \\\"string or null\\\",\\n    \\\"goals\\\": [\\\"new goal\\\"]\\n  },\\n  \\\"objections\\\":
+      [\\\"any new concern or objection raised\\\"]\\n}\\n\\nOmit any top-level key
+      (lead_data, qualification_data, objections) if there is nothing new for that
+      category.  Omit individual fields within lead_data or qualification_data if
+      they were not mentioned.\\n\\nReturn ONLY the JSON \u2014 no explanation, no
+      markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '3434'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"fa55551c-558b-9827-84e5-5b15c9b1f84b","object":"chat.completion","created":1781205465,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{\n  \"qualification_data\":
+        {\n    \"company_size\": \"201-1000\",\n    \"goals\": [\"modernize\"]\n  }\n}","reasoning_content":"The
+        task is to extract NEW information from the LATEST MESSAGE from the visitor.\n","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":907,"completion_tokens":29,"total_tokens":1837,"prompt_tokens_details":{"text_tokens":907,"audio_tokens":0,"image_tokens":0,"cached_tokens":128},"completion_tokens_details":{"reasoning_tokens":901,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":33243500},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a2f52fe8c82e2d-DFW
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:17:50 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '861'
+      traceparent:
+      - 00-8e5f1e0a147abc605d49aa57fcf279d6-744cc9f300095a8a-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '4639.7'
+      x-metrics-mean-itl-ms:
+      - '4.8'
+      x-metrics-ttft-ms:
+      - '144.2'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - fa55551c-558b-9827-84e5-5b15c9b1f84b
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a data extraction assistant.  Analyse
+      the conversation below and extract any NEW information revealed in the LATEST
+      MESSAGE from the visitor.\\n\\nFULL CONVERSATION:\\nVisitor: I work at Acme
+      Corp, we're in logistics.\\n\\nPREVIOUSLY EXTRACTED DATA:\\n{\\n  \\\"lead_data\\\":
+      {},\\n  \\\"qualification_data\\\": {}\\n}\\n\\nINSTRUCTIONS:\\n- Only extract
+      information that is NEW or UPDATED in the latest visitor message.\\n- Do NOT
+      re-extract information already present in PREVIOUSLY EXTRACTED DATA.\\n- If
+      the latest message contains no new extractable information, return an empty
+      JSON object {}.\\n- Be conservative about NAMES and IDENTIFIERS \u2014 only
+      extract information the visitor explicitly stated, not inferences.\\n- For budget_range,
+      map to one of: \\\"Under $10K\\\", \\\"$10K-$50K\\\", \\\"$50K-$100K\\\", \\\"$100K+\\\",
+      or \\\"Unknown\\\".\\n- For timeline, map to one of: \\\"Immediate\\\", \\\"1-3
+      months\\\", \\\"3-6 months\\\", \\\"6+ months\\\", \\\"Just exploring\\\", or
+      \\\"Unknown\\\".  Map any concrete future reference to the nearest bucket instead
+      of defaulting to \\\"Unknown\\\": \\\"Q3\\\" / \\\"Q4\\\" / \\\"by end of year\\\"
+      \u2192 \\\"3-6 months\\\" (or \\\"1-3 months\\\" if the current quarter is close);
+      \\\"next quarter\\\" / \\\"this summer\\\" / \\\"in a couple months\\\" \u2192
+      \\\"1-3 months\\\"; \\\"ASAP\\\" / \\\"this month\\\" \u2192 \\\"Immediate\\\";
+      \\\"next year\\\" / \\\"sometime in 2027\\\" \u2192 \\\"6+ months\\\".  Only
+      use \\\"Unknown\\\" when the visitor was genuinely non-committal (\\\"we'll
+      see\\\", \\\"no rush\\\", \\\"haven't thought about it\\\").\\n- For company_size,
+      map to one of: \\\"1-10\\\", \\\"11-50\\\", \\\"51-200\\\", \\\"201-1000\\\",
+      \\\"1000+\\\", or \\\"Unknown\\\".\\n- For decision_maker, use true / false
+      / null.\\n- For pain_points, enumerate EACH distinct problem as its own list
+      item rather than consolidating into one entry.  If the visitor describes a 3-week
+      ramp time, 20 IT hours per week of manual work, and weak reporting \u2014 that
+      is THREE pain points, not one \\\"bad onboarding\\\" entry.  Capture measurable
+      impacts (time lost, delays, costs) as separate items from capability gaps (missing
+      features, poor UX, integration issues).\\n- For company, only extract a real
+      company name (e.g. \\\"Acme Corp\\\", \\\"Google\\\"). Do NOT extract vague
+      descriptions like \\\"a 400-employee company\\\", \\\"my company\\\", or \\\"a
+      mid-size firm\\\" \u2014 leave company as null if no actual name was given.\\n\\nReturn
+      ONLY a valid JSON object with the following structure (include only fields that
+      have new values):\\n\\n{\\n  \\\"lead_data\\\": {\\n    \\\"first_name\\\":
+      \\\"string or null\\\",\\n    \\\"last_name\\\": \\\"string or null\\\",\\n
+      \   \\\"email\\\": \\\"string or null\\\",\\n    \\\"company\\\": \\\"string
+      or null\\\",\\n    \\\"phone\\\": \\\"string or null\\\",\\n    \\\"title\\\":
+      \\\"string or null\\\"\\n  },\\n  \\\"qualification_data\\\": {\\n    \\\"budget_range\\\":
+      \\\"string or null\\\",\\n    \\\"timeline\\\": \\\"string or null\\\",\\n    \\\"company_size\\\":
+      \\\"string or null\\\",\\n    \\\"pain_points\\\": [\\\"new pain point\\\"],\\n
+      \   \\\"decision_maker\\\": true/false/null,\\n    \\\"current_solution\\\":
+      \\\"string or null\\\",\\n    \\\"goals\\\": [\\\"new goal\\\"]\\n  },\\n  \\\"objections\\\":
+      [\\\"any new concern or objection raised\\\"]\\n}\\n\\nOmit any top-level key
+      (lead_data, qualification_data, objections) if there is nothing new for that
+      category.  Omit individual fields within lead_data or qualification_data if
+      they were not mentioned.\\n\\nReturn ONLY the JSON \u2014 no explanation, no
+      markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '3424'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"07680e10-62e1-9b1d-b48e-7ac2d97f13ea","object":"chat.completion","created":1781205470,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{\n  \"lead_data\":
+        {\n    \"company\": \"Acme Corp\"\n  }\n}","reasoning_content":"The task is
+        to extract NEW information from the latest visitor message.\n","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":907,"completion_tokens":19,"total_tokens":1357,"prompt_tokens_details":{"text_tokens":907,"audio_tokens":0,"image_tokens":0,"cached_tokens":128},"completion_tokens_details":{"reasoning_tokens":431,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":21243500},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a2f54d7f991869-IAH
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:17:52 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '806'
+      traceparent:
+      - 00-ce8e0869e6ae0b75a8d31569b9e41fd3-3ba66e2400066762-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '2242.0'
+      x-metrics-mean-itl-ms:
+      - '4.5'
+      x-metrics-ttft-ms:
+      - '158.6'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - 07680e10-62e1-9b1d-b48e-7ac2d97f13ea
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a data extraction assistant.  Analyse
+      the conversation below and extract any NEW information revealed in the LATEST
+      MESSAGE from the visitor.\\n\\nFULL CONVERSATION:\\nVisitor: I don't really
+      sign off on this \u2014 that's my VP's call.\\n\\nPREVIOUSLY EXTRACTED DATA:\\n{\\n
+      \ \\\"lead_data\\\": {},\\n  \\\"qualification_data\\\": {}\\n}\\n\\nINSTRUCTIONS:\\n-
+      Only extract information that is NEW or UPDATED in the latest visitor message.\\n-
+      Do NOT re-extract information already present in PREVIOUSLY EXTRACTED DATA.\\n-
+      If the latest message contains no new extractable information, return an empty
+      JSON object {}.\\n- Be conservative about NAMES and IDENTIFIERS \u2014 only
+      extract information the visitor explicitly stated, not inferences.\\n- For budget_range,
+      map to one of: \\\"Under $10K\\\", \\\"$10K-$50K\\\", \\\"$50K-$100K\\\", \\\"$100K+\\\",
+      or \\\"Unknown\\\".\\n- For timeline, map to one of: \\\"Immediate\\\", \\\"1-3
+      months\\\", \\\"3-6 months\\\", \\\"6+ months\\\", \\\"Just exploring\\\", or
+      \\\"Unknown\\\".  Map any concrete future reference to the nearest bucket instead
+      of defaulting to \\\"Unknown\\\": \\\"Q3\\\" / \\\"Q4\\\" / \\\"by end of year\\\"
+      \u2192 \\\"3-6 months\\\" (or \\\"1-3 months\\\" if the current quarter is close);
+      \\\"next quarter\\\" / \\\"this summer\\\" / \\\"in a couple months\\\" \u2192
+      \\\"1-3 months\\\"; \\\"ASAP\\\" / \\\"this month\\\" \u2192 \\\"Immediate\\\";
+      \\\"next year\\\" / \\\"sometime in 2027\\\" \u2192 \\\"6+ months\\\".  Only
+      use \\\"Unknown\\\" when the visitor was genuinely non-committal (\\\"we'll
+      see\\\", \\\"no rush\\\", \\\"haven't thought about it\\\").\\n- For company_size,
+      map to one of: \\\"1-10\\\", \\\"11-50\\\", \\\"51-200\\\", \\\"201-1000\\\",
+      \\\"1000+\\\", or \\\"Unknown\\\".\\n- For decision_maker, use true / false
+      / null.\\n- For pain_points, enumerate EACH distinct problem as its own list
+      item rather than consolidating into one entry.  If the visitor describes a 3-week
+      ramp time, 20 IT hours per week of manual work, and weak reporting \u2014 that
+      is THREE pain points, not one \\\"bad onboarding\\\" entry.  Capture measurable
+      impacts (time lost, delays, costs) as separate items from capability gaps (missing
+      features, poor UX, integration issues).\\n- For company, only extract a real
+      company name (e.g. \\\"Acme Corp\\\", \\\"Google\\\"). Do NOT extract vague
+      descriptions like \\\"a 400-employee company\\\", \\\"my company\\\", or \\\"a
+      mid-size firm\\\" \u2014 leave company as null if no actual name was given.\\n\\nReturn
+      ONLY a valid JSON object with the following structure (include only fields that
+      have new values):\\n\\n{\\n  \\\"lead_data\\\": {\\n    \\\"first_name\\\":
+      \\\"string or null\\\",\\n    \\\"last_name\\\": \\\"string or null\\\",\\n
+      \   \\\"email\\\": \\\"string or null\\\",\\n    \\\"company\\\": \\\"string
+      or null\\\",\\n    \\\"phone\\\": \\\"string or null\\\",\\n    \\\"title\\\":
+      \\\"string or null\\\"\\n  },\\n  \\\"qualification_data\\\": {\\n    \\\"budget_range\\\":
+      \\\"string or null\\\",\\n    \\\"timeline\\\": \\\"string or null\\\",\\n    \\\"company_size\\\":
+      \\\"string or null\\\",\\n    \\\"pain_points\\\": [\\\"new pain point\\\"],\\n
+      \   \\\"decision_maker\\\": true/false/null,\\n    \\\"current_solution\\\":
+      \\\"string or null\\\",\\n    \\\"goals\\\": [\\\"new goal\\\"]\\n  },\\n  \\\"objections\\\":
+      [\\\"any new concern or objection raised\\\"]\\n}\\n\\nOmit any top-level key
+      (lead_data, qualification_data, objections) if there is nothing new for that
+      category.  Omit individual fields within lead_data or qualification_data if
+      they were not mentioned.\\n\\nReturn ONLY the JSON \u2014 no explanation, no
+      markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '3440'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"33356d08-505a-98b5-83ee-6179977b749f","object":"chat.completion","created":1781205472,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{\n  \"qualification_data\":
+        {\n    \"decision_maker\": false\n  },\n  \"objections\": [\"Not the decision
+        maker; VP must sign off\"]\n}","reasoning_content":"The task is to extract
+        NEW information from the latest visitor message.\n","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":910,"completion_tokens":34,"total_tokens":1652,"prompt_tokens_details":{"text_tokens":910,"audio_tokens":0,"image_tokens":0,"cached_tokens":64},"completion_tokens_details":{"reasoning_tokens":708,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":29253000},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a2f55cccb8b5f3-IAH
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:17:56 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '880'
+      traceparent:
+      - 00-b4f79f4049171ec5a3444b6f5b37a0f5-8989ca3a000d132c-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '3641.5'
+      x-metrics-mean-itl-ms:
+      - '4.6'
+      x-metrics-ttft-ms:
+      - '156.9'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - 33356d08-505a-98b5-83ee-6179977b749f
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a data extraction assistant.  Analyse
+      the conversation below and extract any NEW information revealed in the LATEST
+      MESSAGE from the visitor.\\n\\nFULL CONVERSATION:\\nVisitor: Yep, I'm the final
+      decision maker on this one.\\n\\nPREVIOUSLY EXTRACTED DATA:\\n{\\n  \\\"lead_data\\\":
+      {},\\n  \\\"qualification_data\\\": {}\\n}\\n\\nINSTRUCTIONS:\\n- Only extract
+      information that is NEW or UPDATED in the latest visitor message.\\n- Do NOT
+      re-extract information already present in PREVIOUSLY EXTRACTED DATA.\\n- If
+      the latest message contains no new extractable information, return an empty
+      JSON object {}.\\n- Be conservative about NAMES and IDENTIFIERS \u2014 only
+      extract information the visitor explicitly stated, not inferences.\\n- For budget_range,
+      map to one of: \\\"Under $10K\\\", \\\"$10K-$50K\\\", \\\"$50K-$100K\\\", \\\"$100K+\\\",
+      or \\\"Unknown\\\".\\n- For timeline, map to one of: \\\"Immediate\\\", \\\"1-3
+      months\\\", \\\"3-6 months\\\", \\\"6+ months\\\", \\\"Just exploring\\\", or
+      \\\"Unknown\\\".  Map any concrete future reference to the nearest bucket instead
+      of defaulting to \\\"Unknown\\\": \\\"Q3\\\" / \\\"Q4\\\" / \\\"by end of year\\\"
+      \u2192 \\\"3-6 months\\\" (or \\\"1-3 months\\\" if the current quarter is close);
+      \\\"next quarter\\\" / \\\"this summer\\\" / \\\"in a couple months\\\" \u2192
+      \\\"1-3 months\\\"; \\\"ASAP\\\" / \\\"this month\\\" \u2192 \\\"Immediate\\\";
+      \\\"next year\\\" / \\\"sometime in 2027\\\" \u2192 \\\"6+ months\\\".  Only
+      use \\\"Unknown\\\" when the visitor was genuinely non-committal (\\\"we'll
+      see\\\", \\\"no rush\\\", \\\"haven't thought about it\\\").\\n- For company_size,
+      map to one of: \\\"1-10\\\", \\\"11-50\\\", \\\"51-200\\\", \\\"201-1000\\\",
+      \\\"1000+\\\", or \\\"Unknown\\\".\\n- For decision_maker, use true / false
+      / null.\\n- For pain_points, enumerate EACH distinct problem as its own list
+      item rather than consolidating into one entry.  If the visitor describes a 3-week
+      ramp time, 20 IT hours per week of manual work, and weak reporting \u2014 that
+      is THREE pain points, not one \\\"bad onboarding\\\" entry.  Capture measurable
+      impacts (time lost, delays, costs) as separate items from capability gaps (missing
+      features, poor UX, integration issues).\\n- For company, only extract a real
+      company name (e.g. \\\"Acme Corp\\\", \\\"Google\\\"). Do NOT extract vague
+      descriptions like \\\"a 400-employee company\\\", \\\"my company\\\", or \\\"a
+      mid-size firm\\\" \u2014 leave company as null if no actual name was given.\\n\\nReturn
+      ONLY a valid JSON object with the following structure (include only fields that
+      have new values):\\n\\n{\\n  \\\"lead_data\\\": {\\n    \\\"first_name\\\":
+      \\\"string or null\\\",\\n    \\\"last_name\\\": \\\"string or null\\\",\\n
+      \   \\\"email\\\": \\\"string or null\\\",\\n    \\\"company\\\": \\\"string
+      or null\\\",\\n    \\\"phone\\\": \\\"string or null\\\",\\n    \\\"title\\\":
+      \\\"string or null\\\"\\n  },\\n  \\\"qualification_data\\\": {\\n    \\\"budget_range\\\":
+      \\\"string or null\\\",\\n    \\\"timeline\\\": \\\"string or null\\\",\\n    \\\"company_size\\\":
+      \\\"string or null\\\",\\n    \\\"pain_points\\\": [\\\"new pain point\\\"],\\n
+      \   \\\"decision_maker\\\": true/false/null,\\n    \\\"current_solution\\\":
+      \\\"string or null\\\",\\n    \\\"goals\\\": [\\\"new goal\\\"]\\n  },\\n  \\\"objections\\\":
+      [\\\"any new concern or objection raised\\\"]\\n}\\n\\nOmit any top-level key
+      (lead_data, qualification_data, objections) if there is nothing new for that
+      category.  Omit individual fields within lead_data or qualification_data if
+      they were not mentioned.\\n\\nReturn ONLY the JSON \u2014 no explanation, no
+      markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '3430'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"cc6fba03-2df4-95ac-9376-a06e3366438d","object":"chat.completion","created":1781205476,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{\n  \"qualification_data\":
+        {\n    \"decision_maker\": true\n  }\n}","reasoning_content":"The task is
+        to extract NEW information from the latest visitor message.\n","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":907,"completion_tokens":18,"total_tokens":1219,"prompt_tokens_details":{"text_tokens":907,"audio_tokens":0,"image_tokens":0,"cached_tokens":128},"completion_tokens_details":{"reasoning_tokens":294,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":17793500},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a2f574380ade8a-DFW
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:17:58 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '813'
+      traceparent:
+      - 00-cb3c51ef8b9913451d82fced490ac85c-227b0a270009449b-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '1544.5'
+      x-metrics-mean-itl-ms:
+      - '4.2'
+      x-metrics-ttft-ms:
+      - '167.1'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - cc6fba03-2df4-95ac-9376-a06e3366438d
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a data extraction assistant.  Analyse
+      the conversation below and extract any NEW information revealed in the LATEST
+      MESSAGE from the visitor.\\n\\nFULL CONVERSATION:\\nVisitor: Onboarding takes
+      us a solid three weeks, my IT team burns about 20 hours a week on manual exports,
+      and our reporting is basically useless.\\n\\nPREVIOUSLY EXTRACTED DATA:\\n{\\n
+      \ \\\"lead_data\\\": {},\\n  \\\"qualification_data\\\": {}\\n}\\n\\nINSTRUCTIONS:\\n-
+      Only extract information that is NEW or UPDATED in the latest visitor message.\\n-
+      Do NOT re-extract information already present in PREVIOUSLY EXTRACTED DATA.\\n-
+      If the latest message contains no new extractable information, return an empty
+      JSON object {}.\\n- Be conservative about NAMES and IDENTIFIERS \u2014 only
+      extract information the visitor explicitly stated, not inferences.\\n- For budget_range,
+      map to one of: \\\"Under $10K\\\", \\\"$10K-$50K\\\", \\\"$50K-$100K\\\", \\\"$100K+\\\",
+      or \\\"Unknown\\\".\\n- For timeline, map to one of: \\\"Immediate\\\", \\\"1-3
+      months\\\", \\\"3-6 months\\\", \\\"6+ months\\\", \\\"Just exploring\\\", or
+      \\\"Unknown\\\".  Map any concrete future reference to the nearest bucket instead
+      of defaulting to \\\"Unknown\\\": \\\"Q3\\\" / \\\"Q4\\\" / \\\"by end of year\\\"
+      \u2192 \\\"3-6 months\\\" (or \\\"1-3 months\\\" if the current quarter is close);
+      \\\"next quarter\\\" / \\\"this summer\\\" / \\\"in a couple months\\\" \u2192
+      \\\"1-3 months\\\"; \\\"ASAP\\\" / \\\"this month\\\" \u2192 \\\"Immediate\\\";
+      \\\"next year\\\" / \\\"sometime in 2027\\\" \u2192 \\\"6+ months\\\".  Only
+      use \\\"Unknown\\\" when the visitor was genuinely non-committal (\\\"we'll
+      see\\\", \\\"no rush\\\", \\\"haven't thought about it\\\").\\n- For company_size,
+      map to one of: \\\"1-10\\\", \\\"11-50\\\", \\\"51-200\\\", \\\"201-1000\\\",
+      \\\"1000+\\\", or \\\"Unknown\\\".\\n- For decision_maker, use true / false
+      / null.\\n- For pain_points, enumerate EACH distinct problem as its own list
+      item rather than consolidating into one entry.  If the visitor describes a 3-week
+      ramp time, 20 IT hours per week of manual work, and weak reporting \u2014 that
+      is THREE pain points, not one \\\"bad onboarding\\\" entry.  Capture measurable
+      impacts (time lost, delays, costs) as separate items from capability gaps (missing
+      features, poor UX, integration issues).\\n- For company, only extract a real
+      company name (e.g. \\\"Acme Corp\\\", \\\"Google\\\"). Do NOT extract vague
+      descriptions like \\\"a 400-employee company\\\", \\\"my company\\\", or \\\"a
+      mid-size firm\\\" \u2014 leave company as null if no actual name was given.\\n\\nReturn
+      ONLY a valid JSON object with the following structure (include only fields that
+      have new values):\\n\\n{\\n  \\\"lead_data\\\": {\\n    \\\"first_name\\\":
+      \\\"string or null\\\",\\n    \\\"last_name\\\": \\\"string or null\\\",\\n
+      \   \\\"email\\\": \\\"string or null\\\",\\n    \\\"company\\\": \\\"string
+      or null\\\",\\n    \\\"phone\\\": \\\"string or null\\\",\\n    \\\"title\\\":
+      \\\"string or null\\\"\\n  },\\n  \\\"qualification_data\\\": {\\n    \\\"budget_range\\\":
+      \\\"string or null\\\",\\n    \\\"timeline\\\": \\\"string or null\\\",\\n    \\\"company_size\\\":
+      \\\"string or null\\\",\\n    \\\"pain_points\\\": [\\\"new pain point\\\"],\\n
+      \   \\\"decision_maker\\\": true/false/null,\\n    \\\"current_solution\\\":
+      \\\"string or null\\\",\\n    \\\"goals\\\": [\\\"new goal\\\"]\\n  },\\n  \\\"objections\\\":
+      [\\\"any new concern or objection raised\\\"]\\n}\\n\\nOmit any top-level key
+      (lead_data, qualification_data, objections) if there is nothing new for that
+      category.  Omit individual fields within lead_data or qualification_data if
+      they were not mentioned.\\n\\nReturn ONLY the JSON \u2014 no explanation, no
+      markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '3522'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"fb86bec8-81f3-97f3-a95f-78c44409d67a","object":"chat.completion","created":1781205478,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{\n  \"qualification_data\":
+        {\n    \"pain_points\": [\n      \"Onboarding takes a solid three weeks\",\n      \"IT
+        team burns about 20 hours a week on manual exports\",\n      \"reporting is
+        basically useless\"\n    ]\n  }\n}","reasoning_content":"The task is to extract
+        NEW information from the LATEST MESSAGE from the visitor.\n","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":926,"completion_tokens":50,"total_tokens":1755,"prompt_tokens_details":{"text_tokens":926,"audio_tokens":0,"image_tokens":0,"cached_tokens":128},"completion_tokens_details":{"reasoning_tokens":779,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":30956000},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a2f57e88305045-IAH
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:18:01 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '980'
+      traceparent:
+      - 00-a033bd8db106ce79cf076115a1bbf313-aaa6aac90004c853-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '3761.1'
+      x-metrics-mean-itl-ms:
+      - '4.1'
+      x-metrics-ttft-ms:
+      - '284.9'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - fb86bec8-81f3-97f3-a95f-78c44409d67a
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a data extraction assistant.  Analyse
+      the conversation below and extract any NEW information revealed in the LATEST
+      MESSAGE from the visitor.\\n\\nFULL CONVERSATION:\\nTARS: Who do I have the
+      pleasure of chatting with?\\nVisitor: I'm Sarah Chen.\\n\\nPREVIOUSLY EXTRACTED
+      DATA:\\n{\\n  \\\"lead_data\\\": {},\\n  \\\"qualification_data\\\": {}\\n}\\n\\nINSTRUCTIONS:\\n-
+      Only extract information that is NEW or UPDATED in the latest visitor message.\\n-
+      Do NOT re-extract information already present in PREVIOUSLY EXTRACTED DATA.\\n-
+      If the latest message contains no new extractable information, return an empty
+      JSON object {}.\\n- Be conservative about NAMES and IDENTIFIERS \u2014 only
+      extract information the visitor explicitly stated, not inferences.\\n- For budget_range,
+      map to one of: \\\"Under $10K\\\", \\\"$10K-$50K\\\", \\\"$50K-$100K\\\", \\\"$100K+\\\",
+      or \\\"Unknown\\\".\\n- For timeline, map to one of: \\\"Immediate\\\", \\\"1-3
+      months\\\", \\\"3-6 months\\\", \\\"6+ months\\\", \\\"Just exploring\\\", or
+      \\\"Unknown\\\".  Map any concrete future reference to the nearest bucket instead
+      of defaulting to \\\"Unknown\\\": \\\"Q3\\\" / \\\"Q4\\\" / \\\"by end of year\\\"
+      \u2192 \\\"3-6 months\\\" (or \\\"1-3 months\\\" if the current quarter is close);
+      \\\"next quarter\\\" / \\\"this summer\\\" / \\\"in a couple months\\\" \u2192
+      \\\"1-3 months\\\"; \\\"ASAP\\\" / \\\"this month\\\" \u2192 \\\"Immediate\\\";
+      \\\"next year\\\" / \\\"sometime in 2027\\\" \u2192 \\\"6+ months\\\".  Only
+      use \\\"Unknown\\\" when the visitor was genuinely non-committal (\\\"we'll
+      see\\\", \\\"no rush\\\", \\\"haven't thought about it\\\").\\n- For company_size,
+      map to one of: \\\"1-10\\\", \\\"11-50\\\", \\\"51-200\\\", \\\"201-1000\\\",
+      \\\"1000+\\\", or \\\"Unknown\\\".\\n- For decision_maker, use true / false
+      / null.\\n- For pain_points, enumerate EACH distinct problem as its own list
+      item rather than consolidating into one entry.  If the visitor describes a 3-week
+      ramp time, 20 IT hours per week of manual work, and weak reporting \u2014 that
+      is THREE pain points, not one \\\"bad onboarding\\\" entry.  Capture measurable
+      impacts (time lost, delays, costs) as separate items from capability gaps (missing
+      features, poor UX, integration issues).\\n- For company, only extract a real
+      company name (e.g. \\\"Acme Corp\\\", \\\"Google\\\"). Do NOT extract vague
+      descriptions like \\\"a 400-employee company\\\", \\\"my company\\\", or \\\"a
+      mid-size firm\\\" \u2014 leave company as null if no actual name was given.\\n\\nReturn
+      ONLY a valid JSON object with the following structure (include only fields that
+      have new values):\\n\\n{\\n  \\\"lead_data\\\": {\\n    \\\"first_name\\\":
+      \\\"string or null\\\",\\n    \\\"last_name\\\": \\\"string or null\\\",\\n
+      \   \\\"email\\\": \\\"string or null\\\",\\n    \\\"company\\\": \\\"string
+      or null\\\",\\n    \\\"phone\\\": \\\"string or null\\\",\\n    \\\"title\\\":
+      \\\"string or null\\\"\\n  },\\n  \\\"qualification_data\\\": {\\n    \\\"budget_range\\\":
+      \\\"string or null\\\",\\n    \\\"timeline\\\": \\\"string or null\\\",\\n    \\\"company_size\\\":
+      \\\"string or null\\\",\\n    \\\"pain_points\\\": [\\\"new pain point\\\"],\\n
+      \   \\\"decision_maker\\\": true/false/null,\\n    \\\"current_solution\\\":
+      \\\"string or null\\\",\\n    \\\"goals\\\": [\\\"new goal\\\"]\\n  },\\n  \\\"objections\\\":
+      [\\\"any new concern or objection raised\\\"]\\n}\\n\\nOmit any top-level key
+      (lead_data, qualification_data, objections) if there is nothing new for that
+      category.  Omit individual fields within lead_data or qualification_data if
+      they were not mentioned.\\n\\nReturn ONLY the JSON \u2014 no explanation, no
+      markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '3451'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"8a011868-6cc9-985e-83e6-891d9d2b8698","object":"chat.completion","created":1781205482,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{\n  \"lead_data\":
+        {\n    \"first_name\": \"Sarah\",\n    \"last_name\": \"Chen\"\n  }\n}","reasoning_content":"The
+        task is to extract any NEW information revealed in the LATEST MESSAGE from
+        the visitor.\n","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":913,"completion_tokens":26,"total_tokens":1205,"prompt_tokens_details":{"text_tokens":913,"audio_tokens":0,"image_tokens":0,"cached_tokens":128},"completion_tokens_details":{"reasoning_tokens":266,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":17368500},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a2f596ba203ea2-DFW
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:18:03 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '855'
+      traceparent:
+      - 00-36b09a4e967b53ce149f02c039df4a02-154547320003fdeb-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '1474.6'
+      x-metrics-mean-itl-ms:
+      - '4.3'
+      x-metrics-ttft-ms:
+      - '158.4'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - 8a011868-6cc9-985e-83e6-891d9d2b8698
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a data extraction assistant.  Analyse
+      the conversation below and extract any NEW information revealed in the LATEST
+      MESSAGE from the visitor.\\n\\nFULL CONVERSATION:\\nVisitor: You can reach me
+      at sarah@acme.com \u2014 I'm at Acme Corp.\\n\\nPREVIOUSLY EXTRACTED DATA:\\n{\\n
+      \ \\\"lead_data\\\": {},\\n  \\\"qualification_data\\\": {}\\n}\\n\\nINSTRUCTIONS:\\n-
+      Only extract information that is NEW or UPDATED in the latest visitor message.\\n-
+      Do NOT re-extract information already present in PREVIOUSLY EXTRACTED DATA.\\n-
+      If the latest message contains no new extractable information, return an empty
+      JSON object {}.\\n- Be conservative about NAMES and IDENTIFIERS \u2014 only
+      extract information the visitor explicitly stated, not inferences.\\n- For budget_range,
+      map to one of: \\\"Under $10K\\\", \\\"$10K-$50K\\\", \\\"$50K-$100K\\\", \\\"$100K+\\\",
+      or \\\"Unknown\\\".\\n- For timeline, map to one of: \\\"Immediate\\\", \\\"1-3
+      months\\\", \\\"3-6 months\\\", \\\"6+ months\\\", \\\"Just exploring\\\", or
+      \\\"Unknown\\\".  Map any concrete future reference to the nearest bucket instead
+      of defaulting to \\\"Unknown\\\": \\\"Q3\\\" / \\\"Q4\\\" / \\\"by end of year\\\"
+      \u2192 \\\"3-6 months\\\" (or \\\"1-3 months\\\" if the current quarter is close);
+      \\\"next quarter\\\" / \\\"this summer\\\" / \\\"in a couple months\\\" \u2192
+      \\\"1-3 months\\\"; \\\"ASAP\\\" / \\\"this month\\\" \u2192 \\\"Immediate\\\";
+      \\\"next year\\\" / \\\"sometime in 2027\\\" \u2192 \\\"6+ months\\\".  Only
+      use \\\"Unknown\\\" when the visitor was genuinely non-committal (\\\"we'll
+      see\\\", \\\"no rush\\\", \\\"haven't thought about it\\\").\\n- For company_size,
+      map to one of: \\\"1-10\\\", \\\"11-50\\\", \\\"51-200\\\", \\\"201-1000\\\",
+      \\\"1000+\\\", or \\\"Unknown\\\".\\n- For decision_maker, use true / false
+      / null.\\n- For pain_points, enumerate EACH distinct problem as its own list
+      item rather than consolidating into one entry.  If the visitor describes a 3-week
+      ramp time, 20 IT hours per week of manual work, and weak reporting \u2014 that
+      is THREE pain points, not one \\\"bad onboarding\\\" entry.  Capture measurable
+      impacts (time lost, delays, costs) as separate items from capability gaps (missing
+      features, poor UX, integration issues).\\n- For company, only extract a real
+      company name (e.g. \\\"Acme Corp\\\", \\\"Google\\\"). Do NOT extract vague
+      descriptions like \\\"a 400-employee company\\\", \\\"my company\\\", or \\\"a
+      mid-size firm\\\" \u2014 leave company as null if no actual name was given.\\n\\nReturn
+      ONLY a valid JSON object with the following structure (include only fields that
+      have new values):\\n\\n{\\n  \\\"lead_data\\\": {\\n    \\\"first_name\\\":
+      \\\"string or null\\\",\\n    \\\"last_name\\\": \\\"string or null\\\",\\n
+      \   \\\"email\\\": \\\"string or null\\\",\\n    \\\"company\\\": \\\"string
+      or null\\\",\\n    \\\"phone\\\": \\\"string or null\\\",\\n    \\\"title\\\":
+      \\\"string or null\\\"\\n  },\\n  \\\"qualification_data\\\": {\\n    \\\"budget_range\\\":
+      \\\"string or null\\\",\\n    \\\"timeline\\\": \\\"string or null\\\",\\n    \\\"company_size\\\":
+      \\\"string or null\\\",\\n    \\\"pain_points\\\": [\\\"new pain point\\\"],\\n
+      \   \\\"decision_maker\\\": true/false/null,\\n    \\\"current_solution\\\":
+      \\\"string or null\\\",\\n    \\\"goals\\\": [\\\"new goal\\\"]\\n  },\\n  \\\"objections\\\":
+      [\\\"any new concern or objection raised\\\"]\\n}\\n\\nOmit any top-level key
+      (lead_data, qualification_data, objections) if there is nothing new for that
+      category.  Omit individual fields within lead_data or qualification_data if
+      they were not mentioned.\\n\\nReturn ONLY the JSON \u2014 no explanation, no
+      markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '3440'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: "{\"id\":\"51c3187d-f30d-9953-a4a8-3ff64716dbf2\",\"object\":\"chat.completion\",\"created\":1781205483,\"model\":\"grok-4.20-0309-reasoning\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"{\\n
+        \ \\\"lead_data\\\": {\\n    \\\"email\\\": \\\"sarah@acme.com\\\",\\n    \\\"company\\\":
+        \\\"Acme Corp\\\"\\n  }\\n}\",\"reasoning_content\":\"The task is to extract
+        NEW information from the latest visitor message.\\nFirst, the task is to extract
+        NEW information from the latest visitor message. Previous data is empty: {\\\"lead_data\\\":
+        {}, \\\"qualification_data\\\": {}}\\n\\nLatest message: \\\"You can reach
+        me at sarah@acme.com \u2014 I'm at Acme Corp.\\\"\\n\\nInstructions:\\n- Only
+        extract NEW or UPDATED info.\",\"refusal\":null},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":914,\"completion_tokens\":31,\"total_tokens\":1551,\"prompt_tokens_details\":{\"text_tokens\":914,\"audio_tokens\":0,\"image_tokens\":0,\"cached_tokens\":128},\"completion_tokens_details\":{\"reasoning_tokens\":606,\"audio_tokens\":0,\"accepted_prediction_tokens\":0,\"rejected_prediction_tokens\":0},\"num_sources_used\":0,\"cost_in_usd_ticks\":26006000},\"system_fingerprint\":\"fp_f71d0178b0\",\"service_tier\":\"default\"}"
+    headers:
+      CF-RAY:
+      - a0a2f5a08eea474a-DFW
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:18:06 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '1126'
+      traceparent:
+      - 00-2e9fccfab6eb655ba9ca9f850fe11336-a87588b0000980a3-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '3321.1'
+      x-metrics-mean-itl-ms:
+      - '4.8'
+      x-metrics-ttft-ms:
+      - '165.6'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - 51c3187d-f30d-9953-a4a8-3ff64716dbf2
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a data extraction assistant.  Analyse
+      the conversation below and extract any NEW information revealed in the LATEST
+      MESSAGE from the visitor.\\n\\nFULL CONVERSATION:\\nVisitor: I'm the VP of Engineering
+      here.\\n\\nPREVIOUSLY EXTRACTED DATA:\\n{\\n  \\\"lead_data\\\": {},\\n  \\\"qualification_data\\\":
+      {}\\n}\\n\\nINSTRUCTIONS:\\n- Only extract information that is NEW or UPDATED
+      in the latest visitor message.\\n- Do NOT re-extract information already present
+      in PREVIOUSLY EXTRACTED DATA.\\n- If the latest message contains no new extractable
+      information, return an empty JSON object {}.\\n- Be conservative about NAMES
+      and IDENTIFIERS \u2014 only extract information the visitor explicitly stated,
+      not inferences.\\n- For budget_range, map to one of: \\\"Under $10K\\\", \\\"$10K-$50K\\\",
+      \\\"$50K-$100K\\\", \\\"$100K+\\\", or \\\"Unknown\\\".\\n- For timeline, map
+      to one of: \\\"Immediate\\\", \\\"1-3 months\\\", \\\"3-6 months\\\", \\\"6+
+      months\\\", \\\"Just exploring\\\", or \\\"Unknown\\\".  Map any concrete future
+      reference to the nearest bucket instead of defaulting to \\\"Unknown\\\": \\\"Q3\\\"
+      / \\\"Q4\\\" / \\\"by end of year\\\" \u2192 \\\"3-6 months\\\" (or \\\"1-3
+      months\\\" if the current quarter is close); \\\"next quarter\\\" / \\\"this
+      summer\\\" / \\\"in a couple months\\\" \u2192 \\\"1-3 months\\\"; \\\"ASAP\\\"
+      / \\\"this month\\\" \u2192 \\\"Immediate\\\"; \\\"next year\\\" / \\\"sometime
+      in 2027\\\" \u2192 \\\"6+ months\\\".  Only use \\\"Unknown\\\" when the visitor
+      was genuinely non-committal (\\\"we'll see\\\", \\\"no rush\\\", \\\"haven't
+      thought about it\\\").\\n- For company_size, map to one of: \\\"1-10\\\", \\\"11-50\\\",
+      \\\"51-200\\\", \\\"201-1000\\\", \\\"1000+\\\", or \\\"Unknown\\\".\\n- For
+      decision_maker, use true / false / null.\\n- For pain_points, enumerate EACH
+      distinct problem as its own list item rather than consolidating into one entry.
+      \ If the visitor describes a 3-week ramp time, 20 IT hours per week of manual
+      work, and weak reporting \u2014 that is THREE pain points, not one \\\"bad onboarding\\\"
+      entry.  Capture measurable impacts (time lost, delays, costs) as separate items
+      from capability gaps (missing features, poor UX, integration issues).\\n- For
+      company, only extract a real company name (e.g. \\\"Acme Corp\\\", \\\"Google\\\").
+      Do NOT extract vague descriptions like \\\"a 400-employee company\\\", \\\"my
+      company\\\", or \\\"a mid-size firm\\\" \u2014 leave company as null if no actual
+      name was given.\\n\\nReturn ONLY a valid JSON object with the following structure
+      (include only fields that have new values):\\n\\n{\\n  \\\"lead_data\\\": {\\n
+      \   \\\"first_name\\\": \\\"string or null\\\",\\n    \\\"last_name\\\": \\\"string
+      or null\\\",\\n    \\\"email\\\": \\\"string or null\\\",\\n    \\\"company\\\":
+      \\\"string or null\\\",\\n    \\\"phone\\\": \\\"string or null\\\",\\n    \\\"title\\\":
+      \\\"string or null\\\"\\n  },\\n  \\\"qualification_data\\\": {\\n    \\\"budget_range\\\":
+      \\\"string or null\\\",\\n    \\\"timeline\\\": \\\"string or null\\\",\\n    \\\"company_size\\\":
+      \\\"string or null\\\",\\n    \\\"pain_points\\\": [\\\"new pain point\\\"],\\n
+      \   \\\"decision_maker\\\": true/false/null,\\n    \\\"current_solution\\\":
+      \\\"string or null\\\",\\n    \\\"goals\\\": [\\\"new goal\\\"]\\n  },\\n  \\\"objections\\\":
+      [\\\"any new concern or objection raised\\\"]\\n}\\n\\nOmit any top-level key
+      (lead_data, qualification_data, objections) if there is nothing new for that
+      category.  Omit individual fields within lead_data or qualification_data if
+      they were not mentioned.\\n\\nReturn ONLY the JSON \u2014 no explanation, no
+      markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '3415'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"d44cc25b-bb74-924c-8bab-06f3208c9672","object":"chat.completion","created":1781205487,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{\n  \"lead_data\":
+        {\n    \"title\": \"VP of Engineering\"\n  }\n}","reasoning_content":"The
+        task is to extract NEW information from the LATEST MESSAGE from the visitor.\n","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":903,"completion_tokens":19,"total_tokens":1355,"prompt_tokens_details":{"text_tokens":903,"audio_tokens":0,"image_tokens":0,"cached_tokens":64},"completion_tokens_details":{"reasoning_tokens":433,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":21915500},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a2f5b5ed217673-IAH
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:18:09 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '820'
+      traceparent:
+      - 00-4453437efadaf72eeb75025da6188840-8de41b0a0009e192-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '2252.4'
+      x-metrics-mean-itl-ms:
+      - '4.4'
+      x-metrics-ttft-ms:
+      - '188.1'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - d44cc25b-bb74-924c-8bab-06f3208c9672
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a data extraction assistant.  Analyse
+      the conversation below and extract any NEW information revealed in the LATEST
+      MESSAGE from the visitor.\\n\\nFULL CONVERSATION:\\nVisitor: Honestly, this
+      sounds pretty expensive for where we're at.\\n\\nPREVIOUSLY EXTRACTED DATA:\\n{\\n
+      \ \\\"lead_data\\\": {},\\n  \\\"qualification_data\\\": {}\\n}\\n\\nINSTRUCTIONS:\\n-
+      Only extract information that is NEW or UPDATED in the latest visitor message.\\n-
+      Do NOT re-extract information already present in PREVIOUSLY EXTRACTED DATA.\\n-
+      If the latest message contains no new extractable information, return an empty
+      JSON object {}.\\n- Be conservative about NAMES and IDENTIFIERS \u2014 only
+      extract information the visitor explicitly stated, not inferences.\\n- For budget_range,
+      map to one of: \\\"Under $10K\\\", \\\"$10K-$50K\\\", \\\"$50K-$100K\\\", \\\"$100K+\\\",
+      or \\\"Unknown\\\".\\n- For timeline, map to one of: \\\"Immediate\\\", \\\"1-3
+      months\\\", \\\"3-6 months\\\", \\\"6+ months\\\", \\\"Just exploring\\\", or
+      \\\"Unknown\\\".  Map any concrete future reference to the nearest bucket instead
+      of defaulting to \\\"Unknown\\\": \\\"Q3\\\" / \\\"Q4\\\" / \\\"by end of year\\\"
+      \u2192 \\\"3-6 months\\\" (or \\\"1-3 months\\\" if the current quarter is close);
+      \\\"next quarter\\\" / \\\"this summer\\\" / \\\"in a couple months\\\" \u2192
+      \\\"1-3 months\\\"; \\\"ASAP\\\" / \\\"this month\\\" \u2192 \\\"Immediate\\\";
+      \\\"next year\\\" / \\\"sometime in 2027\\\" \u2192 \\\"6+ months\\\".  Only
+      use \\\"Unknown\\\" when the visitor was genuinely non-committal (\\\"we'll
+      see\\\", \\\"no rush\\\", \\\"haven't thought about it\\\").\\n- For company_size,
+      map to one of: \\\"1-10\\\", \\\"11-50\\\", \\\"51-200\\\", \\\"201-1000\\\",
+      \\\"1000+\\\", or \\\"Unknown\\\".\\n- For decision_maker, use true / false
+      / null.\\n- For pain_points, enumerate EACH distinct problem as its own list
+      item rather than consolidating into one entry.  If the visitor describes a 3-week
+      ramp time, 20 IT hours per week of manual work, and weak reporting \u2014 that
+      is THREE pain points, not one \\\"bad onboarding\\\" entry.  Capture measurable
+      impacts (time lost, delays, costs) as separate items from capability gaps (missing
+      features, poor UX, integration issues).\\n- For company, only extract a real
+      company name (e.g. \\\"Acme Corp\\\", \\\"Google\\\"). Do NOT extract vague
+      descriptions like \\\"a 400-employee company\\\", \\\"my company\\\", or \\\"a
+      mid-size firm\\\" \u2014 leave company as null if no actual name was given.\\n\\nReturn
+      ONLY a valid JSON object with the following structure (include only fields that
+      have new values):\\n\\n{\\n  \\\"lead_data\\\": {\\n    \\\"first_name\\\":
+      \\\"string or null\\\",\\n    \\\"last_name\\\": \\\"string or null\\\",\\n
+      \   \\\"email\\\": \\\"string or null\\\",\\n    \\\"company\\\": \\\"string
+      or null\\\",\\n    \\\"phone\\\": \\\"string or null\\\",\\n    \\\"title\\\":
+      \\\"string or null\\\"\\n  },\\n  \\\"qualification_data\\\": {\\n    \\\"budget_range\\\":
+      \\\"string or null\\\",\\n    \\\"timeline\\\": \\\"string or null\\\",\\n    \\\"company_size\\\":
+      \\\"string or null\\\",\\n    \\\"pain_points\\\": [\\\"new pain point\\\"],\\n
+      \   \\\"decision_maker\\\": true/false/null,\\n    \\\"current_solution\\\":
+      \\\"string or null\\\",\\n    \\\"goals\\\": [\\\"new goal\\\"]\\n  },\\n  \\\"objections\\\":
+      [\\\"any new concern or objection raised\\\"]\\n}\\n\\nOmit any top-level key
+      (lead_data, qualification_data, objections) if there is nothing new for that
+      category.  Omit individual fields within lead_data or qualification_data if
+      they were not mentioned.\\n\\nReturn ONLY the JSON \u2014 no explanation, no
+      markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '3442'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"c50305ce-0c24-93bb-8be4-df959e8723f9","object":"chat.completion","created":1781205489,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{\n  \"objections\":
+        [\"this sounds pretty expensive for where we''re at\"]\n}","reasoning_content":"The
+        task is to extract any NEW information from the latest visitor message.\nFirst,
+        the task is to extract NEW information from the latest visitor message: \"Honestly,
+        this sounds pretty expensive for where we''re at.\"\n\nPREVIOUSLY EXTRACTED
+        DATA: {\"lead_data\": {}, \"qualification_data\": {}}\n\nI need to see if
+        this message provides new info.","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":907,"completion_tokens":17,"total_tokens":1529,"prompt_tokens_details":{"text_tokens":907,"audio_tokens":0,"image_tokens":0,"cached_tokens":128},"completion_tokens_details":{"reasoning_tokens":605,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":25543500},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a2f5c509df3e84-IAH
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:18:12 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '1097'
+      traceparent:
+      - 00-b53c05f70deda1afb77a02fa954f4d54-72ed1f480000038a-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '3273.3'
+      x-metrics-mean-itl-ms:
+      - '4.9'
+      x-metrics-ttft-ms:
+      - '165.2'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - c50305ce-0c24-93bb-8be4-df959e8723f9
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a data extraction assistant.  Analyse
+      the conversation below and extract any NEW information revealed in the LATEST
+      MESSAGE from the visitor.\\n\\nFULL CONVERSATION:\\nTARS: ...Does that all look
+      correct?\\nVisitor: Yep, that all looks right, thanks!\\n\\nPREVIOUSLY EXTRACTED
+      DATA:\\n{\\n  \\\"lead_data\\\": {},\\n  \\\"qualification_data\\\": {}\\n}\\n\\nINSTRUCTIONS:\\n-
+      Only extract information that is NEW or UPDATED in the latest visitor message.\\n-
+      Do NOT re-extract information already present in PREVIOUSLY EXTRACTED DATA.\\n-
+      If the latest message contains no new extractable information, return an empty
+      JSON object {}.\\n- Be conservative about NAMES and IDENTIFIERS \u2014 only
+      extract information the visitor explicitly stated, not inferences.\\n- For budget_range,
+      map to one of: \\\"Under $10K\\\", \\\"$10K-$50K\\\", \\\"$50K-$100K\\\", \\\"$100K+\\\",
+      or \\\"Unknown\\\".\\n- For timeline, map to one of: \\\"Immediate\\\", \\\"1-3
+      months\\\", \\\"3-6 months\\\", \\\"6+ months\\\", \\\"Just exploring\\\", or
+      \\\"Unknown\\\".  Map any concrete future reference to the nearest bucket instead
+      of defaulting to \\\"Unknown\\\": \\\"Q3\\\" / \\\"Q4\\\" / \\\"by end of year\\\"
+      \u2192 \\\"3-6 months\\\" (or \\\"1-3 months\\\" if the current quarter is close);
+      \\\"next quarter\\\" / \\\"this summer\\\" / \\\"in a couple months\\\" \u2192
+      \\\"1-3 months\\\"; \\\"ASAP\\\" / \\\"this month\\\" \u2192 \\\"Immediate\\\";
+      \\\"next year\\\" / \\\"sometime in 2027\\\" \u2192 \\\"6+ months\\\".  Only
+      use \\\"Unknown\\\" when the visitor was genuinely non-committal (\\\"we'll
+      see\\\", \\\"no rush\\\", \\\"haven't thought about it\\\").\\n- For company_size,
+      map to one of: \\\"1-10\\\", \\\"11-50\\\", \\\"51-200\\\", \\\"201-1000\\\",
+      \\\"1000+\\\", or \\\"Unknown\\\".\\n- For decision_maker, use true / false
+      / null.\\n- For pain_points, enumerate EACH distinct problem as its own list
+      item rather than consolidating into one entry.  If the visitor describes a 3-week
+      ramp time, 20 IT hours per week of manual work, and weak reporting \u2014 that
+      is THREE pain points, not one \\\"bad onboarding\\\" entry.  Capture measurable
+      impacts (time lost, delays, costs) as separate items from capability gaps (missing
+      features, poor UX, integration issues).\\n- For company, only extract a real
+      company name (e.g. \\\"Acme Corp\\\", \\\"Google\\\"). Do NOT extract vague
+      descriptions like \\\"a 400-employee company\\\", \\\"my company\\\", or \\\"a
+      mid-size firm\\\" \u2014 leave company as null if no actual name was given.\\n\\nReturn
+      ONLY a valid JSON object with the following structure (include only fields that
+      have new values):\\n\\n{\\n  \\\"lead_data\\\": {\\n    \\\"first_name\\\":
+      \\\"string or null\\\",\\n    \\\"last_name\\\": \\\"string or null\\\",\\n
+      \   \\\"email\\\": \\\"string or null\\\",\\n    \\\"company\\\": \\\"string
+      or null\\\",\\n    \\\"phone\\\": \\\"string or null\\\",\\n    \\\"title\\\":
+      \\\"string or null\\\"\\n  },\\n  \\\"qualification_data\\\": {\\n    \\\"budget_range\\\":
+      \\\"string or null\\\",\\n    \\\"timeline\\\": \\\"string or null\\\",\\n    \\\"company_size\\\":
+      \\\"string or null\\\",\\n    \\\"pain_points\\\": [\\\"new pain point\\\"],\\n
+      \   \\\"decision_maker\\\": true/false/null,\\n    \\\"current_solution\\\":
+      \\\"string or null\\\",\\n    \\\"goals\\\": [\\\"new goal\\\"]\\n  },\\n  \\\"objections\\\":
+      [\\\"any new concern or objection raised\\\"]\\n}\\n\\nOmit any top-level key
+      (lead_data, qualification_data, objections) if there is nothing new for that
+      category.  Omit individual fields within lead_data or qualification_data if
+      they were not mentioned.\\n\\nReturn ONLY the JSON \u2014 no explanation, no
+      markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '3456'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"6eba9bfa-178a-9b0a-b4e0-fdf2faa04ddc","object":"chat.completion","created":1781205493,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{}","reasoning_content":"The
+        task is to extract any NEW information revealed in the LATEST MESSAGE from
+        the visitor.\n","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":915,"completion_tokens":1,"total_tokens":1123,"prompt_tokens_details":{"text_tokens":915,"audio_tokens":0,"image_tokens":0,"cached_tokens":64},"completion_tokens_details":{"reasoning_tokens":207,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":15965500},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a2f5da2ab02a2d-IAH
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:18:13 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '765'
+      traceparent:
+      - 00-a22d5b62bd03a549de77eea873a4c0e5-d6999565000384a5-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '1081.3'
+      x-metrics-mean-itl-ms:
+      - '4.1'
+      x-metrics-ttft-ms:
+      - '169.5'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - 6eba9bfa-178a-9b0a-b4e0-fdf2faa04ddc
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a data extraction assistant.  Analyse
+      the conversation below and extract any NEW information revealed in the LATEST
+      MESSAGE from the visitor.\\n\\nFULL CONVERSATION:\\nTARS: What's the best email
+      for you?\\nVisitor: Like I said, it's sarah@acme.com.\\n\\nPREVIOUSLY EXTRACTED
+      DATA:\\n{\\n  \\\"lead_data\\\": {\\n    \\\"email\\\": \\\"sarah@acme.com\\\"\\n
+      \ },\\n  \\\"qualification_data\\\": {}\\n}\\n\\nINSTRUCTIONS:\\n- Only extract
+      information that is NEW or UPDATED in the latest visitor message.\\n- Do NOT
+      re-extract information already present in PREVIOUSLY EXTRACTED DATA.\\n- If
+      the latest message contains no new extractable information, return an empty
+      JSON object {}.\\n- Be conservative about NAMES and IDENTIFIERS \u2014 only
+      extract information the visitor explicitly stated, not inferences.\\n- For budget_range,
+      map to one of: \\\"Under $10K\\\", \\\"$10K-$50K\\\", \\\"$50K-$100K\\\", \\\"$100K+\\\",
+      or \\\"Unknown\\\".\\n- For timeline, map to one of: \\\"Immediate\\\", \\\"1-3
+      months\\\", \\\"3-6 months\\\", \\\"6+ months\\\", \\\"Just exploring\\\", or
+      \\\"Unknown\\\".  Map any concrete future reference to the nearest bucket instead
+      of defaulting to \\\"Unknown\\\": \\\"Q3\\\" / \\\"Q4\\\" / \\\"by end of year\\\"
+      \u2192 \\\"3-6 months\\\" (or \\\"1-3 months\\\" if the current quarter is close);
+      \\\"next quarter\\\" / \\\"this summer\\\" / \\\"in a couple months\\\" \u2192
+      \\\"1-3 months\\\"; \\\"ASAP\\\" / \\\"this month\\\" \u2192 \\\"Immediate\\\";
+      \\\"next year\\\" / \\\"sometime in 2027\\\" \u2192 \\\"6+ months\\\".  Only
+      use \\\"Unknown\\\" when the visitor was genuinely non-committal (\\\"we'll
+      see\\\", \\\"no rush\\\", \\\"haven't thought about it\\\").\\n- For company_size,
+      map to one of: \\\"1-10\\\", \\\"11-50\\\", \\\"51-200\\\", \\\"201-1000\\\",
+      \\\"1000+\\\", or \\\"Unknown\\\".\\n- For decision_maker, use true / false
+      / null.\\n- For pain_points, enumerate EACH distinct problem as its own list
+      item rather than consolidating into one entry.  If the visitor describes a 3-week
+      ramp time, 20 IT hours per week of manual work, and weak reporting \u2014 that
+      is THREE pain points, not one \\\"bad onboarding\\\" entry.  Capture measurable
+      impacts (time lost, delays, costs) as separate items from capability gaps (missing
+      features, poor UX, integration issues).\\n- For company, only extract a real
+      company name (e.g. \\\"Acme Corp\\\", \\\"Google\\\"). Do NOT extract vague
+      descriptions like \\\"a 400-employee company\\\", \\\"my company\\\", or \\\"a
+      mid-size firm\\\" \u2014 leave company as null if no actual name was given.\\n\\nReturn
+      ONLY a valid JSON object with the following structure (include only fields that
+      have new values):\\n\\n{\\n  \\\"lead_data\\\": {\\n    \\\"first_name\\\":
+      \\\"string or null\\\",\\n    \\\"last_name\\\": \\\"string or null\\\",\\n
+      \   \\\"email\\\": \\\"string or null\\\",\\n    \\\"company\\\": \\\"string
+      or null\\\",\\n    \\\"phone\\\": \\\"string or null\\\",\\n    \\\"title\\\":
+      \\\"string or null\\\"\\n  },\\n  \\\"qualification_data\\\": {\\n    \\\"budget_range\\\":
+      \\\"string or null\\\",\\n    \\\"timeline\\\": \\\"string or null\\\",\\n    \\\"company_size\\\":
+      \\\"string or null\\\",\\n    \\\"pain_points\\\": [\\\"new pain point\\\"],\\n
+      \   \\\"decision_maker\\\": true/false/null,\\n    \\\"current_solution\\\":
+      \\\"string or null\\\",\\n    \\\"goals\\\": [\\\"new goal\\\"]\\n  },\\n  \\\"objections\\\":
+      [\\\"any new concern or objection raised\\\"]\\n}\\n\\nOmit any top-level key
+      (lead_data, qualification_data, objections) if there is nothing new for that
+      category.  Omit individual fields within lead_data or qualification_data if
+      they were not mentioned.\\n\\nReturn ONLY the JSON \u2014 no explanation, no
+      markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '3494'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"e4afb2e5-6a5e-93e7-9c04-68b2147f6a23","object":"chat.completion","created":1781205494,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{}","reasoning_content":"The
+        task is to extract any NEW information revealed in the LATEST MESSAGE from
+        the visitor.\nThe task is to extract any NEW information revealed in the LATEST
+        MESSAGE from the visitor.\n\nThe full conversation is:\n\nTARS: What''s the
+        best email for you?\n\nVisitor: Like I said, it''s sarah@acme.com.","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":932,"completion_tokens":1,"total_tokens":1447,"prompt_tokens_details":{"text_tokens":932,"audio_tokens":0,"image_tokens":0,"cached_tokens":128},"completion_tokens_details":{"reasoning_tokens":514,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":23181000},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a2f5e19b2c9381-IAH
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:18:16 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '972'
+      traceparent:
+      - 00-10b3e7058093823e53833dc7cf93514f-2a3ef8830000ddd5-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '2371.4'
+      x-metrics-mean-itl-ms:
+      - '4.2'
+      x-metrics-ttft-ms:
+      - '158.9'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - e4afb2e5-6a5e-93e7-9c04-68b2147f6a23
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+version: 1

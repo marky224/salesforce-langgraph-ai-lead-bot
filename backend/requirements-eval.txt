@@ -1,0 +1,23 @@
+# Eval-suite-only dependencies — NOT installed into the production image and NOT
+# part of the default test job's install. The Dockerfile copies only app/ and
+# installs requirements.txt; CI's hermetic `pytest tests/` never collects evals/.
+#
+# Install for local eval work / recording:
+#     pip install -r backend/requirements-eval.txt
+-r requirements.txt
+
+# Test runner — pinned to match the hermetic suite (requirements-dev.txt) so the
+# eval gate runs under the same pytest/asyncio. Required: the eval tests are async
+# (@pytest.mark.asyncio) and pytest-recording does not pin pytest, so without these
+# a clean install pulls a bare, asyncio-less pytest and every eval test errors.
+pytest==8.4.2
+pytest-asyncio==0.26.0
+
+# Deterministic real-model replay: record once against live Grok, replay offline
+# in CI (--record-mode=none) as the gate. pytest-recording adds the --record-mode
+# flag and the @pytest.mark.vcr marker on top of vcrpy.
+vcrpy==8.1.1
+pytest-recording==0.13.4
+
+# (PRs C/D will extend this file with openevals / agentevals / a frontier judge
+# provider for the simulated-user scorecard + calibrated LLM judges.)
