@@ -135,3 +135,48 @@ def aggregate_field_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
         "scalar_f1": round(f1, 4),
         "list_count_match_rate": round(list_match_rate, 4),
     }
+
+
+# ---------------------------------------------------------------------------
+# Routing
+# ---------------------------------------------------------------------------
+# Scored against an ``acceptable_next`` *set*, not a single label: discovery vs
+# qualification (and qualification vs lead_capture) are legitimately ambiguous, so
+# a brittle exact-match would punish correct calls. The first element of each
+# case's acceptable set is treated as the "primary" expected stage for the
+# confusion matrix.
+
+
+def routing_match(predicted_stage: str, acceptable: list[str]) -> dict[str, Any]:
+    """Did the router pick an acceptable next stage?"""
+    return {
+        "predicted": predicted_stage,
+        "acceptable": list(acceptable),
+        "correct": predicted_stage in acceptable,
+    }
+
+
+def routing_accuracy(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Roll up ``routing_match`` dicts into an accuracy + the list of misses."""
+    n = len(results)
+    correct = sum(1 for r in results if r["correct"])
+    return {
+        "n": n,
+        "correct": correct,
+        "accuracy": round(correct / n, 4) if n else 1.0,
+        "misses": [
+            {"predicted": r["predicted"], "acceptable": r["acceptable"]}
+            for r in results
+            if not r["correct"]
+        ],
+    }
+
+
+def confusion_matrix(results: list[dict[str, Any]]) -> dict[str, dict[str, int]]:
+    """``{primary_expected_stage: {predicted_stage: count}}`` for the report."""
+    matrix: dict[str, dict[str, int]] = {}
+    for r in results:
+        primary = r["acceptable"][0] if r["acceptable"] else "?"
+        row = matrix.setdefault(primary, {})
+        row[r["predicted"]] = row.get(r["predicted"], 0) + 1
+    return matrix

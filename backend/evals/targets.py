@@ -16,6 +16,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from app.config import LLMProvider, get_llm
 from app.graph import nodes
+from app.models.schemas import ConversationStage
 from evals._config import RECORD_MODEL, RECORD_TEMPERATURE
 
 
@@ -62,3 +63,23 @@ async def run_extraction(row: dict[str, Any], llm: Any) -> dict[str, Any]:
         "qualification_data": current.get("qualification_data", {}),
     }
     return await nodes.extraction_node(state)  # type: ignore[arg-type]
+
+
+async def run_routing(row: dict[str, Any], llm: Any) -> str:
+    """
+    Run ``router_node`` on one routing case and return the chosen next stage's
+    ``.value`` string. The router reads ``stage`` + the lead/qualification summaries
+    + the latest visitor message + ``retry_count``; the transcript isn't used, so a
+    single latest message reproduces the exact prompt the router sees in prod.
+    """
+    nodes.set_llm(llm)
+    state: dict[str, Any] = {
+        "stage": ConversationStage(row["current_stage"]),
+        "lead_data": row.get("lead_data", {}),
+        "qualification_data": row.get("qualification_data", {}),
+        "messages": [HumanMessage(content=row["latest_message"])],
+        "retry_count": row.get("retry_count", 0),
+    }
+    patch = await nodes.router_node(state)  # type: ignore[arg-type]
+    stage = patch["stage"]
+    return stage.value if hasattr(stage, "value") else str(stage)

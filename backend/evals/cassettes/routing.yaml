@@ -1,0 +1,1733 @@
+interactions:
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a conversation stage router.  Given
+      the current state of a sales conversation, decide which stage should come next.\\n\\nCURRENT
+      STAGE: greeting\\nLEAD DATA COLLECTED: Nothing collected yet.\\nQUALIFICATION
+      DATA COLLECTED: Nothing collected yet.\\nLATEST VISITOR MESSAGE: We're drowning
+      in manual work and could use some help.\\nRETRY COUNT (early-exit attempts):
+      0\\n\\nAVAILABLE STAGES:\\n- greeting: Only used at the very start.\\n- discovery:
+      Exploring pain points, current tools, goals.  Move here if we know very little
+      about their situation.\\n- qualification: Gathering budget, timeline, company
+      size, decision-maker.  Move here once we have at least 1 pain point or goal
+      but are missing qualification fields.\\n- objection_handling: Move here if the
+      visitor's latest message expresses doubt, concern, hesitation, or a negative
+      reaction.\\n- lead_capture: Collecting name, job title, email, company, phone.
+      \ Move here once we have at least 2 qualification fields filled AND the visitor
+      seems engaged.\\n- confirmation: Summarising and confirming.  Move here once
+      lead contact info is substantially complete (at minimum: name + email + company).\\n-
+      complete: Conversation is finished.  Only after confirmation has been given.\\n\\nRULES:\\n-
+      Never skip from greeting directly to lead_capture.\\n- If the visitor tries
+      to leave early and retry_count is 0, stay in the current stage for one soft
+      re-engagement attempt.\\n- If the visitor tries to leave early and retry_count
+      >= 1, move to lead_capture with whatever data we have.\\n- If the visitor volunteers
+      information ahead of the current stage, capture it but don't skip stages entirely
+      \u2014 at least briefly visit discovery and qualification.\\n- Objection handling
+      can happen from any stage \u2014 return to the previous stage afterward.\\n\\nReturn
+      ONLY a valid JSON object:\\n\\n{\\n  \\\"next_stage\\\": \\\"<stage name>\\\",\\n
+      \ \\\"reasoning\\\": \\\"One sentence explaining why.\\\"\\n}\\n\\nReturn ONLY
+      the JSON \u2014 no explanation, no markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '2092'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"e7cc9658-3c3e-956b-9b06-3b36e3963114","object":"chat.completion","created":1781205915,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{\n  \"next_stage\":
+        \"discovery\",\n  \"reasoning\": \"Visitor expressed a clear pain point about
+        manual work after the greeting, so move to discovery to explore details before
+        qualification.\"\n}","reasoning_content":"The current stage is greeting. The
+        lead data and qualification data collected are nothing yet. The latest visitor
+        message is: \"We''re drowning in manual work and could use some help.\"\n","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":531,"completion_tokens":39,"total_tokens":817,"prompt_tokens_details":{"text_tokens":531,"audio_tokens":0,"image_tokens":0,"cached_tokens":64},"completion_tokens_details":{"reasoning_tokens":247,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":13115500},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a300265abdf589-DFW
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:25:16 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '1053'
+      traceparent:
+      - 00-b9ab6f6bd4a34ca9ecfab55a42636379-5b5a5dbe000854c4-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '1939.5'
+      x-metrics-mean-itl-ms:
+      - '4.7'
+      x-metrics-ttft-ms:
+      - '479.4'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - e7cc9658-3c3e-956b-9b06-3b36e3963114
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a conversation stage router.  Given
+      the current state of a sales conversation, decide which stage should come next.\\n\\nCURRENT
+      STAGE: discovery\\nLEAD DATA COLLECTED: Nothing collected yet.\\nQUALIFICATION
+      DATA COLLECTED: Pain points: manual data entry\\nLATEST VISITOR MESSAGE: Yeah,
+      it's eating up most of the week.\\nRETRY COUNT (early-exit attempts): 0\\n\\nAVAILABLE
+      STAGES:\\n- greeting: Only used at the very start.\\n- discovery: Exploring
+      pain points, current tools, goals.  Move here if we know very little about their
+      situation.\\n- qualification: Gathering budget, timeline, company size, decision-maker.
+      \ Move here once we have at least 1 pain point or goal but are missing qualification
+      fields.\\n- objection_handling: Move here if the visitor's latest message expresses
+      doubt, concern, hesitation, or a negative reaction.\\n- lead_capture: Collecting
+      name, job title, email, company, phone.  Move here once we have at least 2 qualification
+      fields filled AND the visitor seems engaged.\\n- confirmation: Summarising and
+      confirming.  Move here once lead contact info is substantially complete (at
+      minimum: name + email + company).\\n- complete: Conversation is finished.  Only
+      after confirmation has been given.\\n\\nRULES:\\n- Never skip from greeting
+      directly to lead_capture.\\n- If the visitor tries to leave early and retry_count
+      is 0, stay in the current stage for one soft re-engagement attempt.\\n- If the
+      visitor tries to leave early and retry_count >= 1, move to lead_capture with
+      whatever data we have.\\n- If the visitor volunteers information ahead of the
+      current stage, capture it but don't skip stages entirely \u2014 at least briefly
+      visit discovery and qualification.\\n- Objection handling can happen from any
+      stage \u2014 return to the previous stage afterward.\\n\\nReturn ONLY a valid
+      JSON object:\\n\\n{\\n  \\\"next_stage\\\": \\\"<stage name>\\\",\\n  \\\"reasoning\\\":
+      \\\"One sentence explaining why.\\\"\\n}\\n\\nReturn ONLY the JSON \u2014 no
+      explanation, no markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '2085'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"53c78174-41b2-96f6-bdcf-b0c21ebf62e9","object":"chat.completion","created":1781205917,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{\n  \"next_stage\":
+        \"qualification\",\n  \"reasoning\": \"A pain point has been confirmed with
+        the visitor elaborating on time spent, satisfying the threshold to move from
+        discovery to qualification for budget/timeline/company details.\"\n}","reasoning_content":"The
+        current stage is discovery. Lead data collected: nothing yet. Qualification
+        data: Pain points: manual data entry. Latest visitor message: \"Yeah, it''s
+        eating up most of the week.\"\nFirst, the current stage is discovery. Lead
+        data collected: nothing yet. But latest visitor message: \"Yeah, it''s eating
+        up most of the week.\" And pain points: manual data entry.\n\nThe user says:
+        \"Lead data collected: nothing yet. Qualification data: Pain points: manual
+        data entry.","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":533,"completion_tokens":47,"total_tokens":1187,"prompt_tokens_details":{"text_tokens":533,"audio_tokens":0,"image_tokens":0,"cached_tokens":64},"completion_tokens_details":{"reasoning_tokens":607,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":22340500},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a3003338a86902-DFW
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:25:20 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '1384'
+      traceparent:
+      - 00-7b641bbbfaab1e615d6db0e26e1854df-6dc5a46400029f10-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '3309.8'
+      x-metrics-mean-itl-ms:
+      - '4.7'
+      x-metrics-ttft-ms:
+      - '171.0'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - 53c78174-41b2-96f6-bdcf-b0c21ebf62e9
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a conversation stage router.  Given
+      the current state of a sales conversation, decide which stage should come next.\\n\\nCURRENT
+      STAGE: qualification\\nLEAD DATA COLLECTED: Nothing collected yet.\\nQUALIFICATION
+      DATA COLLECTED: Budget: $10K-$50K\\nPain points: manual data entry\\nLATEST
+      VISITOR MESSAGE: Honestly, this sounds way too expensive for us.\\nRETRY COUNT
+      (early-exit attempts): 0\\n\\nAVAILABLE STAGES:\\n- greeting: Only used at the
+      very start.\\n- discovery: Exploring pain points, current tools, goals.  Move
+      here if we know very little about their situation.\\n- qualification: Gathering
+      budget, timeline, company size, decision-maker.  Move here once we have at least
+      1 pain point or goal but are missing qualification fields.\\n- objection_handling:
+      Move here if the visitor's latest message expresses doubt, concern, hesitation,
+      or a negative reaction.\\n- lead_capture: Collecting name, job title, email,
+      company, phone.  Move here once we have at least 2 qualification fields filled
+      AND the visitor seems engaged.\\n- confirmation: Summarising and confirming.
+      \ Move here once lead contact info is substantially complete (at minimum: name
+      + email + company).\\n- complete: Conversation is finished.  Only after confirmation
+      has been given.\\n\\nRULES:\\n- Never skip from greeting directly to lead_capture.\\n-
+      If the visitor tries to leave early and retry_count is 0, stay in the current
+      stage for one soft re-engagement attempt.\\n- If the visitor tries to leave
+      early and retry_count >= 1, move to lead_capture with whatever data we have.\\n-
+      If the visitor volunteers information ahead of the current stage, capture it
+      but don't skip stages entirely \u2014 at least briefly visit discovery and qualification.\\n-
+      Objection handling can happen from any stage \u2014 return to the previous stage
+      afterward.\\n\\nReturn ONLY a valid JSON object:\\n\\n{\\n  \\\"next_stage\\\":
+      \\\"<stage name>\\\",\\n  \\\"reasoning\\\": \\\"One sentence explaining why.\\\"\\n}\\n\\nReturn
+      ONLY the JSON \u2014 no explanation, no markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '2117'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"be8db73e-2d5a-96ba-83e9-900d0e92a2ea","object":"chat.completion","created":1781205920,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{\n  \"next_stage\":
+        \"objection_handling\",\n  \"reasoning\": \"The visitor''s message expresses
+        a clear concern about cost, triggering objection handling before returning
+        to qualification.\"\n}","reasoning_content":"The current stage is qualification.
+        We''ve collected: Budget: $10K-$50K, Pain points: manual data entry. Nothing
+        else yet.\n","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":542,"completion_tokens":38,"total_tokens":957,"prompt_tokens_details":{"text_tokens":542,"audio_tokens":0,"image_tokens":0,"cached_tokens":64},"completion_tokens_details":{"reasoning_tokens":377,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":16478000},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a3004879c75c89-IAH
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:25:22 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '987'
+      traceparent:
+      - 00-edceb771bf5d0b761133312f2925bf45-075f6ad8000036ee-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '2366.8'
+      x-metrics-mean-itl-ms:
+      - '5.1'
+      x-metrics-ttft-ms:
+      - '191.7'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - be8db73e-2d5a-96ba-83e9-900d0e92a2ea
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a conversation stage router.  Given
+      the current state of a sales conversation, decide which stage should come next.\\n\\nCURRENT
+      STAGE: qualification\\nLEAD DATA COLLECTED: Nothing collected yet.\\nQUALIFICATION
+      DATA COLLECTED: Pain points: slow CRM\\nLATEST VISITOR MESSAGE: Eh, I gotta
+      go.\\nRETRY COUNT (early-exit attempts): 0\\n\\nAVAILABLE STAGES:\\n- greeting:
+      Only used at the very start.\\n- discovery: Exploring pain points, current tools,
+      goals.  Move here if we know very little about their situation.\\n- qualification:
+      Gathering budget, timeline, company size, decision-maker.  Move here once we
+      have at least 1 pain point or goal but are missing qualification fields.\\n-
+      objection_handling: Move here if the visitor's latest message expresses doubt,
+      concern, hesitation, or a negative reaction.\\n- lead_capture: Collecting name,
+      job title, email, company, phone.  Move here once we have at least 2 qualification
+      fields filled AND the visitor seems engaged.\\n- confirmation: Summarising and
+      confirming.  Move here once lead contact info is substantially complete (at
+      minimum: name + email + company).\\n- complete: Conversation is finished.  Only
+      after confirmation has been given.\\n\\nRULES:\\n- Never skip from greeting
+      directly to lead_capture.\\n- If the visitor tries to leave early and retry_count
+      is 0, stay in the current stage for one soft re-engagement attempt.\\n- If the
+      visitor tries to leave early and retry_count >= 1, move to lead_capture with
+      whatever data we have.\\n- If the visitor volunteers information ahead of the
+      current stage, capture it but don't skip stages entirely \u2014 at least briefly
+      visit discovery and qualification.\\n- Objection handling can happen from any
+      stage \u2014 return to the previous stage afterward.\\n\\nReturn ONLY a valid
+      JSON object:\\n\\n{\\n  \\\"next_stage\\\": \\\"<stage name>\\\",\\n  \\\"reasoning\\\":
+      \\\"One sentence explaining why.\\\"\\n}\\n\\nReturn ONLY the JSON \u2014 no
+      explanation, no markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '2057'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"dd169491-0336-9d69-8be3-0c114228767b","object":"chat.completion","created":1781205923,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{\n  \"next_stage\":
+        \"qualification\",\n  \"reasoning\": \"Visitor is attempting to leave early
+        with retry count at 0, so remain in qualification for a soft re-engagement
+        attempt per rules.\"\n}","reasoning_content":"The current stage is qualification.
+        Lead data collected: nothing. Qualification data: Pain points: slow CRM. Latest
+        visitor message: \"Eh, I gotta go.\" Retry count: 0.\n","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":528,"completion_tokens":43,"total_tokens":943,"prompt_tokens_details":{"text_tokens":528,"audio_tokens":0,"image_tokens":0,"cached_tokens":64},"completion_tokens_details":{"reasoning_tokens":372,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":16303000},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a3005858342e69-DFW
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:25:25 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '1035'
+      traceparent:
+      - 00-2dffd6571bebf17afb6eb9ecff8ab4ce-2307709b000c4a2a-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '2278.3'
+      x-metrics-mean-itl-ms:
+      - '4.8'
+      x-metrics-ttft-ms:
+      - '251.5'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - dd169491-0336-9d69-8be3-0c114228767b
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a conversation stage router.  Given
+      the current state of a sales conversation, decide which stage should come next.\\n\\nCURRENT
+      STAGE: qualification\\nLEAD DATA COLLECTED: Nothing collected yet.\\nQUALIFICATION
+      DATA COLLECTED: Pain points: slow CRM\\nLATEST VISITOR MESSAGE: Seriously, I
+      need to run now.\\nRETRY COUNT (early-exit attempts): 1\\n\\nAVAILABLE STAGES:\\n-
+      greeting: Only used at the very start.\\n- discovery: Exploring pain points,
+      current tools, goals.  Move here if we know very little about their situation.\\n-
+      qualification: Gathering budget, timeline, company size, decision-maker.  Move
+      here once we have at least 1 pain point or goal but are missing qualification
+      fields.\\n- objection_handling: Move here if the visitor's latest message expresses
+      doubt, concern, hesitation, or a negative reaction.\\n- lead_capture: Collecting
+      name, job title, email, company, phone.  Move here once we have at least 2 qualification
+      fields filled AND the visitor seems engaged.\\n- confirmation: Summarising and
+      confirming.  Move here once lead contact info is substantially complete (at
+      minimum: name + email + company).\\n- complete: Conversation is finished.  Only
+      after confirmation has been given.\\n\\nRULES:\\n- Never skip from greeting
+      directly to lead_capture.\\n- If the visitor tries to leave early and retry_count
+      is 0, stay in the current stage for one soft re-engagement attempt.\\n- If the
+      visitor tries to leave early and retry_count >= 1, move to lead_capture with
+      whatever data we have.\\n- If the visitor volunteers information ahead of the
+      current stage, capture it but don't skip stages entirely \u2014 at least briefly
+      visit discovery and qualification.\\n- Objection handling can happen from any
+      stage \u2014 return to the previous stage afterward.\\n\\nReturn ONLY a valid
+      JSON object:\\n\\n{\\n  \\\"next_stage\\\": \\\"<stage name>\\\",\\n  \\\"reasoning\\\":
+      \\\"One sentence explaining why.\\\"\\n}\\n\\nReturn ONLY the JSON \u2014 no
+      explanation, no markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '2071'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"4b00aaaf-fdbf-9baa-94a0-86223de42caa","object":"chat.completion","created":1781205925,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{\n  \"next_stage\":
+        \"lead_capture\",\n  \"reasoning\": \"Visitor is trying to leave early with
+        retry_count at 1, so per rules move to lead_capture with the existing pain
+        point data.\"\n}","reasoning_content":"The current stage is qualification.
+        Lead data collected: nothing. Qualification data collected: Pain points: slow
+        CRM. Latest visitor message: \"Seriously, I need to run now.\" Retry count
+        (early-exit a...","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":530,"completion_tokens":44,"total_tokens":1044,"prompt_tokens_details":{"text_tokens":530,"audio_tokens":0,"image_tokens":0,"cached_tokens":64},"completion_tokens_details":{"reasoning_tokens":470,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":18803000},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a30067ebad4865-DFW
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:25:27 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '1064'
+      traceparent:
+      - 00-061c136c71dcf30ec7268e8f828801d7-3dcc9fe700078986-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '2784.6'
+      x-metrics-mean-itl-ms:
+      - '4.6'
+      x-metrics-ttft-ms:
+      - '340.7'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - 4b00aaaf-fdbf-9baa-94a0-86223de42caa
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a conversation stage router.  Given
+      the current state of a sales conversation, decide which stage should come next.\\n\\nCURRENT
+      STAGE: qualification\\nLEAD DATA COLLECTED: Nothing collected yet.\\nQUALIFICATION
+      DATA COLLECTED: Budget: $50K-$100K\\nTimeline: 1-3 months\\nPain points: manual
+      entry\\nLATEST VISITOR MESSAGE: Makes sense \u2014 what's the next step?\\nRETRY
+      COUNT (early-exit attempts): 0\\n\\nAVAILABLE STAGES:\\n- greeting: Only used
+      at the very start.\\n- discovery: Exploring pain points, current tools, goals.
+      \ Move here if we know very little about their situation.\\n- qualification:
+      Gathering budget, timeline, company size, decision-maker.  Move here once we
+      have at least 1 pain point or goal but are missing qualification fields.\\n-
+      objection_handling: Move here if the visitor's latest message expresses doubt,
+      concern, hesitation, or a negative reaction.\\n- lead_capture: Collecting name,
+      job title, email, company, phone.  Move here once we have at least 2 qualification
+      fields filled AND the visitor seems engaged.\\n- confirmation: Summarising and
+      confirming.  Move here once lead contact info is substantially complete (at
+      minimum: name + email + company).\\n- complete: Conversation is finished.  Only
+      after confirmation has been given.\\n\\nRULES:\\n- Never skip from greeting
+      directly to lead_capture.\\n- If the visitor tries to leave early and retry_count
+      is 0, stay in the current stage for one soft re-engagement attempt.\\n- If the
+      visitor tries to leave early and retry_count >= 1, move to lead_capture with
+      whatever data we have.\\n- If the visitor volunteers information ahead of the
+      current stage, capture it but don't skip stages entirely \u2014 at least briefly
+      visit discovery and qualification.\\n- Objection handling can happen from any
+      stage \u2014 return to the previous stage afterward.\\n\\nReturn ONLY a valid
+      JSON object:\\n\\n{\\n  \\\"next_stage\\\": \\\"<stage name>\\\",\\n  \\\"reasoning\\\":
+      \\\"One sentence explaining why.\\\"\\n}\\n\\nReturn ONLY the JSON \u2014 no
+      explanation, no markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '2125'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: "{\"id\":\"8aeb41ab-aa4b-9a5c-a70b-9524d7691d73\",\"object\":\"chat.completion\",\"created\":1781205928,\"model\":\"grok-4.20-0309-reasoning\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"{\\n
+        \ \\\"next_stage\\\": \\\"lead_capture\\\",\\n  \\\"reasoning\\\": \\\"We
+        have multiple qualification fields (budget, timeline, pain points) already
+        collected and the visitor seems positively engaged by asking for the next
+        step.\\\"\\n}\",\"reasoning_content\":\"The current stage is qualification.
+        Lead data collected: nothing yet. Qualification data collected: Budget: $50K-$100K,
+        Timeline: 1-3 months, Pain points: manual entry.\\nFirst, the current stage
+        is qualification. We have some data: Budget: $50K-$100K, Timeline: 1-3 months,
+        Pain points: manual entry.\\n\\nVisitor says: \\\"Makes sense \u2014 what's
+        the next step?\\\" This indicates engagement, asking for next step.\",\"refusal\":null},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":547,\"completion_tokens\":45,\"total_tokens\":1175,\"prompt_tokens_details\":{\"text_tokens\":547,\"audio_tokens\":0,\"image_tokens\":0,\"cached_tokens\":64},\"completion_tokens_details\":{\"reasoning_tokens\":583,\"audio_tokens\":0,\"accepted_prediction_tokens\":0,\"rejected_prediction_tokens\":0},\"num_sources_used\":0,\"cost_in_usd_ticks\":21865500},\"system_fingerprint\":\"fp_f71d0178b0\",\"service_tier\":\"default\"}"
+    headers:
+      CF-RAY:
+      - a0a30079f823c06e-DFW
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:25:30 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '1300'
+      traceparent:
+      - 00-9851e26d2e008bcdd804874f8bc9d6cd-c7945ee60000bb67-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '2798.2'
+      x-metrics-mean-itl-ms:
+      - '3.9'
+      x-metrics-ttft-ms:
+      - '273.6'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - 8aeb41ab-aa4b-9a5c-a70b-9524d7691d73
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a conversation stage router.  Given
+      the current state of a sales conversation, decide which stage should come next.\\n\\nCURRENT
+      STAGE: lead_capture\\nLEAD DATA COLLECTED: Name: Sarah Chen\\nEmail: sarah@acme.com\\nCompany:
+      Acme Corp\\nQUALIFICATION DATA COLLECTED: Budget: $10K-$50K\\nPain points: manual
+      entry\\nLATEST VISITOR MESSAGE: That's everything you need.\\nRETRY COUNT (early-exit
+      attempts): 0\\n\\nAVAILABLE STAGES:\\n- greeting: Only used at the very start.\\n-
+      discovery: Exploring pain points, current tools, goals.  Move here if we know
+      very little about their situation.\\n- qualification: Gathering budget, timeline,
+      company size, decision-maker.  Move here once we have at least 1 pain point
+      or goal but are missing qualification fields.\\n- objection_handling: Move here
+      if the visitor's latest message expresses doubt, concern, hesitation, or a negative
+      reaction.\\n- lead_capture: Collecting name, job title, email, company, phone.
+      \ Move here once we have at least 2 qualification fields filled AND the visitor
+      seems engaged.\\n- confirmation: Summarising and confirming.  Move here once
+      lead contact info is substantially complete (at minimum: name + email + company).\\n-
+      complete: Conversation is finished.  Only after confirmation has been given.\\n\\nRULES:\\n-
+      Never skip from greeting directly to lead_capture.\\n- If the visitor tries
+      to leave early and retry_count is 0, stay in the current stage for one soft
+      re-engagement attempt.\\n- If the visitor tries to leave early and retry_count
+      >= 1, move to lead_capture with whatever data we have.\\n- If the visitor volunteers
+      information ahead of the current stage, capture it but don't skip stages entirely
+      \u2014 at least briefly visit discovery and qualification.\\n- Objection handling
+      can happen from any stage \u2014 return to the previous stage afterward.\\n\\nReturn
+      ONLY a valid JSON object:\\n\\n{\\n  \\\"next_stage\\\": \\\"<stage name>\\\",\\n
+      \ \\\"reasoning\\\": \\\"One sentence explaining why.\\\"\\n}\\n\\nReturn ONLY
+      the JSON \u2014 no explanation, no markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '2128'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"e0a01673-939e-98b8-86e1-ce792ca52084","object":"chat.completion","created":1781205931,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{\n  \"next_stage\":
+        \"confirmation\",\n  \"reasoning\": \"Lead contact info is substantially complete
+        with name, email, and company already captured along with qualification data,
+        and the visitor''s message signals that all needed details have been provided.\"\n}","reasoning_content":"The
+        current stage is lead_capture. We have collected: Name: Sarah Chen, Email:
+        sarah@acme.com, Company: Acme Corp. Qualification data: Budget: $10K-$50K,
+        Pain points: manual entry.\nFirst, the current stage is lead_capture. We''ve
+        collected: Name: Sarah Chen, Email: sarah@acme.com, Company: Acme Corp. Qualification
+        data: Budget: $10K-$50K, Pain points: manual entry.\n\nVisitor message: \"That''s
+        everything you need.","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":553,"completion_tokens":50,"total_tokens":1111,"prompt_tokens_details":{"text_tokens":553,"audio_tokens":0,"image_tokens":0,"cached_tokens":64},"completion_tokens_details":{"reasoning_tokens":508,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":20190500},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a3008c4ec36b6d-DFW
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:25:33 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '1351'
+      traceparent:
+      - 00-7f56dd4f862fa84ad1c7a4ef13671628-fe70bd82000a9699-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '2992.5'
+      x-metrics-mean-itl-ms:
+      - '5.0'
+      x-metrics-ttft-ms:
+      - '168.1'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - e0a01673-939e-98b8-86e1-ce792ca52084
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a conversation stage router.  Given
+      the current state of a sales conversation, decide which stage should come next.\\n\\nCURRENT
+      STAGE: greeting\\nLEAD DATA COLLECTED: Nothing collected yet.\\nQUALIFICATION
+      DATA COLLECTED: Nothing collected yet.\\nLATEST VISITOR MESSAGE: Hi, I'm Sarah
+      from Acme, you can reach me at sarah@acme.com.\\nRETRY COUNT (early-exit attempts):
+      0\\n\\nAVAILABLE STAGES:\\n- greeting: Only used at the very start.\\n- discovery:
+      Exploring pain points, current tools, goals.  Move here if we know very little
+      about their situation.\\n- qualification: Gathering budget, timeline, company
+      size, decision-maker.  Move here once we have at least 1 pain point or goal
+      but are missing qualification fields.\\n- objection_handling: Move here if the
+      visitor's latest message expresses doubt, concern, hesitation, or a negative
+      reaction.\\n- lead_capture: Collecting name, job title, email, company, phone.
+      \ Move here once we have at least 2 qualification fields filled AND the visitor
+      seems engaged.\\n- confirmation: Summarising and confirming.  Move here once
+      lead contact info is substantially complete (at minimum: name + email + company).\\n-
+      complete: Conversation is finished.  Only after confirmation has been given.\\n\\nRULES:\\n-
+      Never skip from greeting directly to lead_capture.\\n- If the visitor tries
+      to leave early and retry_count is 0, stay in the current stage for one soft
+      re-engagement attempt.\\n- If the visitor tries to leave early and retry_count
+      >= 1, move to lead_capture with whatever data we have.\\n- If the visitor volunteers
+      information ahead of the current stage, capture it but don't skip stages entirely
+      \u2014 at least briefly visit discovery and qualification.\\n- Objection handling
+      can happen from any stage \u2014 return to the previous stage afterward.\\n\\nReturn
+      ONLY a valid JSON object:\\n\\n{\\n  \\\"next_stage\\\": \\\"<stage name>\\\",\\n
+      \ \\\"reasoning\\\": \\\"One sentence explaining why.\\\"\\n}\\n\\nReturn ONLY
+      the JSON \u2014 no explanation, no markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '2098'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"ea17c090-37dd-96df-b320-20e5597e6439","object":"chat.completion","created":1781205934,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{\n  \"next_stage\":
+        \"discovery\",\n  \"reasoning\": \"Visitor volunteered lead info during greeting
+        so capture it internally but proceed to discovery to explore needs without
+        skipping stages.\"\n}","reasoning_content":"The current stage is greeting.
+        The lead data collected is nothing yet. Qualification data is nothing. The
+        latest visitor message is: \"Hi, I''m Sarah from Acme, you can reach me at
+        sarah@acme.com.\"\n","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":540,"completion_tokens":37,"total_tokens":976,"prompt_tokens_details":{"text_tokens":540,"audio_tokens":0,"image_tokens":0,"cached_tokens":128},"completion_tokens_details":{"reasoning_tokens":399,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":16306000},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a3009fa8ea586b-IAH
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:25:36 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '1068'
+      traceparent:
+      - 00-23f83c236b3d7b259d4e35b4084f9358-5c59e48d0000212e-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '2487.7'
+      x-metrics-mean-itl-ms:
+      - '5.1'
+      x-metrics-ttft-ms:
+      - '206.2'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - ea17c090-37dd-96df-b320-20e5597e6439
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a conversation stage router.  Given
+      the current state of a sales conversation, decide which stage should come next.\\n\\nCURRENT
+      STAGE: discovery\\nLEAD DATA COLLECTED: Nothing collected yet.\\nQUALIFICATION
+      DATA COLLECTED: Pain points: manual entry\\nLATEST VISITOR MESSAGE: We've got
+      around $100K set aside for this.\\nRETRY COUNT (early-exit attempts): 0\\n\\nAVAILABLE
+      STAGES:\\n- greeting: Only used at the very start.\\n- discovery: Exploring
+      pain points, current tools, goals.  Move here if we know very little about their
+      situation.\\n- qualification: Gathering budget, timeline, company size, decision-maker.
+      \ Move here once we have at least 1 pain point or goal but are missing qualification
+      fields.\\n- objection_handling: Move here if the visitor's latest message expresses
+      doubt, concern, hesitation, or a negative reaction.\\n- lead_capture: Collecting
+      name, job title, email, company, phone.  Move here once we have at least 2 qualification
+      fields filled AND the visitor seems engaged.\\n- confirmation: Summarising and
+      confirming.  Move here once lead contact info is substantially complete (at
+      minimum: name + email + company).\\n- complete: Conversation is finished.  Only
+      after confirmation has been given.\\n\\nRULES:\\n- Never skip from greeting
+      directly to lead_capture.\\n- If the visitor tries to leave early and retry_count
+      is 0, stay in the current stage for one soft re-engagement attempt.\\n- If the
+      visitor tries to leave early and retry_count >= 1, move to lead_capture with
+      whatever data we have.\\n- If the visitor volunteers information ahead of the
+      current stage, capture it but don't skip stages entirely \u2014 at least briefly
+      visit discovery and qualification.\\n- Objection handling can happen from any
+      stage \u2014 return to the previous stage afterward.\\n\\nReturn ONLY a valid
+      JSON object:\\n\\n{\\n  \\\"next_stage\\\": \\\"<stage name>\\\",\\n  \\\"reasoning\\\":
+      \\\"One sentence explaining why.\\\"\\n}\\n\\nReturn ONLY the JSON \u2014 no
+      explanation, no markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '2084'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"dce928f8-2ea2-930a-a9c4-ec334e97522c","object":"chat.completion","created":1781205937,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{\n  \"next_stage\":
+        \"qualification\",\n  \"reasoning\": \"Visitor provided budget information
+        which is a qualification field, and we already have one pain point, so transition
+        from discovery to gather remaining qualification details like timeline and
+        decision maker.\"\n}","reasoning_content":"The current stage is discovery.
+        Lead data collected: nothing yet. Qualification data: pain points: manual
+        entry. Latest visitor message: \"We''ve got around $100K set aside for this.\"
+        Retry count: 0.\nFirst, the current stage is discovery. Lead data: nothing
+        yet. Qualification data: pain points: manual entry. Latest visitor message:
+        \"We''ve got around $100K set aside for this.\" Retry count: 0.","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":533,"completion_tokens":49,"total_tokens":1039,"prompt_tokens_details":{"text_tokens":533,"audio_tokens":0,"image_tokens":0,"cached_tokens":64},"completion_tokens_details":{"reasoning_tokens":457,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":18640500},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a300b00ad96a82-DFW
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:25:39 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '1341'
+      traceparent:
+      - 00-707c60be0fa3d03806b57807e5b6c3ab-56bcd24e000bab6f-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '2659.4'
+      x-metrics-mean-itl-ms:
+      - '4.8'
+      x-metrics-ttft-ms:
+      - '161.6'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - dce928f8-2ea2-930a-a9c4-ec334e97522c
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a conversation stage router.  Given
+      the current state of a sales conversation, decide which stage should come next.\\n\\nCURRENT
+      STAGE: discovery\\nLEAD DATA COLLECTED: Nothing collected yet.\\nQUALIFICATION
+      DATA COLLECTED: Pain points: manual entry\\nLATEST VISITOR MESSAGE: I'm worried
+      this'll take forever to actually implement.\\nRETRY COUNT (early-exit attempts):
+      0\\n\\nAVAILABLE STAGES:\\n- greeting: Only used at the very start.\\n- discovery:
+      Exploring pain points, current tools, goals.  Move here if we know very little
+      about their situation.\\n- qualification: Gathering budget, timeline, company
+      size, decision-maker.  Move here once we have at least 1 pain point or goal
+      but are missing qualification fields.\\n- objection_handling: Move here if the
+      visitor's latest message expresses doubt, concern, hesitation, or a negative
+      reaction.\\n- lead_capture: Collecting name, job title, email, company, phone.
+      \ Move here once we have at least 2 qualification fields filled AND the visitor
+      seems engaged.\\n- confirmation: Summarising and confirming.  Move here once
+      lead contact info is substantially complete (at minimum: name + email + company).\\n-
+      complete: Conversation is finished.  Only after confirmation has been given.\\n\\nRULES:\\n-
+      Never skip from greeting directly to lead_capture.\\n- If the visitor tries
+      to leave early and retry_count is 0, stay in the current stage for one soft
+      re-engagement attempt.\\n- If the visitor tries to leave early and retry_count
+      >= 1, move to lead_capture with whatever data we have.\\n- If the visitor volunteers
+      information ahead of the current stage, capture it but don't skip stages entirely
+      \u2014 at least briefly visit discovery and qualification.\\n- Objection handling
+      can happen from any stage \u2014 return to the previous stage afterward.\\n\\nReturn
+      ONLY a valid JSON object:\\n\\n{\\n  \\\"next_stage\\\": \\\"<stage name>\\\",\\n
+      \ \\\"reasoning\\\": \\\"One sentence explaining why.\\\"\\n}\\n\\nReturn ONLY
+      the JSON \u2014 no explanation, no markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '2097'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"e5f12746-d1aa-9377-8952-b4787318ab52","object":"chat.completion","created":1781205939,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{\n  \"next_stage\":
+        \"objection_handling\",\n  \"reasoning\": \"Visitor''s message expresses concern
+        and hesitation about implementation time, triggering objection handling from
+        the current discovery stage.\"\n}","reasoning_content":"The current stage
+        is discovery. Lead data collected: nothing yet. Qualification data: pain points:
+        manual entry. Latest visitor message: \"I''m worried this''ll take forever
+        to actually implement.\"\n","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":532,"completion_tokens":39,"total_tokens":896,"prompt_tokens_details":{"text_tokens":532,"audio_tokens":0,"image_tokens":0,"cached_tokens":64},"completion_tokens_details":{"reasoning_tokens":325,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":15078000},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a300c15d696f16-DFW
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:25:41 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '1079'
+      traceparent:
+      - 00-64393dd7ad8de9325ffa3e3b98245fa8-b0196a7800006853-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '2152.8'
+      x-metrics-mean-itl-ms:
+      - '5.0'
+      x-metrics-ttft-ms:
+      - '272.9'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - e5f12746-d1aa-9377-8952-b4787318ab52
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a conversation stage router.  Given
+      the current state of a sales conversation, decide which stage should come next.\\n\\nCURRENT
+      STAGE: confirmation\\nLEAD DATA COLLECTED: Name: Sarah Chen\\nEmail: sarah@acme.com\\nCompany:
+      Acme Corp\\nQUALIFICATION DATA COLLECTED: Budget: $10K-$50K\\nTimeline: 1-3
+      months\\nPain points: manual entry\\nLATEST VISITOR MESSAGE: Yes, that all looks
+      perfect, thanks!\\nRETRY COUNT (early-exit attempts): 0\\n\\nAVAILABLE STAGES:\\n-
+      greeting: Only used at the very start.\\n- discovery: Exploring pain points,
+      current tools, goals.  Move here if we know very little about their situation.\\n-
+      qualification: Gathering budget, timeline, company size, decision-maker.  Move
+      here once we have at least 1 pain point or goal but are missing qualification
+      fields.\\n- objection_handling: Move here if the visitor's latest message expresses
+      doubt, concern, hesitation, or a negative reaction.\\n- lead_capture: Collecting
+      name, job title, email, company, phone.  Move here once we have at least 2 qualification
+      fields filled AND the visitor seems engaged.\\n- confirmation: Summarising and
+      confirming.  Move here once lead contact info is substantially complete (at
+      minimum: name + email + company).\\n- complete: Conversation is finished.  Only
+      after confirmation has been given.\\n\\nRULES:\\n- Never skip from greeting
+      directly to lead_capture.\\n- If the visitor tries to leave early and retry_count
+      is 0, stay in the current stage for one soft re-engagement attempt.\\n- If the
+      visitor tries to leave early and retry_count >= 1, move to lead_capture with
+      whatever data we have.\\n- If the visitor volunteers information ahead of the
+      current stage, capture it but don't skip stages entirely \u2014 at least briefly
+      visit discovery and qualification.\\n- Objection handling can happen from any
+      stage \u2014 return to the previous stage afterward.\\n\\nReturn ONLY a valid
+      JSON object:\\n\\n{\\n  \\\"next_stage\\\": \\\"<stage name>\\\",\\n  \\\"reasoning\\\":
+      \\\"One sentence explaining why.\\\"\\n}\\n\\nReturn ONLY the JSON \u2014 no
+      explanation, no markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '2159'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"79be3243-3d28-9831-a0a8-d849c7a3208c","object":"chat.completion","created":1781205942,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{\n  \"next_stage\":
+        \"complete\",\n  \"reasoning\": \"Visitor has explicitly confirmed the summary
+        as perfect, satisfying the condition to end the conversation.\"\n}","reasoning_content":"The
+        current stage is confirmation. The lead data collected is Name: Sarah Chen,
+        Email: sarah@acme.com, Company: Acme Corp. Qualification data: Budget: $10K-$50K,
+        Timeline: 1-3 months, Pain points: man...","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":564,"completion_tokens":33,"total_tokens":835,"prompt_tokens_details":{"text_tokens":564,"audio_tokens":0,"image_tokens":0,"cached_tokens":64},"completion_tokens_details":{"reasoning_tokens":238,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":13153000},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a300cf5f09d7bf-IAH
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:25:43 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '1039'
+      traceparent:
+      - 00-a6b5ed790a7821abc69eac5b745645d8-a8f5184a00002b67-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '1561.0'
+      x-metrics-mean-itl-ms:
+      - '4.8'
+      x-metrics-ttft-ms:
+      - '188.6'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - 79be3243-3d28-9831-a0a8-d849c7a3208c
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a conversation stage router.  Given
+      the current state of a sales conversation, decide which stage should come next.\\n\\nCURRENT
+      STAGE: qualification\\nLEAD DATA COLLECTED: Nothing collected yet.\\nQUALIFICATION
+      DATA COLLECTED: Pain points: manual entry\\nLATEST VISITOR MESSAGE: We're about
+      50 people.\\nRETRY COUNT (early-exit attempts): 0\\n\\nAVAILABLE STAGES:\\n-
+      greeting: Only used at the very start.\\n- discovery: Exploring pain points,
+      current tools, goals.  Move here if we know very little about their situation.\\n-
+      qualification: Gathering budget, timeline, company size, decision-maker.  Move
+      here once we have at least 1 pain point or goal but are missing qualification
+      fields.\\n- objection_handling: Move here if the visitor's latest message expresses
+      doubt, concern, hesitation, or a negative reaction.\\n- lead_capture: Collecting
+      name, job title, email, company, phone.  Move here once we have at least 2 qualification
+      fields filled AND the visitor seems engaged.\\n- confirmation: Summarising and
+      confirming.  Move here once lead contact info is substantially complete (at
+      minimum: name + email + company).\\n- complete: Conversation is finished.  Only
+      after confirmation has been given.\\n\\nRULES:\\n- Never skip from greeting
+      directly to lead_capture.\\n- If the visitor tries to leave early and retry_count
+      is 0, stay in the current stage for one soft re-engagement attempt.\\n- If the
+      visitor tries to leave early and retry_count >= 1, move to lead_capture with
+      whatever data we have.\\n- If the visitor volunteers information ahead of the
+      current stage, capture it but don't skip stages entirely \u2014 at least briefly
+      visit discovery and qualification.\\n- Objection handling can happen from any
+      stage \u2014 return to the previous stage afterward.\\n\\nReturn ONLY a valid
+      JSON object:\\n\\n{\\n  \\\"next_stage\\\": \\\"<stage name>\\\",\\n  \\\"reasoning\\\":
+      \\\"One sentence explaining why.\\\"\\n}\\n\\nReturn ONLY the JSON \u2014 no
+      explanation, no markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '2068'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: "{\"id\":\"f244c359-a59c-91d8-a102-b11f4269609d\",\"object\":\"chat.completion\",\"created\":1781205943,\"model\":\"grok-4.20-0309-reasoning\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"{\\n
+        \ \\\"next_stage\\\": \\\"qualification\\\",\\n  \\\"reasoning\\\": \\\"Visitor
+        provided company size as a qualification detail, but we only have one qualification
+        field so far and still need more like budget, timeline or decision-maker before
+        advancing.\\\"\\n}\",\"reasoning_content\":\"The current stage is qualification.
+        Lead data collected: nothing yet. Qualification data collected: Pain points:
+        manual entry. Latest visitor message: \\\"We're about 50 people.\\\" Retry
+        count: 0.\\nFirst, the current stage is qualification. Lead data collected:
+        nothing yet. Qualification data collected: Pain points: manual entry. Latest
+        visitor message: \\\"We're about 50 people.\\\" Retry count: 0.\\n\\nAvailable
+        stages: greeting, discovery, qualification, objection_handling, lead_capture,
+        confirmation, complete.\\n\\nRules:\\n\\n - Never skip from greeting directly
+        to lead_capture. (Not relevant here.)\\n\\n  - If the visitor tries to leave
+        early and retry_count is 0, stay in the current stage for one soft re-engagement
+        attempt.\\n\\n  - If the visitor tries to leave early and retry_count >= 1,
+        move to lead_capture with whatever data we have.\\n\\n  - If the visitor volunteers
+        information ahead of the current stage, capture it but don't skip stages entirely
+        \u2014 at least briefly visit discovery and qualification.\\n\\n  - Objection
+        handling can happen from any stage \u2014 return to the previous stage afterward.\\n\\nThe
+        conversation is in qualification stage.\",\"refusal\":null},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":528,\"completion_tokens\":48,\"total_tokens\":1640,\"prompt_tokens_details\":{\"text_tokens\":528,\"audio_tokens\":0,\"image_tokens\":0,\"cached_tokens\":128},\"completion_tokens_details\":{\"reasoning_tokens\":1064,\"audio_tokens\":0,\"accepted_prediction_tokens\":0,\"rejected_prediction_tokens\":0},\"num_sources_used\":0,\"cost_in_usd_ticks\":33056000},\"system_fingerprint\":\"fp_f71d0178b0\",\"service_tier\":\"default\"}"
+    headers:
+      CF-RAY:
+      - a0a300d9b8bbc2fe-IAH
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:25:49 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '2073'
+      traceparent:
+      - 00-cf458b3779a958ec962b71ed83f56d61-878630330001e936-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '5862.4'
+      x-metrics-mean-itl-ms:
+      - '4.9'
+      x-metrics-ttft-ms:
+      - '343.6'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - f244c359-a59c-91d8-a102-b11f4269609d
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a conversation stage router.  Given
+      the current state of a sales conversation, decide which stage should come next.\\n\\nCURRENT
+      STAGE: discovery\\nLEAD DATA COLLECTED: Nothing collected yet.\\nQUALIFICATION
+      DATA COLLECTED: Nothing collected yet.\\nLATEST VISITOR MESSAGE: Not sure really,
+      just looking around for now.\\nRETRY COUNT (early-exit attempts): 0\\n\\nAVAILABLE
+      STAGES:\\n- greeting: Only used at the very start.\\n- discovery: Exploring
+      pain points, current tools, goals.  Move here if we know very little about their
+      situation.\\n- qualification: Gathering budget, timeline, company size, decision-maker.
+      \ Move here once we have at least 1 pain point or goal but are missing qualification
+      fields.\\n- objection_handling: Move here if the visitor's latest message expresses
+      doubt, concern, hesitation, or a negative reaction.\\n- lead_capture: Collecting
+      name, job title, email, company, phone.  Move here once we have at least 2 qualification
+      fields filled AND the visitor seems engaged.\\n- confirmation: Summarising and
+      confirming.  Move here once lead contact info is substantially complete (at
+      minimum: name + email + company).\\n- complete: Conversation is finished.  Only
+      after confirmation has been given.\\n\\nRULES:\\n- Never skip from greeting
+      directly to lead_capture.\\n- If the visitor tries to leave early and retry_count
+      is 0, stay in the current stage for one soft re-engagement attempt.\\n- If the
+      visitor tries to leave early and retry_count >= 1, move to lead_capture with
+      whatever data we have.\\n- If the visitor volunteers information ahead of the
+      current stage, capture it but don't skip stages entirely \u2014 at least briefly
+      visit discovery and qualification.\\n- Objection handling can happen from any
+      stage \u2014 return to the previous stage afterward.\\n\\nReturn ONLY a valid
+      JSON object:\\n\\n{\\n  \\\"next_stage\\\": \\\"<stage name>\\\",\\n  \\\"reasoning\\\":
+      \\\"One sentence explaining why.\\\"\\n}\\n\\nReturn ONLY the JSON \u2014 no
+      explanation, no markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '2084'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"88dc3bc1-8657-96d7-b609-52653468ed72","object":"chat.completion","created":1781205949,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{\n  \"next_stage\":
+        \"discovery\",\n  \"reasoning\": \"Visitor''s non-committal response shows
+        hesitation and low engagement suggesting an early exit attempt, but with retry
+        count at 0 we stay in discovery for a soft re-engagement.\"\n}","reasoning_content":"The
+        current stage is discovery. Lead data collected: nothing. Qualification data:
+        nothing. Latest visitor message: \"Not sure really, just looking around for
+        now.\" Retry count: 0.\nFirst, the current stage is discovery. Lead data:
+        nothing. Qualification data: nothing. Latest visitor message: \"Not sure really,
+        just looking around for now.\" Retry count: 0.\n\nAvailable stages: greeting,
+        discovery, qualification, objection_handling, lead_capture, confirmation,
+        complete.\n\nRules:\n\n- Never skip from greeting directly to lead_capture.
+        (Not relevant here.)\n\n- If the visitor tries to leave early and retry_count
+        is 0, stay in the current stage for one soft re-engagement attempt.","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":530,"completion_tokens":51,"total_tokens":1423,"prompt_tokens_details":{"text_tokens":530,"audio_tokens":0,"image_tokens":0,"cached_tokens":64},"completion_tokens_details":{"reasoning_tokens":842,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":28278000},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a300fefed77094-IAH
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:25:53 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '1593'
+      traceparent:
+      - 00-17eff9e36b88b44c219072c2d8db7a33-f447cc8400034ae2-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '4560.6'
+      x-metrics-mean-itl-ms:
+      - '4.8'
+      x-metrics-ttft-ms:
+      - '175.1'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - 88dc3bc1-8657-96d7-b609-52653468ed72
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"You are a conversation stage router.  Given
+      the current state of a sales conversation, decide which stage should come next.\\n\\nCURRENT
+      STAGE: lead_capture\\nLEAD DATA COLLECTED: Name: Sarah Chen\\nCompany: Acme
+      Corp\\nQUALIFICATION DATA COLLECTED: Budget: $10K-$50K\\nPain points: manual
+      entry\\nLATEST VISITOR MESSAGE: Sure, what else do you need from me?\\nRETRY
+      COUNT (early-exit attempts): 0\\n\\nAVAILABLE STAGES:\\n- greeting: Only used
+      at the very start.\\n- discovery: Exploring pain points, current tools, goals.
+      \ Move here if we know very little about their situation.\\n- qualification:
+      Gathering budget, timeline, company size, decision-maker.  Move here once we
+      have at least 1 pain point or goal but are missing qualification fields.\\n-
+      objection_handling: Move here if the visitor's latest message expresses doubt,
+      concern, hesitation, or a negative reaction.\\n- lead_capture: Collecting name,
+      job title, email, company, phone.  Move here once we have at least 2 qualification
+      fields filled AND the visitor seems engaged.\\n- confirmation: Summarising and
+      confirming.  Move here once lead contact info is substantially complete (at
+      minimum: name + email + company).\\n- complete: Conversation is finished.  Only
+      after confirmation has been given.\\n\\nRULES:\\n- Never skip from greeting
+      directly to lead_capture.\\n- If the visitor tries to leave early and retry_count
+      is 0, stay in the current stage for one soft re-engagement attempt.\\n- If the
+      visitor tries to leave early and retry_count >= 1, move to lead_capture with
+      whatever data we have.\\n- If the visitor volunteers information ahead of the
+      current stage, capture it but don't skip stages entirely \u2014 at least briefly
+      visit discovery and qualification.\\n- Objection handling can happen from any
+      stage \u2014 return to the previous stage afterward.\\n\\nReturn ONLY a valid
+      JSON object:\\n\\n{\\n  \\\"next_stage\\\": \\\"<stage name>\\\",\\n  \\\"reasoning\\\":
+      \\\"One sentence explaining why.\\\"\\n}\\n\\nReturn ONLY the JSON \u2014 no
+      explanation, no markdown fencing.\",\"role\":\"system\"}],\"model\":\"grok-4.20-0309-reasoning\",\"stream\":false,\"temperature\":0.7}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '2114'
+      Content-Type:
+      - application/json
+      Host:
+      - api.x.ai
+      User-Agent:
+      - AsyncOpenAI/Python 2.41.0
+      X-Stainless-Arch:
+      - x64
+      X-Stainless-Async:
+      - async:asyncio
+      X-Stainless-Lang:
+      - python
+      X-Stainless-OS:
+      - Linux
+      X-Stainless-Package-Version:
+      - 2.41.0
+      X-Stainless-Raw-Response:
+      - 'true'
+      X-Stainless-Runtime:
+      - CPython
+      X-Stainless-Runtime-Version:
+      - 3.12.3
+      x-stainless-read-timeout:
+      - '60.0'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.x.ai/v1/chat/completions
+  response:
+    body:
+      string: '{"id":"dddce43b-2a5e-9769-83bd-fb32d8d2d6d0","object":"chat.completion","created":1781205954,"model":"grok-4.20-0309-reasoning","choices":[{"index":0,"message":{"role":"assistant","content":"{\n  \"next_stage\":
+        \"lead_capture\",\n  \"reasoning\": \"Visitor is engaged and proactively offering
+        more information, but lead contact details are still incomplete (missing email,
+        title, phone), so continue collecting in lead_capture before moving to confirmation.\"\n}","reasoning_content":"The
+        current stage is lead_capture. We have some lead data: Name: Sarah Chen, Company:
+        Acme Corp. Qualification data: Budget: $10K-$50K, Pain points: manual entry.\nFirst,
+        the current stage is lead_capture. We have lead data: Name: Sarah Chen, Company:
+        Acme Corp. Qualification: Budget: $10K-$50K, Pain points: manual entry.\n\nVisitor
+        message: \"Sure, what else do you need from me?\"\n\nThis indicates engagement.
+        We need to collect 3 more fields: email, job title, phone probably.\n\nRules:
+        Move to lead_capture once we have at least 2 qualification fields AND visitor
+        engaged. We have budget and pain points (2 quals), and engaged.\n\nBut contact
+        info not complete: missing email, etc.","refusal":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":549,"completion_tokens":52,"total_tokens":1484,"prompt_tokens_details":{"text_tokens":549,"audio_tokens":0,"image_tokens":0,"cached_tokens":128},"completion_tokens_details":{"reasoning_tokens":883,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0},"num_sources_used":0,"cost_in_usd_ticks":28893500},"system_fingerprint":"fp_f71d0178b0","service_tier":"default"}'
+    headers:
+      CF-RAY:
+      - a0a3011c2ac928d8-IAH
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 11 Jun 2026 19:25:59 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - '*'
+      cf-cache-status:
+      - DYNAMIC
+      content-length:
+      - '1632'
+      traceparent:
+      - 00-8d84001b0c9bfeb835eea99a27c8fc2c-6f4594b600003c2f-01
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      x-metrics-e2e-ms:
+      - '5147.3'
+      x-metrics-mean-itl-ms:
+      - '5.2'
+      x-metrics-ttft-ms:
+      - '183.7'
+      x-ratelimit-limit-requests:
+      - '1800'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '1800'
+      x-ratelimit-remaining-tokens:
+      - '10000000'
+      x-request-id:
+      - dddce43b-2a5e-9769-83bd-fb32d8d2d6d0
+      x-zero-data-retention:
+      - 'false'
+    status:
+      code: 200
+      message: OK
+version: 1
