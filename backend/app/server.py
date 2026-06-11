@@ -35,6 +35,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.tracers.langchain import wait_for_all_tracers
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -204,6 +205,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         yield
 
     # --- Shutdown ---
+    if _tracer is not None:
+        # Trace uploads run on a background thread; flush so a deploy/restart
+        # (SIGTERM) doesn't drop in-flight runs.
+        wait_for_all_tracers()
     logger.info("Shutting down AI Sales Lead Bot")
 
 

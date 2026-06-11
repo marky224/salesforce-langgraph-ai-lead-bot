@@ -28,3 +28,17 @@ def test_build_tracer_built_when_enabled(monkeypatch):
     monkeypatch.setenv("LANGSMITH_API_KEY", "ls-test-not-real")
     tracer = build_tracer(Settings(langsmith_tracing=True))
     assert isinstance(tracer, LangChainTracer)
+
+
+def test_build_tracer_uses_settings_api_key(monkeypatch):
+    """A key present only in Settings/.env (not os.environ) still reaches the Client.
+
+    A bare ``Client()`` reads only ``os.environ``, so without passing the key
+    explicitly this would be ``None``. Clearing the env vars proves the value
+    came from ``Settings``, not the implicit environment lookup.
+    """
+    monkeypatch.delenv("LANGSMITH_API_KEY", raising=False)
+    monkeypatch.delenv("LANGCHAIN_API_KEY", raising=False)
+    tracer = build_tracer(Settings(langsmith_tracing=True, langsmith_api_key="ls-from-settings"))
+    assert isinstance(tracer, LangChainTracer)
+    assert tracer.client.api_key == "ls-from-settings"

@@ -247,3 +247,36 @@ def test_run_config_carries_trace_metadata(client):
     assert isinstance(cfg["metadata"]["model"], str) and cfg["metadata"]["model"]
     assert cfg["tags"] == ["tars"]
     assert "callbacks" not in cfg  # tracing off in tests → no tracer attached
+
+
+def test_lifespan_flushes_tracer_on_shutdown(monkeypatch):
+    """In-flight traces are flushed on shutdown when tracing is enabled.
+
+    Background uploads can be dropped if the process exits mid-flight, so the
+    lifespan calls ``wait_for_all_tracers()`` — but only when a tracer is active.
+    """
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
+    monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    monkeypatch.setenv("LANGSMITH_API_KEY", "ls-test-not-real")
+
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
+    from app import server
+
+    @asynccontextmanager
+    async def _memory_checkpointer(_settings):
+        yield MemorySaver()
+
+    monkeypatch.setattr(server, "open_checkpointer", _memory_checkpointer)
+
+    flushed: list[int] = []
+    monkeypatch.setattr(server, "wait_for_all_tracers", lambda: flushed.append(1))
+
+    # Startup builds a real (offline) tracer; the context exit runs the shutdown path.
+    with TestClient(server.app):
+        pass
+
+    assert flushed == [1]  # flushed exactly once, because a tracer was active

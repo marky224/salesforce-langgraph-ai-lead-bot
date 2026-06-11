@@ -51,10 +51,19 @@ def build_tracer(settings: Settings) -> Any | None:
         logger.warning("Tracing enabled but the LangSmith tracer is unavailable; skipping")
         return None
 
-    if settings.langsmith_api_key is None:
+    # Pass the configured key explicitly: pydantic loads it into Settings (from the
+    # environment OR the .env file), but a bare Client() only reads os.environ — which
+    # the .env file never populates. Without this, a key set only in .env silently
+    # fails to upload (and the None check below wouldn't fire). See 13-observability.md.
+    api_key = (
+        settings.langsmith_api_key.get_secret_value()
+        if settings.langsmith_api_key is not None
+        else None
+    )
+    if api_key is None:
         logger.warning("Tracing enabled but LANGSMITH_API_KEY is unset — traces won't upload")
 
-    client = Client(anonymizer=build_email_anonymizer())
+    client = Client(api_key=api_key, anonymizer=build_email_anonymizer())
     tracer = LangChainTracer(client=client, project_name=settings.langsmith_project)
     logger.info(
         "LangSmith tracing enabled (project=%s, email masking on)",
