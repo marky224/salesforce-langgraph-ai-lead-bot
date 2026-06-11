@@ -8,11 +8,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-# The model the committed gate cassettes were recorded against. This is current
-# prod (a *reasoning* variant). When the reasoning->non-reasoning model A/B swaps
-# LLM_MODEL, re-record the cassettes (one-time, reviewed YAML diff) against the new
-# model and bump this constant. The recorded temperature mirrors the prod default.
-RECORD_MODEL = "grok-4.20-0309-reasoning"
+# The model the committed gate cassettes were recorded against. The reasoning ->
+# non-reasoning model A/B (PR B's first application, 2026-06-11) picked grok-4.3: it
+# held the reasoning baseline's extraction/routing accuracy while cutting pre-stream
+# latency, so the cassettes were re-recorded against it and prod's LLM_MODEL moved to
+# match. Re-record (one-time, reviewed YAML diff) + bump this constant on any future
+# swap. The recorded temperature mirrors the prod default.
+RECORD_MODEL = "grok-4.3"
 RECORD_TEMPERATURE = 0.7
 
 _HERE = Path(__file__).resolve().parent
