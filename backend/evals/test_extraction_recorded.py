@@ -11,7 +11,7 @@ prompt-contract regressions the e2e mock can't catch:
 
 It does NOT re-judge the live model — that's the nightly ``run.py --mode live``
 path + the model A/B this harness enables. Floors below are the recorded baseline
-for ``grok-4.20-0309-reasoning``; refresh them when the cassette is re-recorded.
+for ``grok-4.3``; refresh them when the cassette is re-recorded.
 """
 
 from __future__ import annotations
@@ -25,10 +25,10 @@ from evals.targets import build_eval_llm, run_extraction
 
 pytestmark = pytest.mark.eval_recorded
 
-# Recorded baseline (grok-4.20-0309-reasoning, see _private/docs/build/14-evals.md).
-# Scalars (the enum-.value contract) recorded a perfect 1.0 — the gate fails on ANY
-# scalar regression in node/evaluator code. The list-count rate (0.963 recorded) gets
-# a small margin since list cardinality is inherently fuzzier. Floors travel with the
+# Recorded baseline (grok-4.3, see _private/docs/build/14-evals.md). Scalars (the
+# enum-.value contract) recorded a perfect 1.0 — the gate fails on ANY scalar
+# regression in node/evaluator code. The list-count rate (0.9815 recorded) gets a
+# small margin since list cardinality is inherently fuzzier. Floors travel with the
 # cassette: re-recording for the model A/B resets them to the new model's baseline.
 SCALAR_F1_FLOOR = 1.0
 LIST_COUNT_MATCH_FLOOR = 0.90

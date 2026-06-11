@@ -5,7 +5,7 @@ Same two-tier design as the extraction gate: replays committed cassettes offline
 fails closed when a reworded ROUTER_PROMPT anchor changes the request body. Scored
 against an ``acceptable_next`` set per case (discovery vs qualification is
 legitimately ambiguous). Floor is the recorded baseline for
-``grok-4.20-0309-reasoning``; refresh when the cassette is re-recorded.
+``grok-4.3``; refresh when the cassette is re-recorded.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from evals.targets import build_eval_llm, run_routing
 
 pytestmark = pytest.mark.eval_recorded
 
-# Recorded baseline for grok-4.20-0309-reasoning is 1.0 (every case hit its
+# Recorded baseline for grok-4.3 is 1.0 (every case hit its
 # acceptable set). The floor keeps headroom for one genuinely-ambiguous case to
 # drift on a future re-record, while still failing on a real router regression
 # (2+ misses across 14 cases). See _private/docs/build/14-evals.md.

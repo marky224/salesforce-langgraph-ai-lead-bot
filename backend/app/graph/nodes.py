@@ -164,10 +164,13 @@ def get_parse_failure_count() -> int:
 # ---------------------------------------------------------------------------
 
 # USD per 1M tokens, keyed by a model-name substring. Only models we actually
-# run are listed; an unknown model logs tokens with ``cost_usd=None``. Extend
-# when PR B's A/B picks a model.
+# run are listed; an unknown model logs tokens with ``cost_usd=None``. The model
+# A/B (2026-06-11) moved prod from the reasoning build to grok-4.3 — same per-token
+# price (input $1.25 / output $2.50 per docs.x.ai); the reasoning entry is kept for
+# the recorded-eval baseline and A/B reruns.
 _MODEL_PRICING: dict[str, tuple[float, float]] = {
-    "grok-4.20-0309-reasoning": (1.25, 2.50),  # (input_per_1m, output_per_1m)
+    "grok-4.3": (1.25, 2.50),  # current prod (model A/B winner); (input_per_1m, output_per_1m)
+    "grok-4.20-0309-reasoning": (1.25, 2.50),  # prior prod / recorded-eval baseline
 }
 
 
