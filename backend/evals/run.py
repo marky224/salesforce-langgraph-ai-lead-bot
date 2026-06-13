@@ -14,6 +14,10 @@ Two modes:
       python -m evals.run --mode live --model grok-4.20-0309-non-reasoning  --report md
       python -m evals.run --mode live --model grok-4.3                       --report md
 
+The ``sim`` dimension (``--dimension sim``, **live only**) drives the real graph
+against the personas and prints a per-persona scorecard (see ``simulate.py`` /
+``scorecard.py``).
+
 Run from ``backend/``:  ``python -m evals.run --dimension all --report text``
 """
 
@@ -33,7 +37,7 @@ DIMENSIONS = ("extraction", "routing")
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the offline/online eval suite.")
-    parser.add_argument("--dimension", choices=(*DIMENSIONS, "all"), default="all")
+    parser.add_argument("--dimension", choices=(*DIMENSIONS, "sim", "all"), default="all")
     parser.add_argument("--mode", choices=("recorded", "live"), default="recorded")
     parser.add_argument(
         "--model", default=None,
@@ -78,7 +82,38 @@ async def _run_routing(llm) -> dict:
     return {"metrics": routing_accuracy(results), "confusion": confusion_matrix(results), "details": details}
 
 
+async def _run_sim(model: str) -> dict:
+    """
+    Drive the real graph against each persona (live only) → per-persona scorecard.
+
+    The system-under-test runs ``model`` (the ``--model`` override); the simulated
+    visitor is held fixed at the recorded grok-4.3 driver (decision #4) so a SUT swap
+    stays comparable. Salesforce is mocked inside ``simulate`` — zero CRM writes.
+    """
+    from app.graph.graph import build_graph
+    from app.graph.nodes import set_llm
+    from evals.loader import load_dataset
+    from evals.scorecard import score_persona
+    from evals.simulate import simulate
+    from evals.targets import build_eval_llm
+
+    set_llm(build_eval_llm(model=model))
+    graph = build_graph()
+    user_llm = build_eval_llm()  # fixed visitor driver (RECORD_MODEL)
+
+    rows = []
+    for persona in load_dataset("personas.jsonl"):
+        traj = await simulate(
+            graph, persona, user_llm, max_turns=persona["expected"].get("max_turns", 12)
+        )
+        rows.append(score_persona(traj, persona))
+    return {"mode": "live", "model": model, "sim": rows}
+
+
 async def _run(args: argparse.Namespace, model: str) -> dict:
+    if args.dimension == "sim":
+        return await _run_sim(model)
+
     from evals.targets import build_eval_llm
 
     llm = build_eval_llm(model=model)
@@ -102,6 +137,8 @@ async def _run(args: argparse.Namespace, model: str) -> dict:
 
 
 def _format_text(report: dict) -> str:
+    if "sim" in report:
+        return _format_sim_text(report)
     lines = [f"eval report — mode={report['mode']} model={report['model']}", ""]
     for dim, data in report["dimensions"].items():
         lines.append(f"[{dim}] {data['metrics']}")
@@ -115,6 +152,8 @@ def _format_text(report: dict) -> str:
 
 
 def _format_md(report: dict) -> str:
+    if "sim" in report:
+        return _format_sim_md(report)
     lines = [f"## Eval report — `{report['model']}` ({report['mode']})", ""]
     for dim, data in report["dimensions"].items():
         metrics = data["metrics"]
@@ -129,8 +168,52 @@ def _format_md(report: dict) -> str:
     return "\n".join(lines)
 
 
+def _format_sim_text(report: dict) -> str:
+    lines = [f"sim scorecard — model={report['model']} (live, report-only)", ""]
+    for row in report["sim"]:
+        verdict = "PASS" if row["overall_pass"] else "FAIL"
+        lines.append(
+            f"[{verdict}] {row['id']}: score={row['score']['value']} band={row['score']['band']} "
+            f"complete={row['reached_complete']['value']} turns={row['turns']['taken']}"
+        )
+        if row["must_capture"]["missing"]:
+            lines.append(f"    missing: {row['must_capture']['missing']}")
+        if not row["no_stage_loop"]:
+            lines.append("    stage loop detected")
+        voice = row["voice"]
+        if not (voice["markdown_clean"] and voice["brevity_ok"]):
+            lines.append(
+                f"    voice: markdown_clean={voice['markdown_clean']} "
+                f"brevity_ok={voice['brevity_ok']} max_sentences={voice['max_sentences_seen']}"
+            )
+    return "\n".join(lines)
+
+
+def _format_sim_md(report: dict) -> str:
+    lines = [
+        f"## Sim scorecard — `{report['model']}` (live, report-only)",
+        "",
+        "| persona | pass | score | band | complete | turns | must-capture | stage-loop | voice |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    for row in report["sim"]:
+        v = row["voice"]
+        voice = "ok" if (v["markdown_clean"] and v["brevity_ok"]) else f"md={v['markdown_clean']},brev={v['brevity_ok']}"
+        cap = "ok" if row["must_capture"]["ok"] else ", ".join(row["must_capture"]["missing"])
+        lines.append(
+            f"| {row['id']} | {'✅' if row['overall_pass'] else '❌'} | {row['score']['value']} "
+            f"| {row['score']['band']} | {row['reached_complete']['value']} | {row['turns']['taken']} "
+            f"| {cap} | {'ok' if row['no_stage_loop'] else 'LOOP'} | {voice} |"
+        )
+    return "\n".join(lines)
+
+
 def main() -> int:
     args = _parse_args()
+
+    if args.dimension == "sim" and args.mode != "live":
+        print("error: --dimension sim requires --mode live (no cassette to replay)", file=sys.stderr)
+        return 2
 
     os.environ.setdefault("LLM_PROVIDER", "xai")
     os.environ["LLM_STRUCTURED_OUTPUT"] = "false"

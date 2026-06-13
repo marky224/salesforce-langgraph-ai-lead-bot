@@ -48,3 +48,50 @@ jobs:
         env:
           XAI_API_KEY: dummy-key-for-replay
         run: pytest backend/evals -m eval_recorded --record-mode=none -v
+
+  evals-sim-live:
+    name: Evals (simulated-user scorecard, live)
+    # Manual only — hits the real provider (grok-4.3) and costs tokens, so it never
+    # runs on push/PR. Dispatch from the Actions tab once XAI_API_KEY is set as a
+    # repo secret. (A `schedule:` nightly is a trivial follow-up once cost is okayed.)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-eval.txt
+
+      - name: Install eval dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements-eval.txt
+
+      - name: Check XAI_API_KEY secret is set
+        env:
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+        run: |
+          if [ -z "$XAI_API_KEY" ]; then
+            echo "::error::XAI_API_KEY secret is not set — add it in repo Settings → Secrets before dispatching."
+            exit 1
+          fi
+
+      - name: Run simulated-user scorecard (live)
+        working-directory: backend
+        env:
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+        run: python -m evals.run --dimension sim --mode live --report md --output ../sim-scorecard.md
+
+      - name: Upload scorecard artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sim-scorecard
+          path: sim-scorecard.md
+          if-no-files-found: warn
