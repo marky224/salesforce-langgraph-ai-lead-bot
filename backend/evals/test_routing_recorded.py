@@ -21,7 +21,7 @@ pytestmark = pytest.mark.eval_recorded
 # Recorded baseline for grok-4.3 is 1.0 (every case hit its
 # acceptable set). The floor keeps headroom for one genuinely-ambiguous case to
 # drift on a future re-record, while still failing on a real router regression
-# (2+ misses across 14 cases). See _private/docs/build/14-evals.md.
+# (2+ misses across 16 cases). See _private/docs/build/14-evals.md.
 ROUTING_ACCURACY_FLOOR = 0.90
 
 

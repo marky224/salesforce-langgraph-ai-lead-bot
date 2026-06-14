@@ -450,12 +450,15 @@ AVAILABLE STAGES:
 - discovery: Exploring pain points, current tools, goals.  Move here if we \
 know very little about their situation.
 - qualification: Gathering budget, timeline, company size, decision-maker.  \
-Move here once we have at least 1 pain point or goal but are missing \
-qualification fields.
+Move here once we have at least 1 pain point or goal, and stay here while \
+budget or decision-maker is still unknown and the visitor is still engaged — \
+those two are the easiest to skip and the most important to ask.
 - objection_handling: Move here if the visitor's latest message expresses \
 doubt, concern, hesitation, or a negative reaction.
 - lead_capture: Collecting name, job title, email, company, phone.  Move here \
-once we have at least 2 qualification fields filled AND the visitor seems engaged.
+once BOTH budget and decision-maker status are known.  Pain points and company \
+size alone are NOT enough — they're usually volunteered during discovery and \
+do not mean qualification is done.
 - confirmation: Summarising and confirming.  Move here once lead contact \
 info is substantially complete (at minimum: name + email + company).
 - complete: Conversation is finished.  Only after confirmation has been given.
@@ -469,6 +472,9 @@ lead_capture with whatever data we have.
 - If the visitor volunteers information ahead of the current stage, capture \
 it but don't skip stages entirely — at least briefly visit discovery and \
 qualification.
+- Don't loop on a question the visitor keeps dodging.  If we are already in \
+qualification and the visitor stays vague on budget or team size after a soft \
+attempt, treat them as low-intent and move to lead_capture with what we have.
 - Objection handling can happen from any stage — return to the previous \
 stage afterward.
 
