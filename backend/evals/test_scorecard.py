@@ -87,12 +87,13 @@ def test_must_capture_check():
 # --- no_stage_loop: consecutive-run threshold ---
 
 def test_no_stage_loop():
-    healthy = Trajectory(stages=["greeting", "discovery", "qualification", "qualification",
-                                 "qualification", "lead_capture", "confirmation", "complete"])
-    assert no_stage_loop(healthy)                        # qualification x3 == max_repeat -> ok
-    stuck = Trajectory(stages=["greeting", "discovery", "qualification", "qualification",
-                               "qualification", "qualification"])
-    assert not no_stage_loop(stuck)                      # x4 consecutive -> loop
+    # The bot asks one field per turn, so a thorough qualification / lead_capture
+    # stage legitimately repeats ~4-5 times; only a genuinely stuck run (6+) loops.
+    healthy = Trajectory(stages=["greeting", "discovery"] + ["qualification"] * 5
+                         + ["lead_capture", "confirmation", "complete"])
+    assert no_stage_loop(healthy)                        # qualification x5 == max_repeat -> ok
+    stuck = Trajectory(stages=["greeting", "discovery"] + ["qualification"] * 6)
+    assert not no_stage_loop(stuck)                      # x6 consecutive -> stuck loop
     assert no_stage_loop(Trajectory(stages=[]))          # empty -> vacuously ok
 
 
@@ -154,14 +155,15 @@ def test_score_persona_evasive_null_completion():
         "reaches_complete": None, "score_band": [0, 39], "must_capture": {}, "max_turns": 12}}
     traj = Trajectory(
         turns=[("TARS", "What brings you by?"), ("Visitor", "Just looking, honestly.")],
-        stages=["greeting", "discovery", "discovery"],
+        stages=["greeting"] + ["discovery"] * 12,    # stonewalled -> stuck in discovery by design
         final_state={"stage": ConversationStage.DISCOVERY,
                      "qualification_data": {"timeline": "Just exploring"}, "lead_data": {}},
     )
     row = score_persona(traj, persona)
     assert row["reached_complete"]["pass"] is None   # reported, not asserted
     assert row["score"]["value"] <= 39
-    assert row["overall_pass"]                        # LOW band + no loop + within cap
+    assert row["no_stage_loop"] is False             # the stall is real and reported...
+    assert row["overall_pass"]                        # ...but loop is advisory for a non-converter
 
 
 def test_score_persona_fails_when_expected_complete_but_not():
@@ -176,3 +178,19 @@ def test_score_persona_fails_when_expected_complete_but_not():
     row = score_persona(traj, persona)
     assert not row["overall_pass"]
     assert row["reached_complete"]["pass"] is False
+
+
+def test_score_persona_converger_loop_fails():
+    # A persona expected to converge IS still loop-checked: a genuinely stuck run
+    # (6+) fails overall_pass even when completion, score, and capture are fine.
+    persona = {"id": "enterprise_dm_urgent", "expected": {
+        "reaches_complete": True, "score_band": [70, 100],
+        "must_capture": {}, "max_turns": 12}}
+    traj = Trajectory(
+        turns=[("Visitor", f"answer {i}") for i in range(6)],
+        stages=["greeting"] + ["qualification"] * 6,   # stuck re-asking -> real loop
+        final_state=_enterprise_complete_state(),
+    )
+    row = score_persona(traj, persona)
+    assert row["no_stage_loop"] is False
+    assert not row["overall_pass"]                       # loop folded in for a converger

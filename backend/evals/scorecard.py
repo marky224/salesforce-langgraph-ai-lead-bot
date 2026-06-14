@@ -142,16 +142,17 @@ def must_capture_check(final_state: dict[str, Any], spec: dict[str, list[str]]) 
 # Trajectory-level evaluators
 # ---------------------------------------------------------------------------
 
-def no_stage_loop(trajectory: Trajectory, max_repeat: int = 3) -> bool:
+def no_stage_loop(trajectory: Trajectory, max_repeat: int = 5) -> bool:
     """
     True when no stage repeats *consecutively* more than ``max_repeat`` times.
 
-    A coarse "the bot keeps making progress" check. A healthy run walks
-    greeting -> discovery -> qualification (<=3, one per missing field) -> lead_capture
-    (<=3) -> confirmation -> complete; a run stuck re-asking in one phase shows that
-    stage repeating turn after turn. ``max_repeat=3`` tolerates a legitimately
-    multi-field qualification / lead_capture stretch but flags 4+ identical
-    consecutive stages. (``max_turns`` is the backstop for runaway *length*; this
+    A coarse "the bot isn't stuck re-asking the same thing" check. The bot asks one
+    field per turn, so a thorough qualification (budget / timeline / company size /
+    decision-maker) or lead_capture (name / title / email / company) legitimately
+    runs ~4 consecutive turns in the same stage, and which length a given live run
+    lands on is nondeterministic. ``max_repeat=5`` tolerates a full multi-field
+    stretch (plus one re-ask) and only flags a genuinely stuck loop (6+ identical
+    consecutive stages). (``max_turns`` is the backstop for runaway *length*; this
     catches the stuck-in-place mode.)
     """
     longest = run = 1
@@ -229,8 +230,9 @@ def score_persona(trajectory: Trajectory, persona: dict[str, Any]) -> dict[str, 
     ``must_capture`` ``{section: [field, ...]}``, ``max_turns``.
 
     ``overall_pass`` ANDs the *outcome* dimensions (completion when asserted, score
-    band, must-capture, no stage loop, within turn cap). The voice guardrails are
-    reported as advisory quality signals (deterministic but fuzzy) and are **not**
+    band, must-capture, within turn cap, and no stage loop **only for personas
+    expected to converge**). The voice guardrails — and a deliberate non-converter's
+    stage-loop signal — are reported as advisory quality signals and are **not**
     folded into ``overall_pass``; the whole scorecard is report-only.
     """
     expected = persona.get("expected") or {}
@@ -258,9 +260,14 @@ def score_persona(trajectory: Trajectory, persona: dict[str, Any]) -> dict[str, 
     md_offenders = [i for i, t in enumerate(trajectory.tars_turns) if markdown_leak(t)]
     brevity_offenders = [i for i, c in enumerate(sentence_counts) if c > 5]
 
-    outcome_checks = [in_band, capture["ok"], loop_ok, within_cap]
+    outcome_checks = [in_band, capture["ok"], within_cap]
     if complete_pass is not None:
         outcome_checks.append(complete_pass)
+    # no_stage_loop is a meaningful pass/fail only for personas expected to
+    # converge; a deliberate non-converter (reaches_complete is null) is *supposed*
+    # to stall on a stonewalling visitor, so its loop signal stays advisory.
+    if expected_complete is True:
+        outcome_checks.append(loop_ok)
 
     return {
         "id": persona.get("id"),
