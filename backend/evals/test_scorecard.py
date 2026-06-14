@@ -21,6 +21,7 @@ from evals.scorecard import (
     must_capture_check,
     no_stage_loop,
     reached_complete,
+    reask_check,
     score_in_band,
     score_persona,
 )
@@ -194,3 +195,85 @@ def test_score_persona_converger_loop_fails():
     row = score_persona(traj, persona)
     assert row["no_stage_loop"] is False
     assert not row["overall_pass"]                       # loop folded in for a converger
+
+
+# --- reask_check: flag asking for an already-captured field (advisory, heuristic) ---
+
+def test_reask_check_flags_already_captured_email():
+    # Visitor gives email in turn 1; TARS asks for it again in the reply to that turn.
+    # That TARS reply pairs with snapshots[1] (post-extraction state), where email is set.
+    traj = Trajectory(
+        turns=[
+            ("TARS", "Hi, I'm TARS. What brings you by?"),
+            ("Visitor", "Manual entry is eating us alive — I'm at sarah@acme.example."),
+            ("TARS", "Got it. What's your email so I can follow up?"),
+        ],
+        stages=["greeting", "lead_capture"],
+        snapshots=[
+            {"lead_data": {}, "qualification_data": {}},
+            {"lead_data": {"email": "sarah@acme.example"}, "qualification_data": {}},
+        ],
+    )
+    result = reask_check(traj)
+    assert not result["ok"]
+    assert result["reasks"] == [{"turn": 1, "field": "lead_data.email"}]
+
+
+def test_reask_check_ok_when_asking_for_uncaptured_field():
+    # Email not yet known when TARS asks for it -> legitimate, not a re-ask.
+    traj = Trajectory(
+        turns=[
+            ("TARS", "What brings you by?"),
+            ("Visitor", "Reporting runs two days behind."),
+            ("TARS", "That's rough. What's your email so I can send a summary?"),
+        ],
+        stages=["greeting", "lead_capture"],
+        snapshots=[
+            {"lead_data": {}, "qualification_data": {}},
+            {"lead_data": {}, "qualification_data": {}},
+        ],
+    )
+    assert reask_check(traj)["ok"]
+
+
+def test_reask_check_ignores_confirmation_recap():
+    # The confirmation summary restates a captured email but isn't *asking* — skipped.
+    traj = Trajectory(
+        turns=[
+            ("TARS", "What brings you by?"),
+            ("Visitor", "Here's my email: sarah@acme.example."),
+            ("TARS", "So I've got your email as sarah@acme.example and we're set — confirm?"),
+        ],
+        stages=["greeting", "confirmation"],
+        snapshots=[
+            {"lead_data": {}, "qualification_data": {}},
+            {"lead_data": {"email": "sarah@acme.example"}, "qualification_data": {}},
+        ],
+    )
+    assert reask_check(traj)["ok"]
+
+
+def test_reask_check_company_name_excludes_company_size():
+    # "company size?" asks a different field — must not trip the company-name re-ask.
+    traj = Trajectory(
+        turns=[
+            ("TARS", "What brings you by?"),
+            ("Visitor", "I'm at Northwind Logistics."),
+            ("TARS", "Thanks. Roughly what's your company size?"),
+        ],
+        stages=["greeting", "qualification"],
+        snapshots=[
+            {"lead_data": {}, "qualification_data": {}},
+            {"lead_data": {"company": "Northwind Logistics"}, "qualification_data": {}},
+        ],
+    )
+    assert reask_check(traj)["ok"]
+
+
+def test_reask_check_empty_snapshots_trivially_ok():
+    # Hand-built trajectories (no snapshots) never raise and never flag.
+    traj = Trajectory(
+        turns=[("TARS", "What's your email?"), ("Visitor", "later")],
+        stages=["greeting", "lead_capture"],
+    )
+    assert reask_check(traj)["ok"]

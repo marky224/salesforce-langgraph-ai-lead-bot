@@ -78,6 +78,20 @@ def _stage_of(state: dict[str, Any]) -> str:
     return stage.value if isinstance(stage, ConversationStage) else str(stage)
 
 
+def _snapshot(state: dict[str, Any]) -> dict[str, Any]:
+    """
+    Capture what's been extracted so far — read by ``scorecard.reask_check``.
+
+    Copies ``lead_data`` / ``qualification_data`` after each ``ainvoke`` so the
+    scorecard can tell, at each TARS "ask" turn, whether that field was *already*
+    known (a re-ask). Plain dict copies — the trajectory must not alias graph state.
+    """
+    return {
+        "lead_data": dict(state.get("lead_data") or {}),
+        "qualification_data": dict(state.get("qualification_data") or {}),
+    }
+
+
 def _flip(turns: list[tuple[str, str]]) -> list:
     """
     Role-flip the transcript for the simulated user: from the visitor's seat, TARS's
@@ -111,10 +125,12 @@ async def simulate(
     config = {"configurable": {"thread_id": f"sim-{persona['id']}"}}
     turns: list[tuple[str, str]] = []
     stages: list[str] = []
+    snapshots: list[dict[str, Any]] = []  # captured (lead/qual) data, 1:1 with stages
 
     with _patched_salesforce():
         state = await graph.ainvoke({"messages": []}, config=config)  # greeting
         stages.append(_stage_of(state))
+        snapshots.append(_snapshot(state))
         prev_ai = _latest_ai(state)
         turns.append(("TARS", prev_ai))
 
@@ -130,7 +146,8 @@ async def simulate(
                 prev_ai = ai
             stage = _stage_of(state)
             stages.append(stage)
+            snapshots.append(_snapshot(state))
             if stage == ConversationStage.COMPLETE.value:
                 break
 
-    return Trajectory(turns=turns, stages=stages, final_state=state)
+    return Trajectory(turns=turns, stages=stages, snapshots=snapshots, final_state=state)

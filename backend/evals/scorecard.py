@@ -43,12 +43,16 @@ class Trajectory:
     turns : ordered ``(speaker, text)`` pairs; speaker is ``"TARS"`` / ``"Visitor"``.
     stages : ``ConversationStage`` ``.value`` after each ``graph.ainvoke`` (i.e. after
         each TARS turn), oldest first. Read by ``no_stage_loop`` / ``_turns_to_complete``.
+    snapshots : the captured ``{lead_data, qualification_data}`` after each
+        ``graph.ainvoke``, 1:1 with ``stages``. Read by ``reask_check`` to tell whether a
+        field TARS asks for was already known. Empty for hand-built trajectories.
     final_state : the last ``graph.ainvoke`` result — the final graph state. Every
         final-state evaluator reads from this.
     """
 
     turns: list[tuple[str, str]] = field(default_factory=list)
     stages: list[str] = field(default_factory=list)
+    snapshots: list[dict[str, Any]] = field(default_factory=list)
     final_state: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -218,6 +222,62 @@ def brevity_ok(text: str, max_sentences: int = 5) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Re-ask detection (deterministic, heuristic — advisory, like the voice slice)
+# ---------------------------------------------------------------------------
+
+# field -> (state section, interrogative detector). Conservative: only flags when TARS
+# *asks* (the message contains "?") for a field already captured in that turn's
+# snapshot. ``company`` excludes "company size" (a different field). Fuzzy by nature
+# (like ``brevity_ok``) -> reported, never folded into ``overall_pass``.
+_ASK_PATTERNS: dict[str, tuple[str, re.Pattern[str]]] = {
+    "email": ("lead_data", re.compile(r"\be-?mail\b", re.I)),
+    "company": ("lead_data", re.compile(r"\bcompany\b(?!\s+size)", re.I)),
+    "budget_range": ("qualification_data", re.compile(r"\bbudget\b", re.I)),
+    "timeline": ("qualification_data", re.compile(r"\btimeline\b|\btime\s?frame\b|how soon", re.I)),
+    "decision_maker": (
+        "qualification_data",
+        re.compile(r"decision[-\s]?maker|sign[-\s]?off|final say|who (?:makes|signs)", re.I),
+    ),
+}
+
+# Stages where TARS restates rather than asks (the summary / done turns) — skip them so
+# the confirmation recap of captured fields doesn't read as a re-ask.
+_NONASK_STAGES = {ConversationStage.CONFIRMATION.value, ConversationStage.COMPLETE.value}
+
+
+def reask_check(trajectory: Trajectory) -> dict[str, Any]:
+    """
+    Did TARS ask for a contact / qualification field it had already captured?
+
+    Pure and deterministic over ``trajectory.snapshots`` (captured data after each
+    ``ainvoke``, 1:1 with ``stages``). Walks the turns tracking the snapshot index — each
+    ``Visitor`` turn advances to the next ``ainvoke``, so a ``TARS`` turn pairs with the
+    state the conversational node saw when it produced that reply. A re-ask = the message
+    asks (heuristically) for a field already present in that snapshot.
+
+    Heuristic by design (keyword + ``?`` gate), so reported as **advisory** — never folded
+    into ``overall_pass``. Returns ``{"ok": bool, "reasks": [{"turn", "field"}, ...]}``; a
+    trajectory with no snapshots (hand-built) is trivially ok.
+    """
+    reasks: list[dict[str, Any]] = []
+    snapshots = trajectory.snapshots
+    idx = 0  # snapshot/stage index of the current TARS turn's ainvoke
+    for who, text in trajectory.turns:
+        if who == "Visitor":
+            idx += 1
+            continue
+        if idx >= len(snapshots) or idx >= len(trajectory.stages):
+            continue
+        if trajectory.stages[idx] in _NONASK_STAGES or "?" not in text:
+            continue
+        snap = snapshots[idx]
+        for field_name, (section, pattern) in _ASK_PATTERNS.items():
+            if pattern.search(text) and _captured(section, field_name, snap.get(section, {})):
+                reasks.append({"turn": idx, "field": f"{section}.{field_name}"})
+    return {"ok": not reasks, "reasks": reasks}
+
+
+# ---------------------------------------------------------------------------
 # Per-persona scorecard
 # ---------------------------------------------------------------------------
 
@@ -231,9 +291,9 @@ def score_persona(trajectory: Trajectory, persona: dict[str, Any]) -> dict[str, 
 
     ``overall_pass`` ANDs the *outcome* dimensions (completion when asserted, score
     band, must-capture, within turn cap, and no stage loop **only for personas
-    expected to converge**). The voice guardrails — and a deliberate non-converter's
-    stage-loop signal — are reported as advisory quality signals and are **not**
-    folded into ``overall_pass``; the whole scorecard is report-only.
+    expected to converge**). The voice guardrails, the re-ask check, and a deliberate
+    non-converter's stage-loop signal are reported as advisory quality signals and are
+    **not** folded into ``overall_pass``; the whole scorecard is report-only.
     """
     expected = persona.get("expected") or {}
     final_state = trajectory.final_state
@@ -250,6 +310,7 @@ def score_persona(trajectory: Trajectory, persona: dict[str, Any]) -> dict[str, 
 
     capture = must_capture_check(final_state, expected.get("must_capture") or {})
     loop_ok = no_stage_loop(trajectory)
+    reask = reask_check(trajectory)  # advisory — heuristic, not folded into overall_pass
 
     max_turns = expected.get("max_turns")
     turns_taken = trajectory.num_visitor_turns
@@ -282,6 +343,7 @@ def score_persona(trajectory: Trajectory, persona: dict[str, Any]) -> dict[str, 
             "within_cap": within_cap,
         },
         "no_stage_loop": loop_ok,
+        "reask": reask,
         "voice": {
             "markdown_clean": not md_offenders,
             "markdown_offender_turns": md_offenders,
