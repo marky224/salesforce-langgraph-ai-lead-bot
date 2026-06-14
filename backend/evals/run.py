@@ -180,6 +180,9 @@ def _format_sim_text(report: dict) -> str:
             lines.append(f"    missing: {row['must_capture']['missing']}")
         if not row["no_stage_loop"]:
             lines.append("    stage loop detected")
+        if not row["reask"]["ok"]:
+            fields = [r["field"] for r in row["reask"]["reasks"]]
+            lines.append(f"    re-asked already-captured fields: {fields}")
         voice = row["voice"]
         if not (voice["markdown_clean"] and voice["brevity_ok"]):
             lines.append(
@@ -193,17 +196,18 @@ def _format_sim_md(report: dict) -> str:
     lines = [
         f"## Sim scorecard — `{report['model']}` (live, report-only)",
         "",
-        "| persona | pass | score | band | complete | turns | must-capture | stage-loop | voice |",
-        "|---|---|---|---|---|---|---|---|---|",
+        "| persona | pass | score | band | complete | turns | must-capture | stage-loop | reask | voice |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for row in report["sim"]:
         v = row["voice"]
         voice = "ok" if (v["markdown_clean"] and v["brevity_ok"]) else f"md={v['markdown_clean']},brev={v['brevity_ok']}"
         cap = "ok" if row["must_capture"]["ok"] else ", ".join(row["must_capture"]["missing"])
+        reask = "ok" if row["reask"]["ok"] else "REASK"
         lines.append(
             f"| {row['id']} | {'✅' if row['overall_pass'] else '❌'} | {row['score']['value']} "
             f"| {row['score']['band']} | {row['reached_complete']['value']} | {row['turns']['taken']} "
-            f"| {cap} | {'ok' if row['no_stage_loop'] else 'LOOP'} | {voice} |"
+            f"| {cap} | {'ok' if row['no_stage_loop'] else 'LOOP'} | {reask} | {voice} |"
         )
     return "\n".join(lines)
 
