@@ -58,6 +58,30 @@ Add a persona: append one line to `datasets/personas.jsonl` (`id`, `system` = vi
 `expected` = `{reaches_complete, score_band, must_capture, max_turns}`) using the exact enum `.value`
 strings (contract #1) and synthetic `*.example` identities (no PII).
 
+## Calibrated LLM judges (live, report-only)
+
+Two LLM-as-judge quality checks the deterministic scorecard can't measure, graded by a frontier
+`claude-sonnet-4-6` (a *different* model family from the grok-4.3 SUT, to avoid correlated blind spots):
+**persona adherence** (did TARS hold its deadpan persona?) and **summary faithfulness** (is the Salesforce
+`transcript_summary` grounded in the chat?). A judge counts toward the scorecard only after it clears a
+documented **Cohen's κ** bar against human labels — that is the difference between *adding* a judge and
+*validating* one.
+
+```bash
+# calibrate the judges against the 20 human-confirmed labels (live; needs ANTHROPIC_API_KEY):
+cd backend && python -m evals.calibration
+
+# run the sim scorecard WITH the calibrated judges attached (live; extra cost):
+cd backend && python -m evals.run --dimension sim --mode live --judges --report md
+```
+
+`KAPPA_BAR = 0.6` (Landis–Koch "substantial"); the recorded result lives in `calibration.py::CALIBRATED_KAPPA`
+and travels with the labels + judge prompts (re-run + update on any change). A judge below the bar is still
+shown but flagged **advisory** and never folded into `overall_pass`. Recorded 2026-06-15: `persona_adherence`
+κ=0.74 (validated); `summary_faithfulness` κ=0.25 (advisory — the generic groundedness rubric over-flags the
+summary's asked-for sentiment gloss; a task-specific prompt is the follow-up). Deep dive:
+`_private/docs/build/14-evals.md` §8.
+
 ## Add a case
 
 Append one JSON line to `datasets/extraction.jsonl` or `datasets/routing.jsonl`. Extraction `expected`

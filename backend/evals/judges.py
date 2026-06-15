@@ -59,7 +59,13 @@ def build_judge_llm(model: str = JUDGE_MODEL) -> Any:
     ``ANTHROPIC_API_KEY`` is unset, so it is never reached on the offline gate — the
     plumbing tests pass an explicit fake judge instead of calling this.
     """
-    return get_llm(provider=LLMProvider.ANTHROPIC, model=model, temperature=0.0)
+    judge = get_llm(provider=LLMProvider.ANTHROPIC, model=model, temperature=0.0)
+    # The judge reasons over a full transcript before emitting its score; the app default
+    # max_tokens=1024 can truncate that reasoning mid-structured-output, leaving openevals
+    # without a ``score`` (KeyError on a long conversation). Give the judge room — this
+    # touches only the judge model, not the app's conversational nodes.
+    judge.max_tokens = 4096
+    return judge
 
 
 # PERSONA is plain prose with no ``{`` / ``}`` (verified), so it embeds safely in an
