@@ -20,7 +20,7 @@ psycopg[binary]==3.2.13                 # async driver; binary extra → no libp
 # are intentionally NOT installed: LLM_PROVIDER=anthropic|groq fails fast at
 # startup with a clear ImportError (see app/config.py builders). To use one,
 # add the matching package (langchain-anthropic / langchain-groq).
-langchain-openai==0.3.35
+langchain-openai==1.1.14
 
 # Salesforce
 simple-salesforce==1.12.9
