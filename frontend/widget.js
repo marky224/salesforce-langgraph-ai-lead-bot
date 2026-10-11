@@ -83,31 +83,42 @@ function createCustomAdapter() {
           for (const line of lines) {
             if (!line.startsWith('data: ')) continue;
 
+            let data;
             try {
-              const data = JSON.parse(line.slice(6));
-
-              if (data.token) {
-                observer.next(data.token);
-              }
-
-              if (data.error) {
-                observer.error(new Error(data.error));
-                return;
-              }
-
-              if (data.done) {
-                if (data.thread_id) {
-                  threadId = data.thread_id;
-                }
-                if (data.lead_data) {
-                  updateLeadFieldsPanel(data.lead_data, data.stage);
-                }
-                if (data.is_complete) {
-                  handleConversationComplete(data.lead_id);
-                }
-              }
+              data = JSON.parse(line.slice(6));
             } catch (parseErr) {
               console.debug('Skipping SSE line:', line);
+              continue;
+            }
+
+            if (data.token) {
+              observer.next(data.token);
+            }
+
+            if (data.error) {
+              observer.error(new Error(data.error));
+              return;
+            }
+
+            if (data.done) {
+              if (data.thread_id) {
+                threadId = data.thread_id;
+              }
+              // UI side-effects must not kill the stream, but must not be silent either.
+              if (data.lead_data) {
+                try {
+                  updateLeadFieldsPanel(data.lead_data, data.stage);
+                } catch (uiErr) {
+                  console.error('Lead fields panel update failed:', uiErr);
+                }
+              }
+              if (data.is_complete) {
+                try {
+                  handleConversationComplete(data.lead_id);
+                } catch (uiErr) {
+                  console.error('Conversation complete handler failed:', uiErr);
+                }
+              }
             }
           }
         }
