@@ -90,6 +90,10 @@ function createCustomAdapter() {
               console.debug('Skipping SSE line:', line);
               continue;
             }
+            if (!data || typeof data !== 'object') {
+              console.debug('Skipping SSE line:', line);
+              continue;
+            }
 
             if (data.token) {
               observer.next(data.token);
