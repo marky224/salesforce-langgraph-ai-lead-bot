@@ -27,4 +27,4 @@ pytest-recording==0.13.4
 # 0.3.86 and break langgraph 0.6.x / langchain-openai 0.3.x. Verified with
 # `uv pip compile` — these resolve with every app pin unchanged.
 openevals==0.2.0
-langchain-anthropic==0.3.22
+langchain-anthropic==1.4.6
