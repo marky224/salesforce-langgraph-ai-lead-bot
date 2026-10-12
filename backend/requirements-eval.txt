@@ -16,7 +16,7 @@ pytest-asyncio==0.26.0
 # Deterministic real-model replay: record once against live Grok, replay offline
 # in CI (--record-mode=none) as the gate. pytest-recording adds the --record-mode
 # flag and the @pytest.mark.vcr marker on top of vcrpy.
-vcrpy==8.1.1
+vcrpy==8.2.1
 pytest-recording==0.13.4
 
 # Calibrated LLM-as-judge (PR D) — eval_live only; never the offline gate, never the
