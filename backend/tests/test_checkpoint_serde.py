@@ -7,19 +7,23 @@ In strict mode ``StateGraph.compile()`` builds the allow-list from the state
 schema, so ``ConversationStage`` and the LangChain message classes still load.
 
 The variable is read once, at ``langgraph`` import time, so each case runs in a
-fresh subprocess with the variable set (or unset) explicitly.
+fresh subprocess. The strict case takes its environment from the ``ENV`` lines of
+the Dockerfile's runtime stage (after the last ``FROM``), so it fails unless the
+production image really sets the variable.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 import textwrap
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
+DOCKERFILE = BACKEND_DIR / "Dockerfile"
 
 # Writes a state holding ConversationStage + Human/AI messages through the real
 # compiled graph (MemorySaver serializes to msgpack), reads it back, then decodes
@@ -70,11 +74,44 @@ _SCRIPT = textwrap.dedent(
 )
 
 
-def _run_probe(strict: bool) -> dict:
+def _runtime_stage_env(dockerfile: Path) -> dict[str, str]:
+    """
+    Return the variables set by ``ENV`` in the Dockerfile's final (runtime) stage.
+
+    Comment lines are skipped and ``\\`` continuations joined; both
+    ``ENV KEY=value ...`` and the legacy ``ENV KEY value`` form are handled. ``ENV``
+    in an earlier stage (e.g. the builder) is dropped, as the next ``FROM`` drops it.
+    """
+    instructions: list[str] = []
+    pending = ""
+    for raw in dockerfile.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.endswith("\\"):
+            pending += line[:-1] + " "
+            continue
+        instructions.append(pending + line)
+        pending = ""
+
+    env: dict[str, str] = {}
+    for instruction in instructions:
+        keyword, _, args = instruction.partition(" ")
+        if keyword.upper() == "FROM":
+            env = {}
+        elif keyword.upper() == "ENV":
+            tokens = shlex.split(args)
+            if tokens and "=" in tokens[0]:
+                env.update(token.split("=", 1) for token in tokens)
+            elif tokens:
+                env[tokens[0]] = " ".join(tokens[1:])
+    return env
+
+
+def _run_probe(extra_env: dict[str, str]) -> dict:
     env = dict(os.environ)
     env.pop("LANGGRAPH_STRICT_MSGPACK", None)
-    if strict:
-        env["LANGGRAPH_STRICT_MSGPACK"] = "true"
+    env.update(extra_env)
     result = subprocess.run(
         [sys.executable, "-c", _SCRIPT],
         cwd=BACKEND_DIR,
@@ -88,8 +125,9 @@ def _run_probe(strict: bool) -> dict:
 
 
 class TestStrictMsgpack:
-    def test_strict_mode_resumes_state_and_blocks_unregistered_types(self):
-        out = _run_probe(strict=True)
+    def test_image_env_resumes_state_and_blocks_unregistered_types(self):
+        """Under the production image's ENV, app state resumes and unknown types are blocked."""
+        out = _run_probe(_runtime_stage_env(DOCKERFILE))
         assert out["stage_type"] == "ConversationStage"
         assert out["stage_value"] == "qualification"
         assert out["message_types"] == ["HumanMessage", "AIMessage"]
@@ -97,11 +135,33 @@ class TestStrictMsgpack:
 
     def test_default_mode_revives_unregistered_types(self):
         """Control: without the variable the same payload is revived (the advisory's gap)."""
-        out = _run_probe(strict=False)
+        out = _run_probe({})
         assert out["stage_type"] == "ConversationStage"
         assert out["unregistered_revived"] is True
 
-    def test_dockerfile_enables_strict_msgpack(self):
-        """The production image must set the variable — it's what closes the advisory."""
-        dockerfile = (BACKEND_DIR / "Dockerfile").read_text()
-        assert "ENV LANGGRAPH_STRICT_MSGPACK=true" in dockerfile
+
+class TestRuntimeStageEnv:
+    """The Dockerfile parser only counts live ENV lines in the final stage."""
+
+    def _parse(self, tmp_path: Path, body: str) -> dict[str, str]:
+        dockerfile = tmp_path / "Dockerfile"
+        dockerfile.write_text(textwrap.dedent(body))
+        return _runtime_stage_env(dockerfile)
+
+    def test_both_env_forms_in_runtime_stage(self, tmp_path):
+        env = self._parse(tmp_path, """
+            FROM python:3.12-slim AS builder
+            FROM python:3.12-slim
+            ENV A=1 B="two words"
+            ENV C three words
+            """)
+        assert env == {"A": "1", "B": "two words", "C": "three words"}
+
+    def test_commented_and_builder_stage_env_are_ignored(self, tmp_path):
+        env = self._parse(tmp_path, """
+            FROM python:3.12-slim AS builder
+            ENV LANGGRAPH_STRICT_MSGPACK=true
+            FROM python:3.12-slim
+            # ENV LANGGRAPH_STRICT_MSGPACK=true
+            """)
+        assert env == {}
