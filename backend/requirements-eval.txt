@@ -22,9 +22,7 @@ pytest-recording==0.13.4
 # Calibrated LLM-as-judge (PR D) — eval_live only; never the offline gate, never the
 # image. openevals wraps the judge (persona adherence + summary faithfulness); the
 # judge model is a frontier Claude (claude-sonnet-4-6) built via app.config.get_llm,
-# so langchain-anthropic is required here. Pinned to the 0.3.x line on purpose: the
-# 1.x line demands langchain-core>=1.4.6, which would force-upgrade the app's pinned
-# 0.3.86 and break langgraph 0.6.x / langchain-openai 0.3.x. Verified with
-# `uv pip compile` — these resolve with every app pin unchanged.
+# so langchain-anthropic is required here. On the 1.x line with the rest of the
+# LangChain family (1.7.5 needs langchain-core>=1.6.6, met by the app's pin).
 openevals==0.2.0
-langchain-anthropic==0.3.22
+langchain-anthropic==1.7.5

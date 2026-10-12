@@ -8,11 +8,13 @@ uvicorn[standard]==0.49.0
 pydantic==2.13.4
 pydantic-settings==2.14.2
 
-# LangGraph / LangChain
-langgraph==0.6.11
-langchain-core==0.3.86
+# LangGraph / LangChain — one family on the 1.x line. They pin each other tightly
+# (langgraph 1.2 needs langchain-core>=1.4.7 and langgraph-checkpoint>=4.1), so
+# bump them together as a set, never one package at a time.
+langgraph==1.2.14
+langchain-core==1.6.9
 langsmith==0.8.18                        # tracing client; already transitive via langchain-core, pinned for reproducibility
-langgraph-checkpoint-postgres==3.0.5   # durable Postgres checkpointer (Neon); keep on 3.0.x — 3.1.0+ needs langgraph-checkpoint>=4 which breaks langgraph 0.6.x
+langgraph-checkpoint-postgres==3.1.2   # durable Postgres checkpointer (Neon); same table schema as 3.0.x — no migration
 psycopg[binary]==3.2.13                 # async driver; binary extra → no libpq in slim image
 
 # LLM provider — only langchain-openai is bundled. It serves BOTH OpenAI and
@@ -20,7 +22,8 @@ psycopg[binary]==3.2.13                 # async driver; binary extra → no libp
 # are intentionally NOT installed: LLM_PROVIDER=anthropic|groq fails fast at
 # startup with a clear ImportError (see app/config.py builders). To use one,
 # add the matching package (langchain-anthropic / langchain-groq).
-langchain-openai==0.3.35
+langchain-openai==1.7.0
+openai==2.54.0                          # held on 2.x: openai 3 swaps httpx for httpx2, which the eval gate's vcrpy 8.1.1 can't intercept; move with vcrpy
 
 # Salesforce
 simple-salesforce==1.12.9
