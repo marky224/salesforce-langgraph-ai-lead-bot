@@ -10,7 +10,7 @@
 # eval gate runs under the same pytest/asyncio. Required: the eval tests are async
 # (@pytest.mark.asyncio) and pytest-recording does not pin pytest, so without these
 # a clean install pulls a bare, asyncio-less pytest and every eval test errors.
-pytest==8.4.2
+pytest==9.0.3
 pytest-asyncio==0.26.0
 
 # Deterministic real-model replay: record once against live Grok, replay offline
