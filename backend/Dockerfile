@@ -31,6 +31,10 @@ COPY --from=builder /install /usr/local
 # Copy application code
 COPY app/ ./app/
 
+# Only revive checkpoint types on the graph's state-schema allow-list
+# (GHSA-g48c-2wqr-h844). langgraph reads this at import time.
+ENV LANGGRAPH_STRICT_MSGPACK=true
+
 RUN chown -R appuser:appuser /app
 USER appuser
 
