@@ -94,6 +94,7 @@ docker-compose.override.yml
 # ==========================================
 node_modules/
 package-lock.json
+!frontend/package-lock.json
 yarn.lock
 
 # Agentforce generated metadata (retrieved by sf agent publish)
