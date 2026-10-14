@@ -455,7 +455,7 @@ function injectWidget() {
   panel.innerHTML = `
     <div class="mm-chat-header">
       <div class="mm-chat-header-info">
-        <img src="${CONFIG.assistant.avatar}" alt="Alex" class="mm-header-avatar" />
+        <img src="${CONFIG.assistant.avatar}" alt="${CONFIG.assistant.name}" class="mm-header-avatar" />
         <div>
           <div class="mm-header-name">${CONFIG.assistant.name}</div>
           <div class="mm-header-tagline">${CONFIG.assistant.tagline}</div>
