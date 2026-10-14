@@ -106,13 +106,13 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: widget-typecheck/package-lock.json
 
       - name: Install dependencies
-        working-directory: frontend
-        run: npm ci  # typescript only, pinned exactly in frontend/package.json
+        working-directory: widget-typecheck
+        run: npm ci  # typescript only, pinned exactly in widget-typecheck/package.json
 
       - name: Type-check widget.js
-        # frontend/tsconfig.json: allowJs + checkJs + strict + noEmit over widget.js only.
-        working-directory: frontend
+        # widget-typecheck/tsconfig.json: allowJs + checkJs + strict + noEmit over frontend/widget.js only.
+        working-directory: widget-typecheck
         run: npm run typecheck

@@ -8,7 +8,7 @@
  */
 
 // ---------------------------------------------------------------------------
-// Types (JSDoc — checked by `npm run typecheck` in frontend/)
+// Types (JSDoc — checked by `npm run typecheck` in widget-typecheck/)
 // ---------------------------------------------------------------------------
 
 /**

@@ -8,5 +8,5 @@
     "module": "esnext",
     "lib": ["es2022", "dom"]
   },
-  "include": ["widget.js"]
+  "include": ["../frontend/widget.js"]
 }
