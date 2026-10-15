@@ -92,3 +92,27 @@ jobs:
         # Lenient config lives in pyproject.toml ([tool.mypy]); ignore_missing_imports
         # means the app deps need not be installed for a type-only check.
         run: mypy
+
+  widget-types:
+    name: Widget types (tsc)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: widget-typecheck/package-lock.json
+
+      - name: Install dependencies
+        working-directory: widget-typecheck
+        run: npm ci  # typescript only, pinned exactly in widget-typecheck/package.json
+
+      - name: Type-check widget.js
+        # widget-typecheck/tsconfig.json: allowJs + checkJs + strict + noEmit over frontend/widget.js only.
+        working-directory: widget-typecheck
+        run: npm run typecheck

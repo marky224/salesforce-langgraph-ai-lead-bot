@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * widget.js — AI Sales Lead Bot for markandrewmarquez.com
  *
@@ -7,11 +8,95 @@
  */
 
 // ---------------------------------------------------------------------------
+// Types (JSDoc — checked by `npm run typecheck` in widget-typecheck/)
+// ---------------------------------------------------------------------------
+
+/**
+ * Backend `ConversationStage` enum `.value` strings (backend/app/models/schemas.py).
+ * @typedef {'greeting' | 'discovery' | 'qualification' | 'objection_handling'
+ *   | 'lead_capture' | 'confirmation' | 'complete'} ConversationStage
+ */
+
+/**
+ * Contact fields collected so far (backend `LeadData`); any may be missing or null.
+ * @typedef {Object} LeadData
+ * @property {string | null} [first_name]
+ * @property {string | null} [last_name]
+ * @property {string | null} [email]
+ * @property {string | null} [company]
+ * @property {string | null} [phone]
+ * @property {string | null} [title]
+ */
+
+/**
+ * One `data:` line from POST /chat/stream (server.py `event_generator`).
+ * Token lines carry only `token`; an error line only `error`; the final
+ * line carries `done` plus the rest.
+ * @typedef {Object} SseEvent
+ * @property {string} [token]
+ * @property {string} [error]
+ * @property {boolean} [done]
+ * @property {string} [thread_id]
+ * @property {LeadData} [lead_data]
+ * @property {ConversationStage} [stage]
+ * @property {boolean} [is_complete]
+ * @property {string | null} [lead_id]
+ */
+
+/**
+ * Reply from POST /chat/init (the fields the widget reads).
+ * @typedef {Object} ChatInitReply
+ * @property {string} thread_id
+ * @property {string} greeting
+ */
+
+/**
+ * @typedef {Object} Persona
+ * @property {string} name
+ * @property {string} avatar
+ */
+
+/**
+ * @typedef {Object} WidgetConfig
+ * @property {string} backendUrl
+ * @property {Persona & { tagline: string }} assistant
+ * @property {Persona} user
+ * @property {string} cssPath
+ */
+
+/**
+ * nlux streaming-adapter observer (the methods the adapter calls).
+ * @typedef {Object} StreamObserver
+ * @property {(chunk: string) => void} next
+ * @property {(error: Error) => void} error
+ * @property {() => void} complete
+ */
+
+/**
+ * @typedef {Object} ChatWidgetApi
+ * @property {() => void} init
+ * @property {() => void} toggle
+ * @property {() => string | null} getThreadId
+ */
+
+/**
+ * `window` plus the globals the host page sets and the widget exposes.
+ * @typedef {Window & typeof globalThis & {
+ *   CHAT_BACKEND_URL?: string,
+ *   CHAT_CSS_PATH?: string,
+ *   __chatWidget: ChatWidgetApi,
+ * }} WidgetWindow
+ */
+
+const widgetWindow = /** @type {WidgetWindow} */ (window);
+
+// ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
 
+/** @type {WidgetConfig} */
 const CONFIG = {
-  backendUrl: window.CHAT_BACKEND_URL || 'http://localhost:8000',
+  backendUrl: widgetWindow.CHAT_BACKEND_URL || 'http://localhost:8000',
 
   assistant: {
     name: 'TARS',
@@ -27,7 +112,7 @@ const CONFIG = {
   // CSS path — auto-resolved relative to this script's origin so it
   // loads from Azure Static Web Apps even when embedded on GitHub Pages
   get cssPath() {
-    if (window.CHAT_CSS_PATH) return window.CHAT_CSS_PATH;
+    if (widgetWindow.CHAT_CSS_PATH) return widgetWindow.CHAT_CSS_PATH;
     try {
       const scriptUrl = new URL(import.meta.url);
       return `${scriptUrl.origin}/chat-widget.css`;
@@ -41,6 +126,7 @@ const CONFIG = {
 // State
 // ---------------------------------------------------------------------------
 
+/** @type {string | null} */
 let threadId = null;
 let chatInstance = null;
 let isOpen = false;
@@ -52,6 +138,10 @@ let isInitialised = false;
 
 function createCustomAdapter() {
   return {
+    /**
+     * @param {string} message
+     * @param {StreamObserver} observer
+     */
     streamText: async (message, observer) => {
       try {
         const response = await fetch(`${CONFIG.backendUrl}/chat/stream`, {
@@ -66,6 +156,11 @@ function createCustomAdapter() {
         if (!response.ok) {
           observer.error(new Error(`Server returned ${response.status}`));
           return;
+        }
+
+        // Thrown into the catch below, so it is logged and reported like any stream error.
+        if (!response.body) {
+          throw new Error('Chat stream response has no body');
         }
 
         const reader = response.body.getReader();
@@ -83,6 +178,7 @@ function createCustomAdapter() {
           for (const line of lines) {
             if (!line.startsWith('data: ')) continue;
 
+            /** @type {SseEvent} */
             let data;
             try {
               data = JSON.parse(line.slice(6));
@@ -130,7 +226,7 @@ function createCustomAdapter() {
         observer.complete();
       } catch (err) {
         console.error('Chat stream error:', err);
-        observer.error(err);
+        observer.error(/** @type {Error} */ (err));
       }
     },
   };
@@ -151,6 +247,7 @@ async function initConversation() {
       throw new Error(`Init failed: ${response.status}`);
     }
 
+    /** @type {ChatInitReply} */
     const data = await response.json();
     threadId = data.thread_id;
     return data.greeting;
@@ -171,6 +268,7 @@ async function initConversation() {
 
 async function mountChat() {
   const { createAiChat } = await import(
+    // @ts-expect-error -- CDN ESM URL; no local type declarations for @nlux/core.
     'https://cdn.jsdelivr.net/npm/@nlux/core@2.17.1/+esm'
   );
 
@@ -222,8 +320,16 @@ async function mountChat() {
 function toggleChat() {
   const panel = document.getElementById('mm-chat-panel');
   const bubble = document.getElementById('mm-chat-bubble');
-  const bubbleIcon = bubble.querySelector('.bubble-icon');
-  const closeIcon = bubble.querySelector('.close-icon');
+  if (!panel || !bubble) {
+    console.error('Chat widget: #mm-chat-panel or #mm-chat-bubble not found; cannot toggle chat.');
+    return;
+  }
+  const bubbleIcon = /** @type {HTMLElement | null} */ (bubble.querySelector('.bubble-icon'));
+  const closeIcon = /** @type {HTMLElement | null} */ (bubble.querySelector('.close-icon'));
+  if (!bubbleIcon || !closeIcon) {
+    console.error('Chat widget: bubble icons (.bubble-icon / .close-icon) not found; cannot toggle chat.');
+    return;
+  }
 
   isOpen = !isOpen;
 
@@ -248,12 +354,17 @@ function toggleChat() {
 // Lead fields panel — shows what contact info has been collected so far
 // ---------------------------------------------------------------------------
 
+/** @type {Set<ConversationStage>} */
 const LEAD_CAPTURE_STAGES = new Set([
   'lead_capture',
   'confirmation',
   'complete',
 ]);
 
+/**
+ * @param {LeadData} leadData
+ * @param {ConversationStage} [stage]
+ */
 function updateLeadFieldsPanel(leadData, stage) {
   const panel = document.getElementById('mm-lead-fields');
   if (!panel) return;
@@ -269,7 +380,8 @@ function updateLeadFieldsPanel(leadData, stage) {
       leadData.email ||
       leadData.phone);
 
-  const shouldShow = LEAD_CAPTURE_STAGES.has(stage) || hasAnyValue;
+  const shouldShow =
+    (stage !== undefined && LEAD_CAPTURE_STAGES.has(stage)) || hasAnyValue;
 
   if (!shouldShow) {
     panel.style.display = 'none';
@@ -281,6 +393,10 @@ function updateLeadFieldsPanel(leadData, stage) {
     .filter(Boolean)
     .join(' ');
 
+  /**
+   * @param {string} id
+   * @param {string | null | undefined} value
+   */
   const set = (id, value) => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -304,6 +420,7 @@ function updateLeadFieldsPanel(leadData, stage) {
 // Conversation completion handler
 // ---------------------------------------------------------------------------
 
+/** @param {string | null | undefined} leadId */
 function handleConversationComplete(leadId) {
   console.info('Conversation complete. Lead ID:', leadId);
 
@@ -338,7 +455,7 @@ function injectWidget() {
   panel.innerHTML = `
     <div class="mm-chat-header">
       <div class="mm-chat-header-info">
-        <img src="${CONFIG.assistant.avatar}" alt="Alex" class="mm-header-avatar" />
+        <img src="${CONFIG.assistant.avatar}" alt="${CONFIG.assistant.name}" class="mm-header-avatar" />
         <div>
           <div class="mm-header-name">${CONFIG.assistant.name}</div>
           <div class="mm-header-tagline">${CONFIG.assistant.tagline}</div>
@@ -372,7 +489,7 @@ function injectWidget() {
   const bubble = document.createElement('button');
   bubble.id = 'mm-chat-bubble';
   bubble.setAttribute('aria-label', 'Open chat');
-  bubble.onclick = () => window.__chatWidget.toggle();
+  bubble.onclick = () => widgetWindow.__chatWidget.toggle();
   bubble.innerHTML = `
     <span class="bubble-icon">
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -399,7 +516,7 @@ function injectWidget() {
 // Public API
 // ---------------------------------------------------------------------------
 
-window.__chatWidget = {
+widgetWindow.__chatWidget = {
   init: injectWidget,
   toggle: toggleChat,
   getThreadId: () => threadId,
