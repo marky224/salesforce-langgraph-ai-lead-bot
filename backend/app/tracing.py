@@ -1,12 +1,12 @@
 """
-LangSmith tracing wiring — an email-masking tracer, built only when enabled.
+LangSmith tracing wiring — a PII-masking tracer (emails + phone numbers), built only when enabled.
 
 Tracing stays vendor-neutral and opt-in. When enabled we attach ONE explicit
 ``LangChainTracer`` whose client carries an email anonymizer, passed via each
 run's config callbacks (see ``server._run_config``). LangChain's callback
 manager only auto-adds an env-based tracer when no ``LangChainTracer`` is already
 present, so our masked tracer suppresses the un-masked env one — visitor emails
-(real PII) never reach LangSmith.
+and phone numbers (real PII) never reach LangSmith.
 
 No new dependency: ``langsmith`` is already transitive via ``langchain-core``.
 """
@@ -24,17 +24,41 @@ logger = logging.getLogger(__name__)
 # Visitor emails are real PII — mask them before any run I/O leaves the process.
 _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 
+# Phone numbers (optional lead field, and visitors type them into chat). Two shapes:
+#  1. North American: optional leading 1, area code bare or in parens, 3-3-4 digits
+#     joined by space, dot, dash or nothing — "(210) 555-0123", "1-800-555-0123",
+#     "2105550123".
+#  2. International, only with a leading "+": "+44 20 7946 0958", "+1 (210) 555-0123".
+# Boundaries keep it off longer digit runs, decimals and IDs; dates (4-2-2) and UUID
+# segments don't fit 3-3-4. Seven-digit local numbers ("555-0123") are not masked.
+# Bounded quantifiers only, so no catastrophic backtracking on visitor text.
+_PHONE_RE = re.compile(
+    r"(?<![\w.+])(?:"
+    r"\+\d[\d\s().-]{6,18}\d"
+    r"|(?:1[\s.-]?)?(?:\(\d{3}\)\s?|\d{3}[\s.-]?)\d{3}[\s.-]?\d{4}"
+    r")(?![\w]|\.\d)"
+)
+
 
 def build_email_anonymizer() -> Any:
-    """Return a LangSmith anonymizer callable that masks email addresses in run I/O."""
+    """Return a LangSmith anonymizer callable that masks emails and phone numbers in run I/O.
+
+    Emails go first, so an email-shaped address like ``2105550123@txt.example`` becomes
+    ``[EMAIL]`` rather than a half-masked ``[PHONE]@...``.
+    """
     from langsmith.anonymizer import create_anonymizer
 
-    return create_anonymizer([{"pattern": _EMAIL_RE, "replace": "[EMAIL]"}])
+    return create_anonymizer(
+        [
+            {"pattern": _EMAIL_RE, "replace": "[EMAIL]"},
+            {"pattern": _PHONE_RE, "replace": "[PHONE]"},
+        ]
+    )
 
 
 def build_tracer(settings: Settings) -> Any | None:
     """
-    Return an email-masking ``LangChainTracer`` when tracing is enabled, else ``None``.
+    Return a PII-masking ``LangChainTracer`` when tracing is enabled, else ``None``.
 
     Enabled via ``LANGSMITH_TRACING`` (canonical) or the legacy
     ``LANGCHAIN_TRACING_V2`` (see ``Settings.tracing_enabled``). The tracer's
@@ -66,7 +90,7 @@ def build_tracer(settings: Settings) -> Any | None:
     client = Client(api_key=api_key, anonymizer=build_email_anonymizer())
     tracer = LangChainTracer(client=client, project_name=settings.langsmith_project)
     logger.info(
-        "LangSmith tracing enabled (project=%s, email masking on)",
+        "LangSmith tracing enabled (project=%s, email + phone masking on)",
         settings.langsmith_project or "default",
     )
     return tracer

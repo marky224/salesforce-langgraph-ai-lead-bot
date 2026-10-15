@@ -18,6 +18,42 @@ def test_email_anonymizer_masks_addresses():
     }
 
 
+def test_anonymizer_masks_phone_numbers():
+    anon = build_email_anonymizer()
+    for phone in (
+        "(210) 555-0123",
+        "210-555-0123",
+        "210.555.0123",
+        "210 555 0123",
+        "2105550123",
+        "1-800-555-0123",
+        "+1 (210) 555-0123",
+        "+1 210 555 0123",
+        "+44 20 7946 0958",
+    ):
+        assert anon(f"call me at {phone} today") == "call me at [PHONE] today", phone
+    # the lead's phone field, nested like run I/O
+    assert anon({"lead_data": {"phone": "210-555-0123", "email": "x@y.io"}}) == {
+        "lead_data": {"phone": "[PHONE]", "email": "[EMAIL]"}
+    }
+    # an email made of digits stays one [EMAIL], not [PHONE]@...
+    assert anon("text 2105550123@txt.example.com") == "text [EMAIL]"
+
+
+def test_anonymizer_leaves_non_phone_numbers():
+    anon = build_email_anonymizer()
+    for text in (
+        "budget 50K-100K, timeline 2026-10-14",
+        "score 87 of 100, 60 messages max",
+        "cost_usd 0.001206",
+        "thread 3f2a9c4e-1b7d-4e8a-9c3f-2d1e0b9a8c7f",
+        "lead 00Q5g00000ABcdEFGH",
+        "order 12345678901234",
+        "call 555-0123",
+    ):
+        assert anon(text) == text, text
+
+
 def test_build_tracer_none_when_disabled():
     # Init kwargs override any local .env, so this is hermetic.
     settings = Settings(langsmith_tracing=False, langchain_tracing_v2=False)
