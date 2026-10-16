@@ -11,8 +11,8 @@ fresh subprocess. The strict case takes its environment from the ``ENV`` lines o
 the Dockerfile's runtime stage (after the last ``FROM``), so it fails unless the
 production image really sets the variable. The parser forgets ``ENV`` at every
 ``FROM``; if the runtime stage is ever built ``FROM`` an earlier stage, Docker keeps
-that stage's ``ENV`` but the parser does not, so the test can only fail as a false
-alarm, never pass by mistake.
+that stage's ``ENV`` but the parser does not. That mismatch can only cause a false
+alarm, never a false pass.
 """
 
 from __future__ import annotations
@@ -144,7 +144,7 @@ class TestStrictMsgpack:
             "an unregistered type was revived under the image's ENV, so strict msgpack "
             "is off. Likely causes: the Dockerfile runtime stage no longer sets "
             "LANGGRAPH_STRICT_MSGPACK=true, or the installed langgraph-checkpoint "
-            f"({metadata.version('langgraph-checkpoint')}) is older than 4.x."
+            f"({metadata.version('langgraph-checkpoint')}) is older than 4.0.1."
         )
 
     def test_default_mode_revives_unregistered_types(self):
