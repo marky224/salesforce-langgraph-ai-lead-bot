@@ -2,11 +2,15 @@
 LangSmith tracing wiring — a PII-masking tracer (emails + phone numbers), built only when enabled.
 
 Tracing stays vendor-neutral and opt-in. When enabled we attach ONE explicit
-``LangChainTracer`` whose client carries an email anonymizer, passed via each
+``LangChainTracer`` whose client carries a PII anonymizer, passed via each
 run's config callbacks (see ``server._run_config``). LangChain's callback
 manager only auto-adds an env-based tracer when no ``LangChainTracer`` is already
-present, so our masked tracer suppresses the un-masked env one — visitor emails
-and phone numbers (real PII) never reach LangSmith.
+present, so our masked tracer suppresses the un-masked env one.
+
+Masking is best-effort and covers run inputs and outputs only: emails, plus common
+North American and "+"-prefixed phone numbers. Not masked: 7-digit local numbers,
+international numbers without a leading "+" (e.g. "020 7946 0958"), and a run's
+error text, which LangSmith uploads as-is.
 
 No new dependency: ``langsmith`` is already transitive via ``langchain-core``.
 """
@@ -22,21 +26,27 @@ from app.config import Settings
 logger = logging.getLogger(__name__)
 
 # Visitor emails are real PII — mask them before any run I/O leaves the process.
-_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+# Bounded parts (RFC 5321 limits) keep the scan linear: an unbounded local part made
+# the regex quadratic on long text with no "@", and this runs on the event loop.
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}\.[A-Za-z]{2,24}")
 
 # Phone numbers (optional lead field, and visitors type them into chat). Two shapes:
-#  1. North American: optional leading 1, area code bare or in parens, 3-3-4 digits
-#     joined by space, dot, dash or nothing — "(210) 555-0123", "1-800-555-0123",
-#     "2105550123".
+#  1. North American: optional leading 1, area code bare or in parens, 3-3-4 digits.
+#     A separator is a dot, dash, en/em dash or nothing, with an optional space on
+#     either side — "(210) 555-0123", "(210)-555-0123", "210 - 555 - 0123",
+#     "1-800-555-0123", "2105550123".
 #  2. International, only with a leading "+": "+44 20 7946 0958", "+1 (210) 555-0123".
+# Either may end in an extension ("x45", "ext. 12"), masked with the number.
 # Boundaries keep it off longer digit runs, decimals and IDs; dates (4-2-2) and UUID
 # segments don't fit 3-3-4. Seven-digit local numbers ("555-0123") are not masked.
 # Bounded quantifiers only, so no catastrophic backtracking on visitor text.
+_PHONE_SEP = r"\s?[.\-\u2013\u2014]?\s?"
+_PHONE_EXT = r"(?:\s?(?i:x|ext\.?)\s?\d{1,6})?"
 _PHONE_RE = re.compile(
     r"(?<![\w.+])(?:"
-    r"\+\d[\d\s().-]{6,18}\d"
-    r"|(?:1[\s.-]?)?(?:\(\d{3}\)\s?|\d{3}[\s.-]?)\d{3}[\s.-]?\d{4}"
-    r")(?![\w]|\.\d)"
+    r"\+\d[\d\s().\-\u2013\u2014]{6,18}\d"
+    rf"|(?:1{_PHONE_SEP})?(?:\(\d{{3}}\)|\d{{3}}){_PHONE_SEP}\d{{3}}{_PHONE_SEP}\d{{4}}"
+    rf"){_PHONE_EXT}(?![\w]|\.\d)"
 )
 
 

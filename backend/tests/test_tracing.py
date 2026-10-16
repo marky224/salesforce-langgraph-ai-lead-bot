@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 from langchain_core.tracers import LangChainTracer
 
 from app.config import Settings
@@ -30,6 +32,14 @@ def test_anonymizer_masks_phone_numbers():
         "+1 (210) 555-0123",
         "+1 210 555 0123",
         "+44 20 7946 0958",
+        "(210)-555-0123",
+        "(210).555.0123",
+        "(210)555-0123",
+        "210 - 555 - 0123",
+        "210\u2013555\u20130123",
+        "210-555-0123x45",
+        "(210) 555-0123 ext. 12",
+        "+1 210 555 0123 x7",
     ):
         assert anon(f"call me at {phone} today") == "call me at [PHONE] today", phone
     # the lead's phone field, nested like run I/O
@@ -52,6 +62,15 @@ def test_anonymizer_leaves_non_phone_numbers():
         "call 555-0123",
     ):
         assert anon(text) == text, text
+
+
+def test_email_regex_stays_linear_on_long_text():
+    """Long text with no "@" must not stall the event loop (was quadratic, ~1.8 s here)."""
+    anon = build_email_anonymizer()
+    blob = "a" * 40_000
+    start = time.perf_counter()
+    assert anon(blob) == blob
+    assert time.perf_counter() - start < 0.5
 
 
 def test_build_tracer_none_when_disabled():
