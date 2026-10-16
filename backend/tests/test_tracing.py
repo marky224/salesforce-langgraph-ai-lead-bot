@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 from langchain_core.tracers import LangChainTracer
 
 from app.config import Settings
@@ -16,6 +18,59 @@ def test_email_anonymizer_masks_addresses():
         "lead": {"email": "[EMAIL]"},
         "note": "no email",
     }
+
+
+def test_anonymizer_masks_phone_numbers():
+    anon = build_email_anonymizer()
+    for phone in (
+        "(210) 555-0123",
+        "210-555-0123",
+        "210.555.0123",
+        "210 555 0123",
+        "2105550123",
+        "1-800-555-0123",
+        "+1 (210) 555-0123",
+        "+1 210 555 0123",
+        "+44 20 7946 0958",
+        "(210)-555-0123",
+        "(210).555.0123",
+        "(210)555-0123",
+        "210 - 555 - 0123",
+        "210\u2013555\u20130123",
+        "210-555-0123x45",
+        "(210) 555-0123 ext. 12",
+        "+1 210 555 0123 x7",
+    ):
+        assert anon(f"call me at {phone} today") == "call me at [PHONE] today", phone
+    # the lead's phone field, nested like run I/O
+    assert anon({"lead_data": {"phone": "210-555-0123", "email": "x@y.io"}}) == {
+        "lead_data": {"phone": "[PHONE]", "email": "[EMAIL]"}
+    }
+    # an email made of digits stays one [EMAIL], not [PHONE]@...
+    assert anon("text 2105550123@txt.example.com") == "text [EMAIL]"
+
+
+def test_anonymizer_leaves_non_phone_numbers():
+    anon = build_email_anonymizer()
+    for text in (
+        "budget 50K-100K, timeline 2026-10-14",
+        "score 87 of 100, 60 messages max",
+        "cost_usd 0.001206",
+        "thread 3f2a9c4e-1b7d-4e8a-9c3f-2d1e0b9a8c7f",
+        "lead 00Q5g00000ABcdEFGH",
+        "order 12345678901234",
+        "call 555-0123",
+    ):
+        assert anon(text) == text, text
+
+
+def test_email_regex_stays_linear_on_long_text():
+    """Long text with no "@" must not stall the event loop (was quadratic, ~1.8 s here)."""
+    anon = build_email_anonymizer()
+    blob = "a" * 40_000
+    start = time.perf_counter()
+    assert anon(blob) == blob
+    assert time.perf_counter() - start < 0.5
 
 
 def test_build_tracer_none_when_disabled():
