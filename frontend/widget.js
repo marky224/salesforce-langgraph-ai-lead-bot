@@ -131,6 +131,11 @@ let threadId = null;
 let chatInstance = null;
 let isOpen = false;
 let isInitialised = false;
+/**
+ * In-flight mountChat(), so reopening during init doesn't start a second /chat/init.
+ * @type {Promise<void> | null}
+ */
+let mountPromise = null;
 
 // ---------------------------------------------------------------------------
 // Custom SSE Streaming Adapter
@@ -267,6 +272,13 @@ async function initConversation() {
 // ---------------------------------------------------------------------------
 
 async function mountChat() {
+  // Check before the import and /chat/init (a paid LLM call), so a missing container costs nothing.
+  const container = document.getElementById('mm-chat-container');
+  if (!container) {
+    console.error('Chat widget: #mm-chat-container not found; cannot mount chat.');
+    return;
+  }
+
   const { createAiChat } = await import(
     // @ts-expect-error -- CDN ESM URL; no local type declarations for @nlux/core.
     'https://cdn.jsdelivr.net/npm/@nlux/core@2.17.1/+esm'
@@ -308,7 +320,6 @@ async function mountChat() {
       height: '100%',
     });
 
-  const container = document.getElementById('mm-chat-container');
   chatInstance.mount(container);
   isInitialised = true;
 }
@@ -339,8 +350,15 @@ function toggleChat() {
     bubbleIcon.style.display = 'none';
     closeIcon.style.display = 'block';
 
-    if (!isInitialised) {
-      mountChat();
+    // Cleared when settled, so a later open retries after a failed mount.
+    if (!isInitialised && !mountPromise) {
+      mountPromise = mountChat()
+        .catch((err) => {
+          console.error('Chat widget: failed to mount chat:', err);
+        })
+        .finally(() => {
+          mountPromise = null;
+        });
     }
   } else {
     panel.classList.remove('open');
