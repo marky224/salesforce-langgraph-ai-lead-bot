@@ -37,6 +37,15 @@ def test_llm_timeout_and_retries_env_override(monkeypatch):
     assert llm.max_retries == 5
 
 
+def test_default_llm_provider_is_xai(monkeypatch):
+    """With LLM_PROVIDER unset (and no .env), the bot runs xAI Grok, like prod."""
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+
+    from app.config import LLMProvider, Settings
+
+    assert Settings(_env_file=None).llm_provider is LLMProvider.XAI
+
+
 # ---------------------------------------------------------------------------
 # Observability: JSON logs + tracing flag (PR 4, C3)
 # ---------------------------------------------------------------------------

@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     # --- LLM configuration ------------------------------------------------
 
     llm_provider: LLMProvider = Field(
-        default=LLMProvider.ANTHROPIC,
+        default=LLMProvider.XAI,
         description="Which LLM backend to use: anthropic | openai | groq | xai",
     )
     llm_model: str | None = Field(
