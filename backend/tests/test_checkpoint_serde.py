@@ -9,7 +9,10 @@ schema, so ``ConversationStage`` and the LangChain message classes still load.
 The variable is read once, at ``langgraph`` import time, so each case runs in a
 fresh subprocess. The strict case takes its environment from the ``ENV`` lines of
 the Dockerfile's runtime stage (after the last ``FROM``), so it fails unless the
-production image really sets the variable.
+production image really sets the variable. The parser forgets ``ENV`` at every
+``FROM``; if the runtime stage is ever built ``FROM`` an earlier stage, Docker keeps
+that stage's ``ENV`` but the parser does not. That mismatch can only cause a false
+alarm, never a false pass.
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ import shlex
 import subprocess
 import sys
 import textwrap
+from importlib import metadata
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -79,8 +83,13 @@ def _runtime_stage_env(dockerfile: Path) -> dict[str, str]:
     Return the variables set by ``ENV`` in the Dockerfile's final (runtime) stage.
 
     Comment lines are skipped and ``\\`` continuations joined; both
-    ``ENV KEY=value ...`` and the legacy ``ENV KEY value`` form are handled. ``ENV``
-    in an earlier stage (e.g. the builder) is dropped, as the next ``FROM`` drops it.
+    ``ENV KEY=value ...`` and the legacy ``ENV KEY value`` form are handled.
+
+    ``ENV`` set before the last ``FROM`` is dropped. That matches Docker only for
+    ``FROM <image>``: if the runtime stage is ever built from an earlier stage (e.g.
+    ``FROM builder AS runtime``), Docker keeps that stage's ``ENV`` but this parser
+    drops it. The strict test then fails as a false alarm; it can never pass by
+    mistake.
     """
     instructions: list[str] = []
     pending = ""
@@ -131,7 +140,12 @@ class TestStrictMsgpack:
         assert out["stage_type"] == "ConversationStage"
         assert out["stage_value"] == "qualification"
         assert out["message_types"] == ["HumanMessage", "AIMessage"]
-        assert out["unregistered_revived"] is False
+        assert out["unregistered_revived"] is False, (
+            "an unregistered type was revived under the image's ENV, so strict msgpack "
+            "is off. Likely causes: the Dockerfile runtime stage no longer sets "
+            "LANGGRAPH_STRICT_MSGPACK=true, or the installed langgraph-checkpoint "
+            f"({metadata.version('langgraph-checkpoint')}) is older than 4.0.1."
+        )
 
     def test_default_mode_revives_unregistered_types(self):
         """Control: without the variable the same payload is revived (the advisory's gap)."""
