@@ -7,6 +7,10 @@ without any network call, so the tests stay hermetic.
 
 from __future__ import annotations
 
+import importlib
+
+import pytest
+
 
 def test_llm_builder_applies_timeout_and_retries(monkeypatch):
     monkeypatch.setenv("LLM_PROVIDER", "openai")
@@ -44,6 +48,40 @@ def test_default_llm_provider_is_xai(monkeypatch):
     from app.config import LLMProvider, Settings
 
     assert Settings(_env_file=None).llm_provider is LLMProvider.XAI
+
+
+# ---------------------------------------------------------------------------
+# Every LLM_PROVIDER builds (provider packages bundled in requirements.txt)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    ("provider", "key_var", "module", "class_name", "model_attr", "model"),
+    [
+        ("anthropic", "ANTHROPIC_API_KEY", "langchain_anthropic", "ChatAnthropic", "model", "claude-sonnet-4-6"),
+        ("openai", "OPENAI_API_KEY", "langchain_openai", "ChatOpenAI", "model_name", "gpt-4o"),
+        ("groq", "GROQ_API_KEY", "langchain_groq", "ChatGroq", "model_name", "llama-3.3-70b-versatile"),
+        ("xai", "XAI_API_KEY", "langchain_openai", "ChatOpenAI", "model_name", "grok-4.3"),
+    ],
+)
+def test_every_provider_builds_its_default_model(
+    monkeypatch, provider, key_var, module, class_name, model_attr, model
+):
+    """Each provider's package is installed and get_llm() builds its default model.
+
+    CI installs requirements-dev.txt (-> requirements.txt), so a provider package
+    dropped from requirements.txt fails here instead of at app startup.
+    """
+    monkeypatch.setenv("LLM_PROVIDER", provider)
+    monkeypatch.setenv(key_var, "test-key-not-real")
+    monkeypatch.setenv("LLM_MODEL", "")  # beat an LLM_MODEL from a local .env
+
+    from app.config import get_llm, get_settings
+
+    get_settings.cache_clear()
+    llm = get_llm()
+
+    assert type(llm) is getattr(importlib.import_module(module), class_name)
+    assert getattr(llm, model_attr) == model
 
 
 # ---------------------------------------------------------------------------
