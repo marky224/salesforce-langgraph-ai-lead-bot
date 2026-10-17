@@ -278,11 +278,15 @@ settings = get_settings()
 # Default model names per provider
 # ---------------------------------------------------------------------------
 
+# Checked 2026-10-17 against each provider's models docs. Every builder sends
+# ``temperature``, so a default must accept it: Claude 4.7+ return 400 on a
+# non-default temperature and GPT-6 reasoning models need it removed, which rules
+# out the Claude 5 and GPT-6 lines until the builders change.
 _DEFAULT_MODELS: dict[LLMProvider, str] = {
-    LLMProvider.ANTHROPIC: "claude-sonnet-4-20250514",
-    LLMProvider.OPENAI: "gpt-4o",
-    LLMProvider.GROQ: "llama-3.3-70b-versatile",
-    LLMProvider.XAI: "grok-3",
+    LLMProvider.ANTHROPIC: "claude-sonnet-4-6",  # platform.claude.com/docs/en/about-claude/model-deprecations
+    LLMProvider.OPENAI: "gpt-4o",  # developers.openai.com/api/docs/deprecations (shuts down 2027-01-14)
+    LLMProvider.GROQ: "llama-3.3-70b-versatile",  # console.groq.com/docs/models (Production)
+    LLMProvider.XAI: "grok-4.3",  # docs.x.ai/docs/models; also prod's LLM_MODEL
 }
 
 
