@@ -145,9 +145,9 @@ See [architecture.md](architecture.md) for detailed Mermaid diagrams of the Lang
 - Custom TARS robot avatar and dark-themed chat bubble UI
 
 **Swappable LLM Providers**
-- Anthropic Claude, OpenAI GPT-4o, Groq (Llama/Mixtral), xAI Grok
-- Switch providers via a single environment variable (`LLM_PROVIDER`)
-- Currently running xAI Grok (`grok-4-1-fast-reasoning`) in production
+- Anthropic Claude, OpenAI GPT-4o, Groq (Llama), xAI Grok
+- Switch providers with one environment variable (`LLM_PROVIDER`) plus that provider's API key: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GROQ_API_KEY` or `XAI_API_KEY`
+- Currently running xAI Grok (`grok-4.3`) in production
 
 **Salesforce Integration**
 - Automatic Lead creation with 6 custom qualification fields
@@ -290,10 +290,10 @@ curl -X POST https://salesforce-langgraph-ai-lead-bot.purplesky-0949fcd0.central
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `LLM_PROVIDER` | No | `xai` | LLM backend: `anthropic`, `openai`, `groq`, `xai` |
-| `ANTHROPIC_API_KEY` | Yes* | — | API key for the active provider |
-| `OPENAI_API_KEY` | Yes* | — | API key for the active provider |
-| `GROQ_API_KEY` | Yes* | — | API key for the active provider |
-| `XAI_API_KEY` | Yes* | — | API key for the active provider |
+| `ANTHROPIC_API_KEY` | Yes* | — | API key for `LLM_PROVIDER=anthropic` |
+| `OPENAI_API_KEY` | Yes* | — | API key for `LLM_PROVIDER=openai` |
+| `GROQ_API_KEY` | Yes* | — | API key for `LLM_PROVIDER=groq` |
+| `XAI_API_KEY` | Yes* | — | API key for `LLM_PROVIDER=xai` |
 | `SF_INSTANCE_URL` | Yes | — | Salesforce org URL |
 | `SF_CLIENT_ID` | Yes | — | Connected App consumer key |
 | `SF_CLIENT_SECRET` | Yes | — | Connected App consumer secret |
