@@ -18,11 +18,12 @@ langgraph-checkpoint-postgres==3.1.2   # durable Postgres checkpointer (Neon); s
 langgraph-checkpoint==4.2.0            # transitive via langgraph + the saver; pinned so Dependabot tracks it (floors admit 4.1.0, GHSA-fjqc-hq36-qh5p)
 psycopg[binary]==3.2.13                 # async driver; binary extra → no libpq in slim image
 
-# LLM provider — only langchain-openai is bundled. It serves BOTH OpenAI and
-# xAI/Grok (xAI is OpenAI-compatible); prod runs xAI Grok. anthropic and groq
-# are intentionally NOT installed: LLM_PROVIDER=anthropic|groq fails fast at
-# startup with a clear ImportError (see app/config.py builders). To use one,
-# add the matching package (langchain-anthropic / langchain-groq).
+# LLM providers — one integration per LLM_PROVIDER value, all bundled, so switching
+# provider takes only LLM_PROVIDER plus that provider's API key. langchain-openai
+# serves both openai and xai (xAI is OpenAI-compatible; prod runs xAI Grok). All
+# three depend on langchain-core: bump them with the LangChain set above.
+langchain-anthropic==1.7.5              # newest on langchain-core 1.6.9 (1.7.6 needs >=1.6.10); also the eval judge's
+langchain-groq==1.1.3
 langchain-openai==1.7.0
 openai==2.54.0                          # held on 2.x: openai 3 swaps httpx for httpx2, which the eval gate's vcrpy 8.1.1 can't intercept; move with vcrpy
 

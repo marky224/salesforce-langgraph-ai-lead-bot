@@ -6,8 +6,8 @@ with an in-memory ``MemorySaver`` and a ``ChatOpenAI`` client (constructed,
 never called over the network); the test then overrides the LLM with an async
 mock so endpoint bodies return without hitting an API.
 
-``LLM_PROVIDER=openai`` is used because ``langchain-anthropic`` is not installed
-in the test environment (only ``langchain-openai`` is).  ``RATE_LIMIT`` is set
+``LLM_PROVIDER=openai`` keeps the lifespan's model a known ``ChatOpenAI`` (one
+test asserts that provider in the trace metadata).  ``RATE_LIMIT`` is set
 tiny so the limit is reached in a few calls.  Rate-limit buckets are keyed per
 client IP, so each test uses a distinct ``X-Forwarded-For`` value to stay
 isolated from the others.

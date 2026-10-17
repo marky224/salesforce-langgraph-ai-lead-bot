@@ -1,9 +1,8 @@
 """
 Config / LLM-factory tests (PR 3, C1 — LLM timeout + bounded retry).
 
-These exercise the real `get_llm()` under `LLM_PROVIDER=openai` (the only provider
-package installed); `ChatOpenAI` constructs without any network call, so the tests
-stay hermetic.
+These exercise the real `get_llm()` with dummy API keys; the chat models construct
+without any network call, so the tests stay hermetic.
 """
 
 from __future__ import annotations
