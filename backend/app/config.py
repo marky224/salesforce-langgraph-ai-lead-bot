@@ -8,7 +8,7 @@ chat model based on the ``LLM_PROVIDER`` env var.
 Supported providers:
 - **anthropic** — Claude via ``langchain-anthropic``
 - **openai** — GPT-4o via ``langchain-openai``
-- **groq** — Llama / Mixtral via ``langchain-groq``
+- **groq** — Llama via ``langchain-groq``
 - **xai** — Grok via OpenAI-compatible endpoint
 
 Usage::
