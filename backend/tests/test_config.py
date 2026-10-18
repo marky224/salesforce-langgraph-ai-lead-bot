@@ -115,6 +115,21 @@ def test_json_formatter_emits_structured_fields():
     assert out["thread_id"] == "thread-9"
 
 
+def test_configure_logging_quiets_httpx2_loggers():
+    """The anthropic SDK logs through httpx2/httpcore2; quiet them like httpx/httpcore."""
+    import logging
+
+    from app.config import configure_logging
+
+    for name in ("httpx2", "httpcore2"):
+        logging.getLogger(name).setLevel(logging.NOTSET)  # don't rely on an earlier test
+
+    configure_logging()
+
+    assert logging.getLogger("httpx2").level == logging.WARNING
+    assert logging.getLogger("httpcore2").level == logging.WARNING
+
+
 def test_tracing_flag_parsed_from_env(monkeypatch):
     monkeypatch.setenv("LANGCHAIN_TRACING_V2", "true")
 

@@ -488,7 +488,8 @@ def configure_logging() -> None:
     logging.basicConfig(level=level, handlers=[handler], force=True)
 
     # Quieten noisy third-party loggers
-    for noisy in ("httpx", "httpcore", "urllib3", "asyncio"):
+    # (httpx2/httpcore2 are the anthropic SDK's HTTP client.)
+    for noisy in ("httpx", "httpcore", "httpx2", "httpcore2", "urllib3", "asyncio"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
     logger.info("Logging configured at %s level", log_level)
