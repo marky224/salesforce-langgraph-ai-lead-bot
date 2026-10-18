@@ -8,7 +8,7 @@ chat model based on the ``LLM_PROVIDER`` env var.
 Supported providers:
 - **anthropic** — Claude via ``langchain-anthropic``
 - **openai** — GPT-4o via ``langchain-openai``
-- **groq** — Llama / Mixtral via ``langchain-groq``
+- **groq** — Llama via ``langchain-groq``
 - **xai** — Grok via OpenAI-compatible endpoint
 
 Usage::
@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     # --- LLM configuration ------------------------------------------------
 
     llm_provider: LLMProvider = Field(
-        default=LLMProvider.ANTHROPIC,
+        default=LLMProvider.XAI,
         description="Which LLM backend to use: anthropic | openai | groq | xai",
     )
     llm_model: str | None = Field(
@@ -278,11 +278,15 @@ settings = get_settings()
 # Default model names per provider
 # ---------------------------------------------------------------------------
 
+# Checked 2026-10-17 against each provider's models docs. Every builder sends
+# ``temperature``, so a default must accept it: Claude 4.7+ return 400 on a
+# non-default temperature and GPT-6 reasoning models need it removed, which rules
+# out the Claude 5 and GPT-6 lines until the builders change.
 _DEFAULT_MODELS: dict[LLMProvider, str] = {
-    LLMProvider.ANTHROPIC: "claude-sonnet-4-20250514",
-    LLMProvider.OPENAI: "gpt-4o",
-    LLMProvider.GROQ: "llama-3.3-70b-versatile",
-    LLMProvider.XAI: "grok-3",
+    LLMProvider.ANTHROPIC: "claude-sonnet-4-6",  # platform.claude.com/docs/en/about-claude/model-deprecations
+    LLMProvider.OPENAI: "gpt-4o",  # developers.openai.com/api/docs/deprecations (shuts down 2027-01-14)
+    LLMProvider.GROQ: "llama-3.3-70b-versatile",  # console.groq.com/docs/models (Production)
+    LLMProvider.XAI: "grok-4.3",  # docs.x.ai/docs/models; also prod's LLM_MODEL
 }
 
 
@@ -484,7 +488,8 @@ def configure_logging() -> None:
     logging.basicConfig(level=level, handlers=[handler], force=True)
 
     # Quieten noisy third-party loggers
-    for noisy in ("httpx", "httpcore", "urllib3", "asyncio"):
+    # (httpx2/httpcore2 are the anthropic SDK's HTTP client.)
+    for noisy in ("httpx", "httpcore", "httpx2", "httpcore2", "urllib3", "asyncio"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
     logger.info("Logging configured at %s level", log_level)
