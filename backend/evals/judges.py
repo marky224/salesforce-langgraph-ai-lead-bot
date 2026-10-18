@@ -23,7 +23,7 @@ risks correlated blind spots (the judge sharing the SUT's failure modes).  It is
 built through the app's own ``get_llm`` (Anthropic provider) so the key is sourced
 from ``.env`` via Settings and the per-call timeout / retry knobs apply — the same
 path ``targets.build_eval_llm`` uses for the xAI SUT.  Requires ``langchain-anthropic``
-(an eval-only dependency) + ``ANTHROPIC_API_KEY``.
+(bundled in ``requirements.txt``) + ``ANTHROPIC_API_KEY``.
 
 These are **async** evaluators (``create_async_llm_as_judge``) so they compose with
 the async sim loop; each returns an openevals ``EvaluatorResult``
