@@ -146,7 +146,7 @@ See [architecture.md](architecture.md) for detailed Mermaid diagrams of the Lang
 
 **Swappable LLM Providers**
 - Anthropic Claude, OpenAI GPT-4o, Groq (Llama), xAI Grok
-- Switch providers with one environment variable (`LLM_PROVIDER`) plus that provider's API key: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GROQ_API_KEY` or `XAI_API_KEY`
+- Switch providers with one environment variable (`LLM_PROVIDER`) plus that provider's API key (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GROQ_API_KEY` or `XAI_API_KEY`), with `LLM_MODEL` unset (each provider has a default model) or set to one of that provider's models
 - Currently running xAI Grok (`grok-4.3`) in production
 
 **Salesforce Integration**
@@ -290,6 +290,7 @@ curl -X POST https://salesforce-langgraph-ai-lead-bot.purplesky-0949fcd0.central
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `LLM_PROVIDER` | No | `xai` | LLM backend: `anthropic`, `openai`, `groq`, `xai` |
+| `LLM_MODEL` | No | Per provider | Override the provider's default model; must be one of that provider's models |
 | `ANTHROPIC_API_KEY` | Yes* | — | API key for `LLM_PROVIDER=anthropic` |
 | `OPENAI_API_KEY` | Yes* | — | API key for `LLM_PROVIDER=openai` |
 | `GROQ_API_KEY` | Yes* | — | API key for `LLM_PROVIDER=groq` |
