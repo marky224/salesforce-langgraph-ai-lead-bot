@@ -412,9 +412,13 @@ def test_startup_does_not_wait_for_or_fail_on_the_site_index(lifespan_env, monke
 
     monkeypatch.setattr(site_index, "_urlopen", _hanging_urlopen)
 
+    started = time.monotonic()
     with TestClient(server.app) as test_client:
-        # Startup has finished, and the first fetch is still in flight: had the
-        # lifespan awaited it, startup would only return once release.wait timed out.
+        # Startup returned at once (it normally takes a few hundredths of a second),
+        # so it didn't wait on the fetch even briefly...
+        assert time.monotonic() - started < 1.0
+        # ...and the first fetch is still in flight: had the lifespan awaited it,
+        # startup would only return once release.wait timed out.
         assert entered.wait(5)
         assert not done.is_set()
         assert test_client.get("/health").status_code == 200
