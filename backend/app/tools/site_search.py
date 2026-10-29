@@ -104,17 +104,24 @@ def tokenize(text: str) -> list[str]:
     NFKC, ``[A-Za-z0-9]+`` runs, lower-cased; drop 1-character tokens and
     stopwords (except the acronym ``IT``), then a minimal plural fold
     (``agents`` -> ``agent``, ``apis`` -> ``api``; ``-ss``/``-us``/``-sis`` endings
-    are kept: ``process``, ``status``, ``analysis``). The same function runs on
+    are kept: ``process``, ``status``, ``analysis``). Stopwords are checked before
+    the fold (so ``this`` doesn't become ``thi``) and after it (so ``explains`` and
+    ``websites`` drop like ``explain`` and ``website``). The same function runs on
     documents and queries, so the fold only has to be consistent, not
     linguistically right.
     """
     tokens: list[str] = []
     for raw in _TOKEN.findall(unicodedata.normalize("NFKC", text)):
         tok = raw.lower()
-        if raw not in _KEEP_ACRONYMS and (len(tok) < 2 or tok in STOPWORDS):
+        if raw in _KEEP_ACRONYMS:
+            tokens.append(tok)
+            continue
+        if len(tok) < 2 or tok in STOPWORDS:
             continue
         if len(tok) > 3 and tok.endswith("s") and not tok.endswith(("ss", "us", "sis")):
             tok = tok[:-1]
+            if tok in STOPWORDS:
+                continue
         tokens.append(tok)
     return tokens
 

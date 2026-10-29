@@ -50,6 +50,14 @@ class TestTokenize:
     def test_drops_framing_words_about_marks_work(self):
         assert tokenize("Has Mark worked with LangGraph? What's his experience?") == ["langgraph"]
 
+    def test_inflected_framing_words_drop_after_the_plural_fold(self):
+        assert tokenize("Which article explains it") == []
+        assert tokenize("sites websites marks reads shows tells knows wants explains learns") == []
+
+    def test_stopwords_that_end_in_s_are_dropped_before_the_fold(self):
+        # Without the first check, "this" and "does" would fold to "thi" and "doe".
+        assert tokenize("this does canaries") == ["canarie"]
+
     def test_keeps_the_acronym_IT_but_not_the_pronoun(self):
         assert tokenize("It was IT support work") == ["it", "support", "work"]
         assert tokenize("it support") == ["support"]
@@ -99,6 +107,16 @@ class TestRank:
         on_topic = search.rank("terraform canaries")[0][1]
         diluted = search.rank("terraform canaries kubernetes helm")[0][1]
         assert diluted < on_topic
+
+    @pytest.mark.parametrize(
+        ("inflected", "base"),
+        [
+            ("Which article explains how lead scoring works?", "lead scoring works"),
+            ("Which of the websites covers terraform canaries?", "covers terraform canaries"),
+        ],
+    )
+    def test_inflected_framing_words_do_not_lower_the_score(self, search, inflected, base):
+        assert search.rank(inflected) == search.rank(base)
 
     def test_query_with_no_content_terms_returns_nothing(self, search):
         assert search.rank("what did you write about?") == []
