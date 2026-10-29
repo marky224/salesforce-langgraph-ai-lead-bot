@@ -28,6 +28,8 @@ os.environ.setdefault("LOG_LEVEL", "WARNING")
 os.environ["LLM_STRUCTURED_OUTPUT"] = "false"
 os.environ["LANGSMITH_TRACING"] = "false"
 os.environ["LANGCHAIN_TRACING_V2"] = "false"
+# No site-index fetch from evals: tests that need the index set it directly.
+os.environ["SITE_INDEX_URL"] = ""
 
 
 def pytest_configure(config: pytest.Config) -> None:

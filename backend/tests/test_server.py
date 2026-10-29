@@ -17,7 +17,12 @@ from __future__ import annotations
 
 import itertools
 import json
+import threading
+import time
+import urllib.error
 from contextlib import asynccontextmanager
+from email.message import Message
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -280,3 +285,136 @@ def test_lifespan_flushes_tracer_on_shutdown(monkeypatch):
         pass
 
     assert flushed == [1]  # flushed exactly once, because a tracer was active
+
+
+# ---------------------------------------------------------------------------
+# Site index: loaded in the background by the lifespan, never blocking startup
+# ---------------------------------------------------------------------------
+
+SITE_INDEX_URL = "https://www.markandrewmarquez.com/site-index.json"
+SITE_INDEX_FIXTURE = Path(__file__).parent / "fixtures" / "site_index_v1.json"
+
+
+class _FakeIndexResponse:
+    """The slice of an HTTP response that site_index.fetch_site_index reads."""
+
+    def __init__(self, body: bytes):
+        self._body = body
+        self.headers = Message()
+        self.headers["Content-Type"] = "application/json"
+
+    def read(self, size: int = -1) -> bytes:
+        return self._body if size < 0 else self._body[:size]
+
+    def geturl(self) -> str:
+        return SITE_INDEX_URL
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return None
+
+
+@pytest.fixture
+def lifespan_env(monkeypatch):
+    """Env for driving the real lifespan offline; resets the in-memory index."""
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
+
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
+    from app import server
+    from app.tools import site_index
+
+    @asynccontextmanager
+    async def _memory_checkpointer(_settings):
+        yield MemorySaver()
+
+    monkeypatch.setattr(server, "open_checkpointer", _memory_checkpointer)
+    site_index.set_site_index(None)
+    yield server, site_index
+    site_index.set_site_index(None)
+
+
+def _wait_for(predicate, timeout: float = 5.0) -> bool:
+    deadline = time.monotonic() + timeout
+    while not predicate():
+        if time.monotonic() > deadline:
+            return False
+        time.sleep(0.01)
+    return True
+
+
+def test_lifespan_never_fetches_the_site_index_when_url_is_blank(lifespan_env, monkeypatch):
+    server, site_index = lifespan_env
+    fetches: list[object] = []
+    started: list[tuple] = []
+
+    async def _record_refresh(*args):
+        started.append(args)
+
+    monkeypatch.setattr(site_index, "_urlopen", lambda request, timeout: fetches.append(request))
+    monkeypatch.setattr(server, "run_site_index_refresh", _record_refresh)
+
+    with TestClient(server.app) as test_client:  # conftest leaves SITE_INDEX_URL empty
+        assert test_client.get("/health").status_code == 200
+
+    assert started == []
+    assert fetches == []
+    assert site_index.get_site_index() is None
+
+
+def test_lifespan_loads_the_site_index_in_the_background(lifespan_env, monkeypatch):
+    server, site_index = lifespan_env
+    monkeypatch.setenv("SITE_INDEX_URL", SITE_INDEX_URL)
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
+    calls: list[tuple] = []
+
+    def _fake_urlopen(request, timeout):
+        calls.append((request.full_url, timeout))
+        return _FakeIndexResponse(SITE_INDEX_FIXTURE.read_bytes())
+
+    monkeypatch.setattr(site_index, "_urlopen", _fake_urlopen)
+
+    with TestClient(server.app):
+        assert _wait_for(lambda: site_index.get_site_index() is not None)
+
+    assert calls[0] == (SITE_INDEX_URL, 10.0)
+    index = site_index.get_site_index()
+    assert index is not None
+    assert len(index.chunks) == 13
+
+
+def test_startup_does_not_wait_for_or_fail_on_the_site_index(lifespan_env, monkeypatch):
+    """A hung, then failing, fetch neither delays startup nor degrades readiness."""
+    server, site_index = lifespan_env
+    monkeypatch.setenv("SITE_INDEX_URL", SITE_INDEX_URL)
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
+    entered = threading.Event()
+    release = threading.Event()
+
+    def _hanging_urlopen(request, timeout):
+        entered.set()
+        release.wait(5)
+        raise urllib.error.URLError("connection refused")
+
+    monkeypatch.setattr(site_index, "_urlopen", _hanging_urlopen)
+
+    with TestClient(server.app) as test_client:
+        # Startup finished while the fetch is still hanging.
+        assert entered.wait(5)
+        assert test_client.get("/health").status_code == 200
+        assert test_client.get("/health/ready").status_code == 200
+        release.set()
+        assert test_client.get("/health").status_code == 200
+
+    assert site_index.get_site_index() is None

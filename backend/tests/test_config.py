@@ -137,3 +137,75 @@ def test_tracing_flag_parsed_from_env(monkeypatch):
 
     get_settings.cache_clear()
     assert get_settings().langchain_tracing_v2 is True
+
+
+# ---------------------------------------------------------------------------
+# Site index settings (TARS site questions)
+# ---------------------------------------------------------------------------
+
+_SITE_ENV = ("SITE_INDEX_URL", "SITE_INDEX_REFRESH_SECONDS", "SITE_SEARCH_MIN_SCORE")
+
+
+def test_site_index_defaults(monkeypatch):
+    """Unset, the bot loads the published index hourly with the calibrated threshold."""
+    for var in _SITE_ENV:
+        monkeypatch.delenv(var, raising=False)
+
+    from app.config import Settings
+
+    settings = Settings(_env_file=None)
+    assert settings.site_index_url == "https://www.markandrewmarquez.com/site-index.json"
+    assert settings.site_index_refresh_seconds == 3600
+    assert settings.site_search_min_score == 0.4
+
+
+def test_site_index_env_overrides(monkeypatch):
+    monkeypatch.setenv("SITE_INDEX_URL", "https://example.org/index.json")
+    monkeypatch.setenv("SITE_INDEX_REFRESH_SECONDS", "600")
+    monkeypatch.setenv("SITE_SEARCH_MIN_SCORE", "0.55")
+
+    from app.config import Settings
+
+    settings = Settings(_env_file=None)
+    assert settings.site_index_url == "https://example.org/index.json"
+    assert settings.site_index_refresh_seconds == 600
+    assert settings.site_search_min_score == 0.55
+
+
+@pytest.mark.parametrize("value", ["", "   "])
+def test_blank_site_index_url_turns_retrieval_off(monkeypatch, value):
+    monkeypatch.setenv("SITE_INDEX_URL", value)
+
+    from app.config import Settings
+
+    assert Settings(_env_file=None).site_index_url == ""
+
+
+@pytest.mark.parametrize(
+    ("var", "value"),
+    [
+        ("SITE_INDEX_URL", "http://www.markandrewmarquez.com/site-index.json"),
+        ("SITE_INDEX_URL", "file:///etc/hosts"),
+        ("SITE_INDEX_URL", "https://"),
+        ("SITE_INDEX_URL", "www.markandrewmarquez.com/site-index.json"),
+        ("SITE_INDEX_REFRESH_SECONDS", "30"),
+        ("SITE_SEARCH_MIN_SCORE", "1.5"),
+        ("SITE_SEARCH_MIN_SCORE", "-0.1"),
+    ],
+)
+def test_site_index_settings_reject_bad_values(monkeypatch, var, value):
+    monkeypatch.setenv(var, value)
+
+    from pydantic import ValidationError
+
+    from app.config import Settings
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
+def test_test_suite_never_points_at_a_real_site_index():
+    """conftest blanks SITE_INDEX_URL, so no test lifespan fetches the index."""
+    from app.config import get_settings
+
+    assert get_settings().site_index_url == ""

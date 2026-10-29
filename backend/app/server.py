@@ -25,6 +25,7 @@ Or via Docker::
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from collections.abc import AsyncGenerator
@@ -53,6 +54,7 @@ from app.models.schemas import (
     ConversationStage,
     HealthResponse,
 )
+from app.tools.site_index import run_site_index_refresh
 from app.tracing import build_tracer
 
 logger = logging.getLogger(__name__)
@@ -160,9 +162,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     1. Configure logging.
     2. Instantiate the LLM provider.
     3. Inject the LLM into the graph nodes.
-    4. Compile the LangGraph with a checkpointer.
+    4. Start the site-index refresh in the background (not awaited, so startup
+       never waits on the network or fails because of the index).
+    5. Compile the LangGraph with a checkpointer.
 
     On shutdown:
+    - Cancel the site-index refresh.
     - Log a clean shutdown message.
     """
     global _graph, _trace_base, _tracer  # noqa: PLW0603
@@ -195,14 +200,30 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     }
     _tracer = build_tracer(settings)
 
+    # Site index for TARS site questions: load now and every refresh interval.
+    # An empty SITE_INDEX_URL turns retrieval off (no task, no fetch).
+    site_index_task: asyncio.Task[None] | None = None
+    if settings.site_index_url:
+        site_index_task = asyncio.create_task(
+            run_site_index_refresh(
+                settings.site_index_url, settings.site_index_refresh_seconds
+            )
+        )
+
     # Open the checkpointer (Postgres if DATABASE_URL set, else MemorySaver) and
     # keep it open for the whole process so the DB connection lives for the
     # app's lifetime.
-    async with open_checkpointer(settings) as checkpointer:
-        _graph = build_graph(checkpointer=checkpointer)
-        logger.info("LangGraph compiled and ready")
+    try:
+        async with open_checkpointer(settings) as checkpointer:
+            _graph = build_graph(checkpointer=checkpointer)
+            logger.info("LangGraph compiled and ready")
 
-        yield
+            yield
+    finally:
+        if site_index_task is not None:
+            site_index_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await site_index_task
 
     # --- Shutdown ---
     if _tracer is not None:

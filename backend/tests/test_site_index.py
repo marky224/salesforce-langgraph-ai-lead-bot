@@ -384,3 +384,54 @@ class TestRefresh:
             await run_site_index_refresh(INDEX_URL, 3600)
         assert loads == [INDEX_URL, INDEX_URL]
         assert sleeps == [3600, 3600]
+
+
+# ---------------------------------------------------------------------------
+# The default SITE_SEARCH_MIN_SCORE on the fixture
+# ---------------------------------------------------------------------------
+
+class TestDefaultThreshold:
+    """
+    The default min score (0.4) was calibrated on the full published index: of
+    25 labeled questions, all 16 answerable ones picked their page and scored at
+    least 0.437; the 9 off-site ones scored at most 0.355. This pins the same split
+    on the fixture, so a ranking or default change that breaks it fails here.
+    """
+
+    ANSWERABLE = [
+        ("Does the TARS chatbot hand leads off to Salesforce and Agentforce?",
+         "salesforce-langgraph-ai-lead-bot"),
+        ("What does M365 Guardian's weekly security report check?", "m365-guardian"),
+        ("Can M365 Guardian run in Microsoft Teams?", "m365-guardian"),
+        ("What did the KPMG virtual internship find about the ideal customer?", "kpmg-project"),
+        ("How do I try api-medic?", "api-medic"),
+    ]
+    OFF_SITE = [
+        "What's the weather in Paris today?",
+        "Do you have an article about Kubernetes Helm charts?",
+        "What did Mark write about React Native mobile apps?",
+        "What is the capital of Australia?",
+        "Has Mark written about blockchain smart contracts?",
+        "Did Mark write about quantum computing?",
+    ]
+
+    @pytest.fixture
+    def search(self):
+        return _parse(FIXTURE_BYTES).search
+
+    @pytest.fixture
+    def min_score(self, monkeypatch) -> float:
+        monkeypatch.delenv("SITE_SEARCH_MIN_SCORE", raising=False)
+        from app.config import Settings
+
+        return Settings(_env_file=None).site_search_min_score
+
+    @pytest.mark.parametrize(("question", "slug"), ANSWERABLE)
+    def test_answerable_question_hits_its_page(self, search, min_score, question, slug):
+        hit = search_site(search, question, min_score=min_score)
+        assert hit is not None, question
+        assert hit.url == f"https://{HOST}/portfolio/{slug}/"
+
+    @pytest.mark.parametrize("question", OFF_SITE)
+    def test_off_site_question_is_a_miss(self, search, min_score, question):
+        assert search_site(search, question, min_score=min_score) is None

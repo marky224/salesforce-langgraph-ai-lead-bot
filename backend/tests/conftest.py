@@ -16,6 +16,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 os.environ.setdefault("LLM_PROVIDER", "anthropic")
 os.environ.setdefault("ANTHROPIC_API_KEY", "sk-test-not-real")
 os.environ.setdefault("LOG_LEVEL", "WARNING")
+# Never fetch the real site index: an empty URL turns retrieval off. Forced, not
+# setdefault, so a shell or .env value can't make the suite go online; tests
+# that exercise the loader set their own URL and fake the fetch.
+os.environ["SITE_INDEX_URL"] = ""
 
 
 @pytest.fixture(autouse=True)
