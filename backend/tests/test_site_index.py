@@ -304,6 +304,24 @@ class TestRedirects:
         assert len(redirect_handlers) == 1
         assert isinstance(redirect_handlers[0], site_index._RefuseRedirects)
 
+    def test_fetch_refuses_a_redirect_through_the_module_opener(self, monkeypatch):
+        """The real _urlopen -> _OPENER path, with https answered by a 301 (no network)."""
+        requests: list[str] = []
+
+        def _answer_301(handler, req):
+            requests.append(req.full_url)
+            headers = Message()
+            # Same host and https, so only the redirect refusal can stop it.
+            headers["Location"] = f"https://{HOST}/moved/site-index.json"
+            response = urllib.response.addinfourl(io.BytesIO(b""), headers, req.full_url, 301)
+            response.msg = "Moved Permanently"
+            return response
+
+        monkeypatch.setattr(urllib.request.HTTPSHandler, "https_open", _answer_301)
+        with pytest.raises(SiteIndexError, match="redirect refused: HTTP 301"):
+            fetch_site_index(INDEX_URL)
+        assert requests == [INDEX_URL]
+
     @pytest.mark.asyncio
     async def test_a_redirect_is_a_logged_load_failure(self, fake_urlopen, caplog):
         fake_urlopen.error = SiteIndexError("redirect refused: HTTP 302 to https://evil.example/")
