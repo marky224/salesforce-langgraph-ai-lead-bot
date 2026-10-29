@@ -12,6 +12,9 @@ Node categories:
   (lead info, qualification signals, objections) and patches state dicts.
 - **Scoring node** — computes a 0-100 lead score from qualification data.
 - **Salesforce node** — creates Lead + Task records via the Salesforce API.
+- **Site answer node** — answers a question about Mark's own articles and
+  projects from the site index, with the page's link, then hands back to the
+  stage the visitor was in (it never changes ``stage``).
 - **Error node** — produces a graceful fallback reply when something breaks.
 
 All LLM calls go through a shared ``_invoke_llm`` helper so the provider
@@ -22,8 +25,10 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from typing import Any
+from urllib.parse import urlsplit
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
@@ -39,15 +44,23 @@ from app.graph.prompts import (
     PERSONA,
     QUALIFICATION_PROMPT,
     ROUTER_PROMPT,
+    SITE_ANSWER_PROMPT,
+    SITE_NO_MATCH_REPLY,
+    SITE_RETURN_LINES,
+    SITE_UNAVAILABLE_REPLY,
     TRANSCRIPT_SUMMARY_PROMPT,
     format_known_info,
+    format_site_excerpts,
     format_transcript,
     get_missing_contact_fields,
     get_missing_qualification_fields,
+    site_return_hint,
 )
 from app.graph.state import GraphState
 from app.models.schemas import ConversationStage
 from app.tools.qualification import compute_lead_score
+from app.tools.site_index import get_site_index
+from app.tools.site_search import SiteHit, search_site
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +118,7 @@ _STATE_DEFAULTS: dict[str, Any] = {
     "salesforce_task_id": None,
     "retry_count": 0,
     "error": None,
+    "site_question": False,
 }
 
 
@@ -531,6 +545,128 @@ async def confirmation_node(state: GraphState) -> dict:
         "messages": [AIMessage(content=reply)],
         "stage": ConversationStage.CONFIRMATION,
     }
+
+
+# ---------------------------------------------------------------------------
+# Site answer node (a detour: questions about Mark's articles and projects)
+# ---------------------------------------------------------------------------
+
+_SITE_REPLY_MAX_SENTENCES = 4
+_SITE_REPLY_MAX_CHARS = 600
+_SITE_TITLE_MAX_CHARS = 100
+_NO_ANSWER = "NO_ANSWER"
+
+_MD_IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
+_MD_LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+# A URL stops before trailing punctuation, so the sentence keeps its full stop.
+_URL_TAIL = r"(?=[.,;:!?)\]]*(?:\s|$))"
+_URL = re.compile(rf"(?i)\b(?:https?://|www\.)[^\s<>\"']+?{_URL_TAIL}")
+_SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+(?=[A-Z\"'‘“])")
+_TITLE_DROP = re.compile(r"[\[\]()<>]")
+
+
+def _current_stage(state: GraphState) -> ConversationStage:
+    """``state['stage']`` as the enum, whether the checkpoint restored an enum or a str."""
+    stage = state.get("stage", ConversationStage.DISCOVERY)
+    if isinstance(stage, ConversationStage):
+        return stage
+    try:
+        return ConversationStage(stage)
+    except ValueError:
+        return ConversationStage.DISCOVERY
+
+
+def _link_title(title: str) -> str:
+    """The chunk's page title as safe markdown link text."""
+    text = "".join(ch for ch in title if ch.isprintable())
+    text = " ".join(_TITLE_DROP.sub("", text).split())[:_SITE_TITLE_MAX_CHARS].rstrip()
+    return text or "the full write-up"
+
+
+def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
+    """
+    Make the model's site answer safe to show, or ``None`` for no answer.
+
+    Removes every link and URL the model wrote (the only link is the chunk's
+    own url, appended here), turns ``<``/``>`` into ``‹``/``›`` (the widget
+    renders markdown into HTML), caps the text at 4 sentences and 600 characters,
+    and appends ``Read more: [title](url)``. ``None`` when the model replied
+    NO_ANSWER or nothing is left after cleaning.
+    """
+    text = raw.strip()
+    if text.upper().startswith(_NO_ANSWER):
+        return None
+
+    domain = re.escape(urlsplit(hit.url).netloc.removeprefix("www."))
+    own_site = re.compile(rf"(?i)\b(?:[\w-]+\.)*{domain}[^\s<>\"']*?{_URL_TAIL}")
+    text = _MD_IMAGE.sub("", text)
+    text = _MD_LINK.sub(r"\1", text)
+    text = _URL.sub("", text)
+    text = own_site.sub("", text)
+    text = text.replace("<", "‹").replace(">", "›")
+    text = re.sub(r"\(\s*\)", "", text)
+    text = " ".join(text.split())
+    text = re.sub(r"\s+([.,;:!?])", r"\1", text)
+
+    text = " ".join(_SENTENCE_BREAK.split(text)[:_SITE_REPLY_MAX_SENTENCES])
+    if len(text) > _SITE_REPLY_MAX_CHARS:
+        text = text[: _SITE_REPLY_MAX_CHARS - 3].rsplit(" ", 1)[0].rstrip(" ,;:") + "..."
+    if not text.strip(" .,;:!?"):
+        return None
+    return f"{text}\n\nRead more: [{_link_title(hit.title)}]({hit.url})"
+
+
+async def site_answer_node(state: GraphState) -> dict:
+    """
+    Answer a question about Mark's own articles and projects, then hand back.
+
+    A detour, not a stage: it never writes ``stage``, so the next turn carries
+    on from the stage the visitor was in, and the reply ends with a sentence
+    that steers back to it. The answer comes only from the best-matching page
+    of the site index, and that page's url is the only link. With no index
+    loaded, or no chunk scoring at least ``site_search_min_score``, it sends a
+    fixed reply and makes no LLM call. Clears ``site_question``.
+    """
+    logger.info("Node: site_answer")
+
+    question = ""
+    for msg in reversed(state.get("messages", [])):
+        if isinstance(msg, HumanMessage):
+            question = msg.content if isinstance(msg.content, str) else ""
+            break
+    stage = _current_stage(state)
+    return_line = SITE_RETURN_LINES[stage]
+
+    index = get_site_index()
+    if index is None:
+        logger.info("site_answer outcome=unavailable")
+        reply = f"{SITE_UNAVAILABLE_REPLY} {return_line}"
+    else:
+        hit = search_site(
+            index.search, question, min_score=get_settings().site_search_min_score
+        )
+        if hit is None:
+            logger.info("site_answer outcome=no_match")
+            reply = f"{SITE_NO_MATCH_REPLY} {return_line}"
+        else:
+            prompt = SITE_ANSWER_PROMPT.format(
+                persona=PERSONA,
+                excerpts=format_site_excerpts(hit.chunks),
+                return_hint=site_return_hint(
+                    stage, _gs(state, "lead_data"), _gs(state, "qualification_data")
+                ),
+            )
+            raw = await _invoke_llm(prompt, list(state.get("messages", [])), node="site_answer")
+            answer = _finalize_site_reply(raw, hit)
+            logger.info(
+                "site_answer outcome=%s score=%.3f url=%s",
+                "answered" if answer else "no_answer",
+                hit.score,
+                hit.url,
+            )
+            reply = answer or f"{SITE_NO_MATCH_REPLY} {return_line}"
+
+    return {"messages": [AIMessage(content=reply)], "site_question": False}
 
 
 # ---------------------------------------------------------------------------
