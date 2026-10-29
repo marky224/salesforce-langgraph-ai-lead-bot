@@ -221,8 +221,8 @@ class Settings(BaseSettings):
         default="https://www.markandrewmarquez.com/site-index.json",
         description=(
             "The portfolio site's site-index.json (contract v1), loaded in the "
-            "background at startup and every site_index_refresh_seconds. An "
-            "https URL, or empty to turn retrieval off."
+            "background at startup and every site_index_refresh_seconds (a failed "
+            "load is retried after 60 s). An https URL, or empty to turn retrieval off."
         ),
     )
     site_index_refresh_seconds: int = Field(

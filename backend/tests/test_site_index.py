@@ -403,6 +403,26 @@ class TestRefresh:
         assert loads == [INDEX_URL, INDEX_URL]
         assert sleeps == [3600, 3600]
 
+    @pytest.mark.asyncio
+    async def test_a_failed_load_is_retried_after_60_seconds(self, monkeypatch):
+        outcomes = iter([False, True, False])
+        sleeps: list[float] = []
+
+        async def fake_refresh(url):
+            return next(outcomes)
+
+        async def fake_sleep(seconds):
+            sleeps.append(seconds)
+            if len(sleeps) == 3:
+                raise asyncio.CancelledError
+
+        monkeypatch.setattr(site_index, "refresh_site_index", fake_refresh)
+        monkeypatch.setattr(site_index.asyncio, "sleep", fake_sleep)
+        with pytest.raises(asyncio.CancelledError):
+            await run_site_index_refresh(INDEX_URL, 3600)
+        # fail -> 60 s, success -> the full interval, fail -> 60 s again
+        assert sleeps == [60, 3600, 60]
+
 
 # ---------------------------------------------------------------------------
 # The default SITE_SEARCH_MIN_SCORE on the fixture

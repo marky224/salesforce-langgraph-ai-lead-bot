@@ -16,7 +16,8 @@ Usage::
 Design notes:
 - Stdlib only: ``urllib`` runs in a worker thread, so the event loop never blocks.
 - A refresh never raises. A failed or invalid fetch is logged and the previous
-  index (or none) stays, so startup and the refresh loop survive anything.
+  index (or none) stays, so startup and the refresh loop survive anything. The
+  loop retries a failed load after 60 s rather than a full interval.
 - Redirects are refused: the index must come from its own URL, https, on the
   configured host. Chunk urls must be on that host too.
 - The content-type must be ``application/json``: CloudFront answers an unknown
@@ -45,6 +46,7 @@ logger = logging.getLogger(__name__)
 INDEX_VERSION = 1
 FETCH_TIMEOUT_SECONDS = 10.0
 MAX_INDEX_BYTES = 2_000_000  # ~10x the published file (~170 KB)
+RETRY_AFTER_FAILURE_SECONDS = 60.0
 
 _CHUNK_FIELDS = ("id", "url", "title", "heading", "text")
 # Characters that would break the markdown link a chunk url ends up in.
@@ -255,7 +257,13 @@ async def refresh_site_index(url: str) -> bool:
 
 
 async def run_site_index_refresh(url: str, interval_seconds: float) -> None:
-    """Load *url* now and then every *interval_seconds*, until cancelled."""
+    """
+    Load *url* now, then again after *interval_seconds*, until cancelled.
+
+    After a failed load the next try comes after RETRY_AFTER_FAILURE_SECONDS
+    instead, so one transient failure at a cold start doesn't leave the replica
+    without an index for a whole interval.
+    """
     while True:
-        await refresh_site_index(url)
-        await asyncio.sleep(interval_seconds)
+        loaded = await refresh_site_index(url)
+        await asyncio.sleep(interval_seconds if loaded else RETRY_AFTER_FAILURE_SECONDS)
