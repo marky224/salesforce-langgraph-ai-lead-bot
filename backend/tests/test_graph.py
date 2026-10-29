@@ -902,3 +902,72 @@ class TestSiteAnswerNode:
         assert "<<<" not in block
         assert ">>>" not in block
         assert len(json.loads(block)[0]["text"]) <= 1500
+
+
+class TestSiteRouting:
+    """The router's site_question answer and the edges around it (node names as literals)."""
+
+    @pytest.mark.asyncio
+    async def test_router_site_question_keeps_stage(self, conversation_state, mock_llm):
+        mock_llm.ainvoke.return_value = MagicMock(
+            content=json.dumps({"next_stage": "site_question", "reasoning": "Asks about an article."})
+        )
+
+        result = await router_node(conversation_state)
+
+        assert result == {"site_question": True}  # no stage, no retry_count
+
+    @pytest.mark.asyncio
+    async def test_a_site_question_is_not_an_early_exit(self, conversation_state, mock_llm):
+        conversation_state["messages"].append(
+            HumanMessage(content="I gotta go soon, but did Mark write anything about canaries?")
+        )
+        mock_llm.ainvoke.return_value = MagicMock(content=json.dumps({"next_stage": "site_question"}))
+
+        result = await router_node(conversation_state)
+
+        assert "retry_count" not in result
+
+    @pytest.mark.asyncio
+    async def test_a_stage_decision_clears_the_flag(self, conversation_state, mock_llm):
+        conversation_state["site_question"] = True
+        mock_llm.ainvoke.return_value = MagicMock(content=json.dumps({"next_stage": "qualification"}))
+
+        result = await router_node(conversation_state)
+
+        assert result["stage"] == ConversationStage.QUALIFICATION
+        assert result["site_question"] is False
+
+    def test_route_after_router_sends_a_site_question_to_site_answer(self, base_state):
+        from app.graph.edges import route_after_router
+
+        base_state["stage"] = ConversationStage.QUALIFICATION
+        base_state["site_question"] = True
+        assert route_after_router(base_state) == "site_answer"
+
+        base_state["site_question"] = False
+        assert route_after_router(base_state) == "qualification"
+
+    @pytest.mark.parametrize(
+        "first_message",
+        [
+            "I just read your article about the TARS bot.",
+            "What did Mark build for M365?",
+            "Is there a case study on the site?",
+            "Tell me about your projects.",
+        ],
+    )
+    def test_greeting_site_cue_goes_to_router(self, base_state, first_message):
+        from app.graph.edges import route_after_extraction
+
+        base_state["messages"] = [AIMessage(content="Hi, I'm TARS."), HumanMessage(content=first_message)]
+        assert route_after_extraction(base_state) == "router"
+
+    def test_greeting_without_a_site_cue_stays_on_the_fast_path(self, base_state):
+        from app.graph.edges import route_after_extraction
+
+        base_state["messages"] = [
+            AIMessage(content="Hi, I'm TARS."),
+            HumanMessage(content="We're drowning in manual data entry."),
+        ]
+        assert route_after_extraction(base_state) == "discovery"

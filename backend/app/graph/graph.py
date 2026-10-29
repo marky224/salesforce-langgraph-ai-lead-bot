@@ -43,6 +43,7 @@ from app.graph.edges import (
     NODE_ROUTER,
     NODE_SALESFORCE,
     NODE_SCORING,
+    NODE_SITE_ANSWER,
     NODE_TURN_CAP,
     route_after_conversation_node,
     route_after_error,
@@ -64,6 +65,7 @@ from app.graph.nodes import (
     router_node,
     salesforce_node,
     scoring_node,
+    site_answer_node,
     turn_cap_node,
 )
 from app.graph.state import GraphState
@@ -126,7 +128,11 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> StateGraph:
     # Abuse guard
     graph.add_node(NODE_TURN_CAP, turn_cap_node)
 
-    logger.debug("Registered %d nodes", 12)
+    # Site questions: a detour that answers from the site index and leaves
+    # ``stage`` as it was (its reply is sent whole, not streamed; see server.py)
+    graph.add_node(NODE_SITE_ANSWER, site_answer_node)
+
+    logger.debug("Registered %d nodes", 13)
 
     # ------------------------------------------------------------------
     # 2. Set conditional entry point
@@ -182,6 +188,7 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> StateGraph:
             NODE_LEAD_CAPTURE: NODE_LEAD_CAPTURE,
             NODE_CONFIRMATION: NODE_CONFIRMATION,
             NODE_SCORING: NODE_SCORING,
+            NODE_SITE_ANSWER: NODE_SITE_ANSWER,
         },
     )
 
@@ -234,11 +241,14 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> StateGraph:
     # --- Turn cap → end (abuse guard terminates the turn) ---
     graph.add_edge(NODE_TURN_CAP, END)
 
+    # --- Site answer → end (the next message resumes from the unchanged stage) ---
+    graph.add_edge(NODE_SITE_ANSWER, END)
+
     # ------------------------------------------------------------------
     # 4. Compile with checkpointer
     # ------------------------------------------------------------------
 
     compiled = graph.compile(checkpointer=checkpointer)
-    logger.info("Graph compiled successfully with %d nodes", 12)
+    logger.info("Graph compiled successfully with %d nodes", 13)
 
     return compiled

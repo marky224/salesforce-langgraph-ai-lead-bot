@@ -120,6 +120,8 @@ Visitor types message
       → LangGraph: extraction node (parse new data from message)
       → LangGraph: router node (decide next conversation stage)
       → LangGraph: conversation node (generate AI reply)
+        or, for a question about Mark's articles and projects, the site_answer
+        node (answer from the site index with the page's link; stage unchanged)
     ← SSE stream: tokens sent back in real-time
   ← Chat bubble displays reply with typing effect
 

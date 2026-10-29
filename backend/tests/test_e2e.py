@@ -14,6 +14,7 @@ so the mock does not produce scores — assertions exercise the real scorer.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -77,6 +78,10 @@ class ContentBasedMockLLM:
         # Transcript summary prompt
         if "summarise the following sales chat" in prompt_lower:
             return "Test prospect discussed automation needs."
+
+        # Site answer prompt (a detour that quotes site excerpts)
+        if "answering a question about mark's website content" in prompt_lower:
+            return "It runs ten security checks every week. Anything about timing I should know?"
 
         # Conversational prompts — return generic but appropriate text
         if "opening of the conversation" in prompt_lower:
@@ -208,6 +213,115 @@ class TestFullConversationFlow:
         lead_payload = mock_salesforce.Lead.create.call_args[0][0]
         assert lead_payload["LeadSource"] == "Web Chat"
         assert lead_payload["Lead_Score__c"] == 71
+
+
+# ---------------------------------------------------------------------------
+# E2E: Site question detour (answer from the site index, then back)
+# ---------------------------------------------------------------------------
+
+SITE_FIXTURE = Path(__file__).parent / "fixtures" / "site_index_v1.json"
+M365_LINK = (
+    "Read more: [M365 Guardian An LLM-Powered Microsoft 365 Administration Chatbot]"
+    "(https://www.markandrewmarquez.com/portfolio/m365-guardian/)"
+)
+
+
+@pytest.fixture
+def site_index():
+    from app.tools.site_index import parse_site_index, set_site_index
+
+    set_site_index(parse_site_index(
+        SITE_FIXTURE.read_bytes(),
+        content_type="application/json",
+        final_url="https://www.markandrewmarquez.com/site-index.json",
+        allowed_netloc="www.markandrewmarquez.com",
+    ))
+    yield
+    set_site_index(None)
+
+
+class TestSiteDetour:
+    """A site question gets an answer with the page link; the funnel carries on."""
+
+    @pytest.mark.asyncio
+    async def test_site_question_mid_qualification_returns_to_qualification(
+        self, mock_salesforce, site_index
+    ):
+        mock_llm = ContentBasedMockLLM(
+            extraction_responses=[
+                {"qualification_data": {"pain_points": ["manual data entry"], "current_solution": "spreadsheets"}},
+                {"qualification_data": {"company_size": "11-50"}},
+                {},  # the site question carries no lead data
+                {"qualification_data": {"budget_range": "$10K-$50K", "timeline": "1-3 months", "decision_maker": True}},
+                {"lead_data": {"first_name": "Sarah", "last_name": "Chen"}},
+                {"lead_data": {"email": "sarah@acme.com", "company": "Acme Corp"}},
+                {},
+            ],
+            router_responses=[
+                {"next_stage": "qualification", "reasoning": "Have pain points"},
+                {"next_stage": "site_question", "reasoning": "Asks about an article"},
+                {"next_stage": "lead_capture", "reasoning": "Qual complete"},
+                {"next_stage": "lead_capture", "reasoning": "Need email"},
+                {"next_stage": "confirmation", "reasoning": "Have all contact info"},
+            ],
+        )
+        set_llm(mock_llm)
+        graph = build_graph()
+        config = {"configurable": {"thread_id": "e2e-site-001"}}
+
+        async def say(text):
+            return await graph.ainvoke({"messages": [HumanMessage(content=text)]}, config=config)
+
+        await graph.ainvoke({"messages": []}, config=config)
+        await say("We have manual data entry problems")
+        result = await say("About 15 hours a week, team of 50")
+        assert result["stage"] == ConversationStage.QUALIFICATION
+
+        # The detour: answered with the page link, stage left as it was.
+        result = await say("What does M365 Guardian's weekly security report check?")
+        assert result["stage"] == ConversationStage.QUALIFICATION
+        assert result["site_question"] is False
+        assert result["messages"][-1].content == (
+            "It runs ten security checks every week. Anything about timing I should know?"
+            f"\n\n{M365_LINK}"
+        )
+
+        # The funnel carries on from qualification to a completed lead.
+        await say("$10K-$50K budget, 1-3 months, I make the decisions")
+        await say("Sarah Chen")
+        await say("sarah@acme.com, Acme Corp")
+        result = await say("Yes, looks good!")
+
+        assert result["stage"] == ConversationStage.COMPLETE
+        assert result["salesforce_lead_id"] == "00Q000TEST00001"
+        assert result["lead_score"] == 71  # same data as the full flow, same score
+
+    @pytest.mark.asyncio
+    async def test_a_first_message_about_the_site_gets_answered_then_discovery(self, site_index):
+        mock_llm = ContentBasedMockLLM(
+            extraction_responses=[{}, {"qualification_data": {"pain_points": ["manual data entry"]}}],
+            router_responses=[{"next_stage": "site_question", "reasoning": "Asks about a project"}],
+        )
+        set_llm(mock_llm)
+        graph = build_graph()
+        config = {"configurable": {"thread_id": "e2e-site-002"}}
+
+        await graph.ainvoke({"messages": []}, config=config)
+        result = await graph.ainvoke(
+            {"messages": [HumanMessage(content=(
+                "I just read Mark's post on M365 Guardian. What does its weekly security report check?"
+            ))]},
+            config=config,
+        )
+        assert result["stage"] == ConversationStage.GREETING
+        assert result["messages"][-1].content.endswith(M365_LINK)
+
+        # Next turn: no site cue, so the greeting fast path goes to discovery.
+        result = await graph.ainvoke(
+            {"messages": [HumanMessage(content="We have manual data entry problems")]},
+            config=config,
+        )
+        assert result["stage"] == ConversationStage.DISCOVERY
 
 
 # ---------------------------------------------------------------------------

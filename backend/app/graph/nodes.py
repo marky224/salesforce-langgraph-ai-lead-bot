@@ -829,6 +829,12 @@ async def salesforce_node(state: GraphState) -> dict:
 # Router node
 # ---------------------------------------------------------------------------
 
+# The router's answer for a question about Mark's own articles or projects.
+# A router output only, never a ConversationStage value: the enum's .value
+# strings are a shared contract (scorer, prompts, Salesforce, widget).
+SITE_QUESTION = "site_question"
+
+
 async def router_node(state: GraphState) -> dict:
     """
     Decide which conversation stage should come next.
@@ -836,6 +842,9 @@ async def router_node(state: GraphState) -> dict:
     Uses the ``ROUTER_PROMPT`` with an LLM call to make a contextual
     routing decision.  Returns the updated ``stage`` and optionally
     increments ``retry_count`` if the visitor tried to leave early.
+    When the router answers ``site_question`` it returns only
+    ``site_question=True`` (``stage`` unchanged); ``route_after_router``
+    then sends the turn to ``site_answer``.
 
     This node does NOT produce a user-visible message — it only updates
     the ``stage`` field for the conditional edge to read.
@@ -865,6 +874,11 @@ async def router_node(state: GraphState) -> dict:
     reasoning = parsed.get("reasoning", "")
     logger.info("Router decision: %s — %s", next_stage_str, reasoning)
 
+    # A site question is a detour, not a stage: flag it for site_answer and
+    # leave ``stage`` (and the early-exit count) as they are.
+    if next_stage_str == SITE_QUESTION:
+        return {"site_question": True}
+
     # Map string to enum (fallback to discovery if unrecognised)
     try:
         next_stage = ConversationStage(next_stage_str)
@@ -872,7 +886,8 @@ async def router_node(state: GraphState) -> dict:
         logger.warning("Unrecognised stage '%s', defaulting to discovery", next_stage_str)
         next_stage = ConversationStage.DISCOVERY
 
-    result: dict[str, Any] = {"stage": next_stage}
+    # Every other decision clears the flag, so a stale one can't misroute.
+    result: dict[str, Any] = {"stage": next_stage, "site_question": False}
 
     # Detect early-exit attempt: if visitor seems to be leaving and we
     # haven't retried yet, the router may keep the current stage.
