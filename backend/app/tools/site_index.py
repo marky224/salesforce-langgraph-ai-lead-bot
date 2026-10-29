@@ -49,6 +49,7 @@ MAX_INDEX_BYTES = 2_000_000  # ~10x the published file (~170 KB)
 RETRY_AFTER_FAILURE_SECONDS = 60.0
 MAX_METADATA_CHARS = 64  # generated_at / source_commit longer than this are dropped
 _ERROR_VALUE_CHARS = 40  # fetched values quoted in an error are cut to this
+_WARNING_CHARS = 200  # the error text in the load-failure warning is cut to this
 
 _CHUNK_FIELDS = ("id", "url", "title", "heading", "text")
 # Characters that would break the markdown link a chunk url ends up in.
@@ -168,6 +169,18 @@ def _clip(value: Any) -> str:
     return text if len(text) <= _ERROR_VALUE_CHARS else text[:_ERROR_VALUE_CHARS] + "..."
 
 
+def _loggable(text: str, limit: int = _WARNING_CHARS) -> str:
+    """
+    *text* with non-printable characters escaped (``\\r``, ``\\x1b``) and cut to
+    *limit* characters. Error text can carry server-controlled status, header and
+    URL values, so a CR, an escape code or a 60 KB header must not reach the log.
+    """
+    escaped = "".join(ch if ch.isprintable() else ascii(ch)[1:-1] for ch in text[:limit])
+    if len(text) > limit or len(escaped) > limit:
+        return escaped[: limit - 3] + "..."
+    return escaped
+
+
 def parse_site_index(
     body: bytes, *, content_type: str, final_url: str, allowed_netloc: str
 ) -> SiteIndex:
@@ -257,7 +270,7 @@ async def refresh_site_index(url: str) -> bool:
     except Exception as exc:
         logger.warning(
             "site_index load failed: %s (%s)",
-            exc,
+            _loggable(str(exc)),
             "keeping the previous index" if _index is not None else "no index loaded",
         )
         return False

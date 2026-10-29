@@ -514,3 +514,66 @@ class TestDefaultThreshold:
     @pytest.mark.parametrize("question", OFF_SITE)
     def test_off_site_question_is_a_miss(self, search, min_score, question):
         assert search_site(search, question, min_score=min_score) is None
+
+
+# ---------------------------------------------------------------------------
+# The load-failure warning (server-controlled text, through the real opener)
+# ---------------------------------------------------------------------------
+
+_WARNING_OVERHEAD = len("site_index load failed:  (no index loaded)")
+
+
+def _answer_https(monkeypatch, *, code: int, msg: str, headers: dict[str, str], body: bytes = b""):
+    """Patch urllib's HTTPS handler to answer every request with this response (no network)."""
+
+    def _respond(handler, req):
+        response_headers = Message()
+        for name, value in headers.items():
+            response_headers[name] = value
+        response = urllib.response.addinfourl(io.BytesIO(body), response_headers, req.full_url, code)
+        response.msg = msg
+        return response
+
+    monkeypatch.setattr(urllib.request.HTTPSHandler, "https_open", _respond)
+
+
+async def _failure_warning(caplog) -> str:
+    with caplog.at_level(logging.WARNING, logger="app.tools.site_index"):
+        assert await refresh_site_index(INDEX_URL) is False
+    messages = [r.getMessage() for r in caplog.records if "site_index load failed" in r.getMessage()]
+    assert len(messages) == 1
+    return messages[0]
+
+
+class TestFailureWarning:
+    @pytest.mark.asyncio
+    async def test_control_characters_in_the_reason_phrase_are_escaped(self, monkeypatch, caplog):
+        _answer_https(monkeypatch, code=503, msg="Busy\rFORGED \x1b[31mred", headers={})
+        message = await _failure_warning(caplog)
+        assert "\r" not in message
+        assert "\x1b" not in message
+        assert "HTTP Error 503: Busy\\rFORGED \\x1b[31mred" in message
+
+    @pytest.mark.asyncio
+    async def test_a_crlf_in_a_refused_location_is_escaped(self, monkeypatch, caplog):
+        # urllib's own HTTPError quotes a redirect to a non-http scheme verbatim.
+        location = "gopher://evil.example/\r\nCRITICAL forged log line"
+        _answer_https(monkeypatch, code=302, msg="Found", headers={"Location": location})
+        message = await _failure_warning(caplog)
+        assert "\r" not in message
+        assert "\n" not in message
+        assert "gopher://evil.example/\\r\\nCRITICAL" in message
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("code", "headers"),
+        [
+            (301, {"Location": f"https://{HOST}/" + "x" * 60_000}),
+            (200, {"Content-Type": "text/" + "x" * 60_000}),
+        ],
+    )
+    async def test_a_huge_header_is_cut_short(self, monkeypatch, caplog, code, headers):
+        _answer_https(monkeypatch, code=code, msg="Moved", headers=headers, body=FIXTURE_BYTES)
+        message = await _failure_warning(caplog)
+        assert len(message) <= _WARNING_OVERHEAD + 200
+        assert message.endswith("... (no index loaded)")
