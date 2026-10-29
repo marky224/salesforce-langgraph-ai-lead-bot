@@ -216,6 +216,37 @@ class TestParse:
         index = _parse(json.dumps(_doc(generated_at=123, source_commit=None)).encode())
         assert index.generated_at is None
         assert index.source_commit is None
+        assert index.metadata_dropped == 1  # 123 was present; a null wasn't
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "2026-10-26T22:22:32Z\n2026-10-29 | INFO | forged log line",
+            "abc\x1b[31m",
+            "x" * 65,
+        ],
+    )
+    def test_metadata_must_be_short_and_printable(self, value):
+        index = _parse(json.dumps(_doc(generated_at=value, source_commit=value)).encode())
+        assert index.generated_at is None
+        assert index.source_commit is None
+        assert index.metadata_dropped == 2
+
+    def test_metadata_up_to_64_printable_characters_is_kept(self):
+        commit = "a" * 64
+        index = _parse(json.dumps(_doc(source_commit=commit)).encode())
+        assert index.source_commit == commit
+        assert index.generated_at == "2026-10-26T22:22:32Z"
+        assert index.metadata_dropped == 0
+
+    def test_a_long_version_is_cut_short_in_the_error(self):
+        version = "2\n" + "x" * 5000
+        with pytest.raises(SiteIndexError) as caught:
+            _parse(json.dumps(_doc(version=version)).encode())
+        message = str(caught.value)
+        assert "\n" not in message
+        assert len(message) < 80
+        assert message.startswith("version '2\\nxxx")
 
     @pytest.mark.parametrize(
         "final_url",
@@ -373,6 +404,16 @@ class TestRefresh:
             assert await refresh_site_index(INDEX_URL) is False
         assert get_site_index() is previous
         assert "keeping the previous index" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_the_log_line_carries_no_dropped_metadata(self, fake_urlopen, caplog):
+        forged = "2026-10-26T22:22:32Z\nCRITICAL forged log line"
+        body = json.dumps(_doc(generated_at=forged)).encode()
+        fake_urlopen.response = FakeResponse(body)
+        with caplog.at_level(logging.INFO, logger="app.tools.site_index"):
+            assert await refresh_site_index(INDEX_URL) is True
+        assert "generated_at=None source_commit=fixture metadata_dropped=1" in caplog.text
+        assert "forged log line" not in caplog.text
 
     @pytest.mark.asyncio
     async def test_failure_with_no_previous_index_leaves_none(self, fake_urlopen, caplog):

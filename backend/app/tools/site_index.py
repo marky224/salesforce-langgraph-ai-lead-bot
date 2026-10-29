@@ -47,6 +47,8 @@ INDEX_VERSION = 1
 FETCH_TIMEOUT_SECONDS = 10.0
 MAX_INDEX_BYTES = 2_000_000  # ~10x the published file (~170 KB)
 RETRY_AFTER_FAILURE_SECONDS = 60.0
+MAX_METADATA_CHARS = 64  # generated_at / source_commit longer than this are dropped
+_ERROR_VALUE_CHARS = 40  # fetched values quoted in an error are cut to this
 
 _CHUNK_FIELDS = ("id", "url", "title", "heading", "text")
 # Characters that would break the markdown link a chunk url ends up in.
@@ -66,6 +68,7 @@ class SiteIndex:
     source_commit: str | None
     size_bytes: int
     skipped: int  # chunks dropped as invalid at load
+    metadata_dropped: int  # generated_at / source_commit present but not kept
 
     @property
     def chunks(self) -> tuple[SiteChunk, ...]:
@@ -148,8 +151,21 @@ def _parse_chunk(raw: Any, allowed_netloc: str) -> SiteChunk | None:
     return SiteChunk(**values)
 
 
-def _str_or_none(value: Any) -> str | None:
-    return value if isinstance(value, str) else None
+def _metadata(value: Any) -> str | None:
+    """
+    *value* if it is a short printable string, else ``None``. These values come
+    from the fetched file and are logged as-is, so a newline or a huge value
+    must not reach the log line.
+    """
+    if isinstance(value, str) and len(value) <= MAX_METADATA_CHARS and value.isprintable():
+        return value
+    return None
+
+
+def _clip(value: Any) -> str:
+    """``repr(value)``, cut to a short length, for fetched values in error text."""
+    text = repr(value)
+    return text if len(text) <= _ERROR_VALUE_CHARS else text[:_ERROR_VALUE_CHARS] + "..."
 
 
 def parse_site_index(
@@ -176,7 +192,7 @@ def parse_site_index(
 
     version = doc.get("version")
     if type(version) is not int or version != INDEX_VERSION:  # JSON true == 1 in Python
-        raise SiteIndexError(f"version {version!r}, expected {INDEX_VERSION}")
+        raise SiteIndexError(f"version {_clip(version)}, expected {INDEX_VERSION}")
 
     raw_chunks = doc.get("chunks")
     if not isinstance(raw_chunks, list):
@@ -186,12 +202,17 @@ def parse_site_index(
     if not chunks:
         raise SiteIndexError(f"no valid chunks (of {len(raw_chunks)})")
 
+    raw_meta = {key: doc.get(key) for key in ("generated_at", "source_commit")}
+    meta = {key: _metadata(value) for key, value in raw_meta.items()}
     return SiteIndex(
         search=SiteSearch(chunks),
-        generated_at=_str_or_none(doc.get("generated_at")),
-        source_commit=_str_or_none(doc.get("source_commit")),
+        generated_at=meta["generated_at"],
+        source_commit=meta["source_commit"],
         size_bytes=len(body),
         skipped=len(raw_chunks) - len(chunks),
+        metadata_dropped=sum(
+            1 for key, value in raw_meta.items() if value is not None and meta[key] is None
+        ),
     )
 
 
@@ -244,7 +265,7 @@ async def refresh_site_index(url: str) -> bool:
     set_site_index(index)
     logger.info(
         "site_index loaded chunks=%d pages=%d skipped=%d bytes=%d ms=%d "
-        "generated_at=%s source_commit=%s",
+        "generated_at=%s source_commit=%s metadata_dropped=%d",
         len(index.chunks),
         index.page_count,
         index.skipped,
@@ -252,6 +273,7 @@ async def refresh_site_index(url: str) -> bool:
         int((time.perf_counter() - start) * 1000),
         index.generated_at,
         index.source_commit,
+        index.metadata_dropped,
     )
     return True
 
