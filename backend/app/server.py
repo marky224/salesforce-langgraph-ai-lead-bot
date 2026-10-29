@@ -412,6 +412,9 @@ async def chat_stream(request: Request, payload: ChatRequest) -> StreamingRespon
         data: {"token": " there"}
         data: {"token": "!"}
         data: {"done": true, "thread_id": "abc", "stage": "discovery"}
+
+    A site answer (``site_answer`` node) is not streamed token by token: its
+    reply is checked first and sent as a single ``token`` event.
     """
     graph = _get_graph()
     thread_id = payload.thread_id or str(uuid.uuid4())
@@ -439,6 +442,10 @@ async def chat_stream(request: Request, payload: ChatRequest) -> StreamingRespon
             "greeting", "discovery", "qualification",
             "objection_handling", "lead_capture", "confirmation", "error",
         }
+        # Nodes whose reply is checked before it is shown (site_answer strips any
+        # URL the model wrote): their LLM tokens are never streamed; the finished
+        # reply goes out as one token event when the node ends.
+        _BUFFERED_NODES = {"site_answer"}
 
         try:
             async for event in graph.astream_events(
@@ -464,6 +471,17 @@ async def chat_stream(request: Request, payload: ChatRequest) -> StreamingRespon
                 # Capture final state when the graph completes
                 elif kind == "on_chain_end":
                     output = event.get("data", {}).get("output", {})
+                    name = event.get("name")
+                    if (
+                        name in _BUFFERED_NODES
+                        and event.get("metadata", {}).get("langgraph_node") == name
+                        and isinstance(output, dict)
+                    ):
+                        messages = output.get("messages") or []
+                        last = messages[-1] if messages else None
+                        if isinstance(last, AIMessage) and isinstance(last.content, str) and last.content:
+                            collected_reply += last.content
+                            yield f"data: {_sse_json({'token': last.content})}\n\n"
                     if isinstance(output, dict):
                         if "stage" in output:
                             raw_stage = output["stage"]

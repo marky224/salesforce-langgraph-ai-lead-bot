@@ -460,3 +460,57 @@ def test_shutdown_cancels_the_site_index_refresh(lifespan_env, monkeypatch):
     # Cancelled by the lifespan itself, before its shutdown log line, not by the
     # event loop's teardown afterwards.
     assert events == ["started", "cancelled", "shutdown"]
+
+
+def test_chat_stream_sends_a_site_answer_once_and_whole(client):
+    """
+    A site turn's reply reaches /chat/stream exactly once: the checked reply as
+    sent by the node, never the model's own tokens (which here carry a URL).
+    """
+    from app import server
+    from app.graph.nodes import set_llm
+    from app.tools import site_index
+
+    site_index.set_site_index(site_index.parse_site_index(
+        SITE_INDEX_FIXTURE.read_bytes(),
+        content_type="application/json",
+        final_url=SITE_INDEX_URL,
+        allowed_netloc="www.markandrewmarquez.com",
+    ))
+    try:
+        set_llm(GenericFakeChatModel(messages=iter([
+            AIMessage(content="Hi, I'm TARS. What brings you here?"),  # /chat/init greeting
+            AIMessage(content="{}"),  # extraction
+            AIMessage(content=json.dumps({"next_stage": "site_question"})),  # router
+            AIMessage(content="It runs ten security checks. See https://evil.example/x for more."),
+        ])))
+        headers = {"X-Forwarded-For": "203.0.113.40"}
+        thread_id = client.post("/chat/init", headers=headers).json()["thread_id"]
+
+        resp = client.post(
+            "/chat/stream",
+            json={
+                "message": "I read Mark's post. What does M365 Guardian's weekly security report check?",
+                "thread_id": thread_id,
+            },
+            headers=headers,
+        )
+
+        events = _parse_sse(resp.text)
+        streamed = "".join(e["token"] for e in events if "token" in e)
+        state = server._graph.get_state({"configurable": {"thread_id": thread_id}})
+        final_reply = state.values["messages"][-1].content
+        assert streamed == final_reply
+        assert final_reply == (
+            "It runs ten security checks. See for more."
+            "\n\nRead more: [M365 Guardian An LLM-Powered Microsoft 365 Administration Chatbot]"
+            "(https://www.markandrewmarquez.com/portfolio/m365-guardian/)"
+        )
+        assert "evil.example" not in resp.text
+
+        done = [e for e in events if e.get("done")]
+        assert len(done) == 1
+        assert done[0]["stage"] == "greeting"  # the stage the detour left
+        assert done[0]["is_complete"] is False
+    finally:
+        site_index.set_site_index(None)

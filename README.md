@@ -123,6 +123,7 @@ Visitor types message
         or, for a question about Mark's articles and projects, the site_answer
         node (answer from the site index with the page's link; stage unchanged)
     ← SSE stream: tokens sent back in real-time
+      (a site answer is checked first, then sent as one message)
   ← Chat bubble displays reply with typing effect
 
 On conversation completion:
