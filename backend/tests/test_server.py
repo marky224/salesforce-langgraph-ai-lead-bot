@@ -15,6 +15,7 @@ isolated from the others.
 
 from __future__ import annotations
 
+import asyncio
 import itertools
 import json
 import threading
@@ -401,20 +402,57 @@ def test_startup_does_not_wait_for_or_fail_on_the_site_index(lifespan_env, monke
 
     entered = threading.Event()
     release = threading.Event()
+    done = threading.Event()
 
     def _hanging_urlopen(request, timeout):
         entered.set()
         release.wait(5)
+        done.set()
         raise urllib.error.URLError("connection refused")
 
     monkeypatch.setattr(site_index, "_urlopen", _hanging_urlopen)
 
     with TestClient(server.app) as test_client:
-        # Startup finished while the fetch is still hanging.
+        # Startup has finished, and the first fetch is still in flight: had the
+        # lifespan awaited it, startup would only return once release.wait timed out.
         assert entered.wait(5)
+        assert not done.is_set()
         assert test_client.get("/health").status_code == 200
         assert test_client.get("/health/ready").status_code == 200
         release.set()
         assert test_client.get("/health").status_code == 200
 
     assert site_index.get_site_index() is None
+
+
+def test_shutdown_cancels_the_site_index_refresh(lifespan_env, monkeypatch):
+    """The lifespan cancels the refresh task and waits for it before shutting down."""
+    server, _ = lifespan_env
+    monkeypatch.setenv("SITE_INDEX_URL", SITE_INDEX_URL)
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
+    events: list[str] = []
+
+    async def _refresh_until_cancelled(url, interval_seconds):
+        events.append("started")
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            events.append("cancelled")
+            raise
+
+    def _record_shutdown(msg, *args, **kwargs):
+        if msg.startswith("Shutting down"):
+            events.append("shutdown")
+
+    monkeypatch.setattr(server, "run_site_index_refresh", _refresh_until_cancelled)
+    monkeypatch.setattr(server.logger, "info", _record_shutdown)
+
+    with TestClient(server.app):
+        assert _wait_for(lambda: "started" in events)
+
+    # Cancelled by the lifespan itself, before its shutdown log line, not by the
+    # event loop's teardown afterwards.
+    assert events == ["started", "cancelled", "shutdown"]
