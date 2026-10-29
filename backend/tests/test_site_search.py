@@ -54,6 +54,12 @@ class TestTokenize:
         assert tokenize("Which article explains it") == []
         assert tokenize("sites websites marks reads shows tells knows wants explains learns") == []
 
+    def test_past_tense_and_ing_framing_words_are_dropped(self):
+        assert tokenize(
+            "explained explaining showed shown showing told telling reading writing posted "
+            "posting learning knew known knowing wanted wanting wondered"
+        ) == []
+
     def test_stopwords_that_end_in_s_are_dropped_before_the_fold(self):
         # Without the first check, "this" and "does" would fold to "thi" and "doe".
         assert tokenize("this does canaries") == ["canarie"]
@@ -112,6 +118,10 @@ class TestRank:
         ("inflected", "base"),
         [
             ("Which article explains how lead scoring works?", "lead scoring works"),
+            ("Which article explained how lead scoring works?", "lead scoring works"),
+            ("Is there an article explaining how lead scoring works?", "lead scoring works"),
+            ("Which article showed how lead scoring works?", "lead scoring works"),
+            ("Which post told how lead scoring works?", "lead scoring works"),
             ("Which of the websites covers terraform canaries?", "covers terraform canaries"),
         ],
     )

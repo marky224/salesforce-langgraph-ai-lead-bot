@@ -472,8 +472,8 @@ class TestRefresh:
 class TestDefaultThreshold:
     """
     The default min score (0.4) was calibrated on the full published index: of
-    29 labeled questions, all 20 answerable ones picked their page and scored at
-    least 0.438; the 9 off-site ones scored at most 0.355. This pins the same split
+    36 labeled questions, all 27 answerable ones picked their page and scored at
+    least 0.437; the 9 off-site ones scored at most 0.355. This pins the same split
     on the fixture, so a ranking or default change that breaks it fails here.
     """
 

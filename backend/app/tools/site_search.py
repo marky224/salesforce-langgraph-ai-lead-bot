@@ -89,6 +89,8 @@ _STOPWORD_TEXT = """
     article articles post posts blog wrote write writes written writeup writeups
     read page pages site website mark
     worked working learn learned learnt experience experiences
+    explained explaining showed shown showing told telling reading writing posted
+    posting learning knew known knowing wanted wanting wondered
 """
 STOPWORDS: frozenset[str] = frozenset(_STOPWORD_TEXT.split())
 
