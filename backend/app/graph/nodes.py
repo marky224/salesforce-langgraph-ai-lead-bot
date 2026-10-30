@@ -687,9 +687,12 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
     (``mark@markandrewmarquez.com?``, ``x@evil.example``); a host/path with no
     port whose host has an uppercase letter (``Node.js/TypeScript``,
     ``ASP.NET/C#``); bare hosts with no path or port; and entity-encoded URLs.
-    The text around a removed URL is left as it is. Known over-strip, accepted
-    because it errs safe: a host with a port is removed in any case, so prose
-    such as ``Node.js:20`` or ``ASP.NET:8`` goes too.
+    The text around a removed URL is left as it is. Known over-strips, accepted
+    because they err safe: a host with a port is removed in any case, so prose
+    such as ``Node.js:20`` or ``ASP.NET:8`` goes too; and after an email on the
+    site's domain, a ``?`` followed by closing punctuation counts as a query,
+    so ``(Or email mark@markandrewmarquez.com?)`` becomes ``(Or email mark@``
+    and ``Really, mark@markandrewmarquez.com?!`` becomes ``Really, mark@?!``.
 
     The unescape, the link passes and the tidy steps run in rounds, at most 3,
     until the text stops changing, so closing up a space or an empty ``()``,
@@ -717,7 +720,8 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
     # The site's own domain in any token, except in a plain email address: right
     # after an @ it is stripped only when a path, a port, or a ?/# with more text
     # follows, also past dots or hyphens (x@site.com./page, x@site.com.evil.example/x).
-    # A sentence-ending ? or . after an email doesn't count.
+    # A ? or . that ends a sentence after an email doesn't count, but a ? before
+    # closing punctuation does (an accepted over-strip, listed in the docstring).
     own_site = re.compile(
         rf"(?<![\w.@-])[\w.-]*{domain}\S*"
         rf"|(?<=@)[\w.-]*{domain}[\w.-]*(?=/|[?#]\S|:\d)\S*",
