@@ -765,6 +765,17 @@ class TestSiteAnswerNode:
         )
 
     @pytest.mark.asyncio
+    async def test_a_script_tag_from_the_model_never_reaches_the_reply(self, site_index, mock_llm):
+        mock_llm.ainvoke.return_value = MagicMock(
+            content="It runs ten checks. <script>alert(1)</script> It emails a weekly report."
+        )
+
+        reply = (await site_answer_node(_site_state(M365_QUESTION)))["messages"][0].content
+
+        assert "<script" not in reply
+        assert "‹script›alert(1)‹/script›" in reply
+
+    @pytest.mark.asyncio
     async def test_only_the_chunk_url_survives(self, site_index, mock_llm):
         mock_llm.ainvoke.return_value = MagicMock(content=(
             "See www.markandrewmarquez.com/portfolio/fake-page or markandrewmarquez.com for it. "
