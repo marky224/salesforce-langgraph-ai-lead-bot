@@ -15,6 +15,7 @@ import json
 import logging
 import re
 import time
+import unicodedata
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -1018,6 +1019,10 @@ MODEL_LINK_SHAPES = [
     "See @MarkAndrewMarquez.com/portfolio/made-up-page now.",
     "Write to x@MarkAndrewMarquez.com/portfolio/made-up-page now.",
     "It is at Evil.example:8080/login now.",
+    # An invisible format character (zero-width space, soft hyphen) inside a link.
+    "Visit www\u200b.evil.example today.",
+    "See markandrewmarquez\u200b.com/portfolio/made-up-page now.",
+    "Go to evil\u00ad.example/login now.",
 ]
 
 # Shapes whose cleanup may fail closed to the no-match reply (the rounds
@@ -1054,13 +1059,24 @@ class TestSiteAnswerLinks:
             )
             return
         body, link_line = reply.split("\n\n")
+        # What the visitor sees: invisible format characters don't show.
+        visible = "".join(ch for ch in body if unicodedata.category(ch) != "Cf").lower()
         for fragment in (
             "evil.example", "markandrewmarquez", "//", "http", "www.", "mailto", "tel:",
             "192.0.2.7", "8080", "[", "]",
         ):
-            assert fragment not in body.lower(), (fragment, body)
+            assert fragment not in visible, (fragment, body)
         assert link_line == f"Read more: [{M365_TITLE}]({M365_URL})"
         assert body.split()[0] == model_reply.split()[0]
+
+    @pytest.mark.asyncio
+    async def test_a_bidi_override_never_reaches_the_reply(self, site_index, mock_llm):
+        # U+202E would make "nigol/elpmaxe.live" display as evil.example/login.
+        mock_llm.ainvoke.return_value = MagicMock(content="Go to \u202enigol/elpmaxe.live now.")
+
+        reply = (await site_answer_node(_site_state(M365_QUESTION)))["messages"][0].content
+
+        assert "\u202e" not in reply
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("model_reply", MODEL_PROSE_TO_KEEP)

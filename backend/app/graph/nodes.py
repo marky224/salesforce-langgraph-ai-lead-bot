@@ -27,6 +27,7 @@ import json
 import logging
 import re
 import time
+import unicodedata
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -640,6 +641,9 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
     The only link in the reply is the chunk's own url, appended here as
     ``Read more: [title](url)``. From the model's text it removes:
 
+    - first, every Unicode format character (category Cf: zero-width spaces,
+      soft hyphens, bidi overrides), so an invisible character can't hide a
+      link from the passes below;
     - markdown images, and markdown links (keeping the link text);
     - any leftover link destination ``](...)``, then every ``[`` and ``]``;
     - each of these, up to the next whitespace (trailing ``.,;:!?`` kept):
@@ -670,6 +674,9 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
     didn't settle.
     """
     text = raw.strip()[:_SITE_RAW_MAX_CHARS]
+    # Invisible format characters (zero-width space, soft hyphen, bidi overrides)
+    # would hide a link from every pass while the browser still shows it whole.
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Cf").strip()
     if text.upper().startswith(_NO_ANSWER):
         return None
 
