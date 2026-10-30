@@ -559,6 +559,8 @@ _SITE_REPLY_MAX_CHARS = 600
 _SITE_RAW_MAX_CHARS = 4 * _SITE_REPLY_MAX_CHARS
 _SITE_TITLE_MAX_CHARS = 100
 _NO_ANSWER = "NO_ANSWER"
+# Rounds of (link passes, then tidy) before the reply is capped; see _finalize_site_reply.
+_LINK_PASS_ROUNDS = 3
 
 _MD_IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 _MD_LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
@@ -600,6 +602,24 @@ def _keep_trailing_punct(match: re.Match[str]) -> str:
     return run[len(run.rstrip(_SENTENCE_PUNCT)):]
 
 
+def _strip_links(text: str, own_site: re.Pattern[str]) -> str:
+    """One round of the link passes (the shapes are listed in _finalize_site_reply)."""
+    text = _MD_IMAGE.sub("", text)
+    text = _MD_LINK.sub(r"\1", text)
+    text = _MD_DESTINATION.sub("", text)
+    text = text.replace("[", "").replace("]", "")
+    text = _LINKISH.sub(_keep_trailing_punct, text)
+    return own_site.sub(_keep_trailing_punct, text)
+
+
+def _tidy(text: str) -> str:
+    """``<``/``>`` to ``‹``/``›``, drop empty ``()``, collapse spaces, close up space before punctuation."""
+    text = text.replace("<", "‹").replace(">", "›")
+    text = re.sub(r"\(\s*\)", "", text)
+    text = " ".join(text.split())
+    return re.sub(r"\s+([.,;:!?])", r"\1", text)
+
+
 def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
     """
     Make the model's site answer safe to show, or ``None`` for no answer.
@@ -611,7 +631,9 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
     here as ``Read more: [title](url)``. Also turns ``<``/``>`` into ``‹``/``›``
     (the widget renders markdown into HTML) and caps the text at 4 sentences
     and 600 characters. ``None`` when the model replied NO_ANSWER or nothing is
-    left after cleaning. The text around a removed URL is left as it is.
+    left after cleaning. The text around a removed URL is left as it is. The
+    link passes run again after tidying, up to 3 rounds, so closing up a space
+    or an empty ``()`` can't rebuild a link.
     """
     text = raw.strip()[:_SITE_RAW_MAX_CHARS]
     if text.upper().startswith(_NO_ANSWER):
@@ -619,16 +641,14 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
 
     domain = re.escape(urlsplit(hit.url).netloc.removeprefix("www."))
     own_site = re.compile(rf"[\w.-]*{domain}\S*", re.IGNORECASE)
-    text = _MD_IMAGE.sub("", text)
-    text = _MD_LINK.sub(r"\1", text)
-    text = _MD_DESTINATION.sub("", text)
-    text = text.replace("[", "").replace("]", "")
-    text = _LINKISH.sub(_keep_trailing_punct, text)
-    text = own_site.sub(_keep_trailing_punct, text)
-    text = text.replace("<", "‹").replace(">", "›")
-    text = re.sub(r"\(\s*\)", "", text)
-    text = " ".join(text.split())
-    text = re.sub(r"\s+([.,;:!?])", r"\1", text)
+    # Tidying can join pieces into a link ("www .evil.example" -> "www.evil.example"),
+    # so the link passes run again until the text stops changing.
+    for _ in range(_LINK_PASS_ROUNDS):
+        cleaned = _tidy(_strip_links(text, own_site))
+        changed = cleaned != text
+        text = cleaned
+        if not changed:
+            break
 
     text = " ".join(_SENTENCE_BREAK.split(text)[:_SITE_REPLY_MAX_SENTENCES])
     if len(text) > _SITE_REPLY_MAX_CHARS:

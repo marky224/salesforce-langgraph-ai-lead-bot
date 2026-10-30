@@ -999,6 +999,11 @@ MODEL_LINK_SHAPES = [
     "It is at [the [full] write-up](mailto:x@evil.example) now.",
     "It is at <https://www.markandrewmarquez.com/portfolio/made-up-page/> now.",
     "It is at evil.example/x now.",
+    # Pieces that tidying (closing up a space or an empty ()) would join into a link.
+    "Visit www .evil.example today.",
+    "Go to evil .example/login now.",
+    "See markandrewmarquez .com/portfolio/made-up-page now.",
+    "Try www().evil.example now.",
 ]
 
 
@@ -1016,7 +1021,7 @@ class TestSiteAnswerLinks:
         for fragment in ("evil.example", "markandrewmarquez", "//", "http", "www.", "mailto", "[", "]"):
             assert fragment not in body, (fragment, body)
         assert link_line == f"Read more: [{M365_TITLE}]({M365_URL})"
-        assert body.startswith("It is at")
+        assert body.split()[0] == model_reply.split()[0]
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("model_reply", MODEL_LINK_SHAPES)
