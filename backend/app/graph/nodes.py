@@ -567,11 +567,21 @@ _MD_LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 # The destination of a link _MD_LINK can't parse (nested or escaped brackets,
 # any scheme such as mailto:).
 _MD_DESTINATION = re.compile(r"\]\([^)]*\)")
-# A link-ish run, removed up to the next whitespace: a scheme or protocol-relative
-# URL (also inside quotes, <...> or href="..."), a www. host, or a bare host
-# followed by a path (evil.example/x).
+# Link-ish runs, each removed up to the next whitespace (trailing .,;:!? kept).
 _LINKISH = re.compile(
-    r"(?:https?:)?//\S+|www\.\S+|(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}/\S*", re.IGNORECASE
+    # http://, https:// and protocol-relative // URLs, wherever they start
+    # (inside quotes, <...> or href="...", or glued to a word)
+    r"(?:https?:)?//\S+"
+    # www. hosts
+    r"|www\.\S+"
+    # mailto: and tel: URIs (not glued after a letter, so "hotel:" is safe)
+    r"|(?<![a-z])(?:mailto|tel):\S+"
+    # a host, optionally with a trailing dot, followed by a port and/or a path:
+    # evil.example/x, evil.example:8080/login, evil.example:8080, evil.example./login
+    r"|(?<![a-z0-9.-])(?:[a-z0-9-]+\.)+[a-z]{2,}\.?(?::\d+(?:/\S*)?|/\S*)"
+    # an IPv4 address, optionally with a port, followed by a path: 192.0.2.7/login
+    r"|(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?/\S*",
+    re.IGNORECASE,
 )
 _SENTENCE_PUNCT = ".,;:!?"
 _SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+(?=[A-Z\"'‘“])")
@@ -624,23 +634,36 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
     """
     Make the model's site answer safe to show, or ``None`` for no answer.
 
-    Removes every link and URL the model wrote, in any shape: markdown links
-    and images (keeping link text), every ``[`` and ``]`` left over, and each
-    URL, ``www.`` host, bare ``host/path`` and mention of the site's own domain
-    up to the next whitespace. The only link is the chunk's own url, appended
-    here as ``Read more: [title](url)``. Also turns ``<``/``>`` into ``‹``/``›``
-    (the widget renders markdown into HTML) and caps the text at 4 sentences
-    and 600 characters. ``None`` when the model replied NO_ANSWER or nothing is
-    left after cleaning. The text around a removed URL is left as it is. The
+    The only link in the reply is the chunk's own url, appended here as
+    ``Read more: [title](url)``. From the model's text it removes:
+
+    - markdown images, and markdown links (keeping the link text);
+    - any leftover link destination ``](...)``, then every ``[`` and ``]``;
+    - each of these, up to the next whitespace (trailing ``.,;:!?`` kept):
+      ``http://``, ``https://`` and protocol-relative ``//`` URLs, also inside
+      quotes, ``<...>`` or ``href="..."`` or glued to a word; ``www.`` hosts;
+      ``mailto:`` and ``tel:`` URIs; a host followed by a port and/or a path,
+      with or without a trailing dot (``evil.example/x``,
+      ``evil.example:8080/login``, ``evil.example./login``); an IPv4 address
+      followed by a path (``192.0.2.7/login``); and the site's own domain
+      anywhere except in an email address.
+
+    Kept as text: plain email addresses, bare hosts with no path or port, and
+    entity-encoded URLs. The text around a removed URL is left as it is. The
     link passes run again after tidying, up to 3 rounds, so closing up a space
     or an empty ``()`` can't rebuild a link.
+
+    Also turns ``<``/``>`` into ``‹``/``›`` (the widget renders markdown into
+    HTML) and caps the text at 4 sentences and 600 characters. ``None`` when
+    the model replied NO_ANSWER or nothing is left after cleaning.
     """
     text = raw.strip()[:_SITE_RAW_MAX_CHARS]
     if text.upper().startswith(_NO_ANSWER):
         return None
 
     domain = re.escape(urlsplit(hit.url).netloc.removeprefix("www."))
-    own_site = re.compile(rf"[\w.-]*{domain}\S*", re.IGNORECASE)
+    # The site's own domain in any token, except right after the @ of an email.
+    own_site = re.compile(rf"(?<![\w.@-])[\w.-]*{domain}\S*", re.IGNORECASE)
     # Tidying can join pieces into a link ("www .evil.example" -> "www.evil.example"),
     # so the link passes run again until the text stops changing.
     for _ in range(_LINK_PASS_ROUNDS):

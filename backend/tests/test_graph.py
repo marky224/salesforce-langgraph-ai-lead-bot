@@ -1004,6 +1004,18 @@ MODEL_LINK_SHAPES = [
     "Go to evil .example/login now.",
     "See markandrewmarquez .com/portfolio/made-up-page now.",
     "Try www().evil.example now.",
+    # URI schemes, ports, IPv4 hosts and trailing-dot hosts written as text.
+    "Write to mailto:x@evil.example today.",
+    "Call tel:+15555550100 today.",
+    "It is at evil.example:8080/login now.",
+    "It is at 192.0.2.7/login now.",
+    "It is at evil.example./login now.",
+]
+
+# Ordinary prose the link cleanup must leave exactly as written.
+MODEL_PROSE_TO_KEEP = [
+    "Email sarah.chen@contoso.com for the slides.",
+    "Write to mark@markandrewmarquez.com for the slides.",
 ]
 
 
@@ -1018,10 +1030,22 @@ class TestSiteAnswerLinks:
         reply = (await site_answer_node(_site_state(M365_QUESTION)))["messages"][0].content
 
         body, link_line = reply.split("\n\n")
-        for fragment in ("evil.example", "markandrewmarquez", "//", "http", "www.", "mailto", "[", "]"):
+        for fragment in (
+            "evil.example", "markandrewmarquez", "//", "http", "www.", "mailto", "tel:",
+            "192.0.2.7", "8080", "[", "]",
+        ):
             assert fragment not in body, (fragment, body)
         assert link_line == f"Read more: [{M365_TITLE}]({M365_URL})"
         assert body.split()[0] == model_reply.split()[0]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("model_reply", MODEL_PROSE_TO_KEEP)
+    async def test_ordinary_prose_is_kept_as_written(self, site_index, mock_llm, model_reply):
+        mock_llm.ainvoke.return_value = MagicMock(content=model_reply)
+
+        reply = (await site_answer_node(_site_state(M365_QUESTION)))["messages"][0].content
+
+        assert reply.split("\n\n")[0] == model_reply
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("model_reply", MODEL_LINK_SHAPES)
