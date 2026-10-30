@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -26,6 +27,7 @@ from app.graph.nodes import (
     _compute_cost_usd,
     _ExtractedLead,
     _ExtractionResult,
+    _finalize_site_reply,
     _invoke_llm,
     _link_title,
     _merge_dict,
@@ -55,7 +57,7 @@ from app.graph.prompts import (
 )
 from app.graph.state import create_initial_state
 from app.models.schemas import ConversationStage
-from app.tools.site_search import SiteChunk
+from app.tools.site_search import SiteChunk, SiteHit
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -1017,3 +1019,25 @@ class TestSiteAnswerLinks:
 
         html = markdown_it.MarkdownIt("commonmark").render(reply)
         assert re.findall(r'href="([^"]*)"', html) == [M365_URL]
+
+
+class TestSiteAnswerCleanupTime:
+    """The cleanup runs inside the async node, so it must stay fast on any model output."""
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            "It works. https://a" + "." * 32_000 + "x",  # a URL-like run with no whitespace
+            "It works. " + "a." * 16_000 + "x",  # a host-like run with no whitespace
+        ],
+        ids=["url-like", "host-like"],
+    )
+    def test_a_32000_character_run_is_cleaned_well_under_a_second(self, raw):
+        hit = SiteHit(url=M365_URL, title=M365_TITLE, score=0.6, chunks=())
+
+        start = time.perf_counter()
+        reply = _finalize_site_reply(raw, hit)
+
+        assert time.perf_counter() - start < 0.5
+        assert reply is not None
+        assert reply.endswith(f"Read more: [{M365_TITLE}]({M365_URL})")

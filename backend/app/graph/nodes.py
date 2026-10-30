@@ -553,6 +553,10 @@ async def confirmation_node(state: GraphState) -> dict:
 
 _SITE_REPLY_MAX_SENTENCES = 4
 _SITE_REPLY_MAX_CHARS = 600
+# The model's text is cut to this before any regex runs: the cleanup does
+# synchronous CPU work inside the async node, and some passes grow with the
+# square of the input on long runs without whitespace.
+_SITE_RAW_MAX_CHARS = 4 * _SITE_REPLY_MAX_CHARS
 _SITE_TITLE_MAX_CHARS = 100
 _NO_ANSWER = "NO_ANSWER"
 
@@ -609,7 +613,7 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
     and 600 characters. ``None`` when the model replied NO_ANSWER or nothing is
     left after cleaning. The text around a removed URL is left as it is.
     """
-    text = raw.strip()
+    text = raw.strip()[:_SITE_RAW_MAX_CHARS]
     if text.upper().startswith(_NO_ANSWER):
         return None
 
