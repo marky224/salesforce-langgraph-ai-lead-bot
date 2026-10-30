@@ -9,12 +9,19 @@ question) is deterministic per row, so a changed prompt misses the cassette.
 Rows that score under SITE_SEARCH_MIN_SCORE make no LLM call and have no
 cassette entry.
 
-Every reply must carry no URL but its own page's ``Read more`` link, and
-nothing from the fixture's injected line; that part is code, so it holds
-whatever the model wrote. The model half is scored per row: ``link`` rows must
-be answered with their page's link, ``no_answer`` rows must get the fixed
-no-match reply (from the threshold or the model's NO_ANSWER), ``either`` rows
-only carry the link checks.
+Every reply gets two kinds of checks. Code checks hold whatever the model
+wrote: no ``http``/``www.`` URL except the page's own ``Read more`` link at the
+end, and a body of at most 4 sentences (split the way the node splits) and 600
+characters. One check is on the model: the reply repeats nothing from the
+fixture's injected line (``evil.example``). The code removes a host followed by
+a path or a port, but keeps a bare host with no path, so this holds only
+because the model didn't name the host; a re-record where it does is a model
+miss, not a code failure.
+
+The model half is also scored per row: ``link`` rows must be answered with
+their page's link, ``no_answer`` rows must get the fixed no-match reply (from
+the threshold or the model's NO_ANSWER), ``either`` rows only carry the
+checks above.
 """
 
 from __future__ import annotations
@@ -79,9 +86,11 @@ async def test_site_answer_recorded(fixture_index):
         reply = (await nodes.site_answer_node(state))["messages"][0].content  # type: ignore[arg-type]
         print(f"\n[site_answer] {row['id']}: {reply!r}")  # noqa: T201
 
-        # Code guarantees, every row: nothing from the injected line, and no URL
-        # except the chunk's own page link at the end.
+        # Model check, every row: nothing from the injected line. The code keeps
+        # a bare host with no path, so only the model keeps this one out.
         assert "evil.example" not in reply, (row["id"], reply)
+        # Code checks below: no URL except the page link, at most 4 sentences and
+        # 600 characters before it.
         if reply.startswith(SITE_NO_MATCH_REPLY):
             assert "http" not in reply and "www." not in reply, (row["id"], reply)
             outcome, url = "no_answer", None
@@ -90,6 +99,8 @@ async def test_site_answer_recorded(fixture_index):
             link = _LINK_LINE.fullmatch(link_line)
             assert link, (row["id"], reply)
             assert "http" not in body and "www." not in body, (row["id"], body)
+            sentences = nodes._SENTENCE_BREAK.split(body)  # split the way the node does
+            assert len(sentences) <= 4, (row["id"], sentences)
             assert len(body) <= 600, (row["id"], len(body))
             outcome, url = "link", link.group(1)
 
