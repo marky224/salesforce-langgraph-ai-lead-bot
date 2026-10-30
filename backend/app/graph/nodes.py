@@ -576,10 +576,13 @@ _LINKISH = re.compile(
     r"|(?i:www)\.\S+"
     # mailto: and tel: URIs (not glued after a letter, so "hotel:" is safe)
     r"|(?<![A-Za-z])(?i:mailto|tel):\S+"
-    # an all-lowercase host, optionally with a trailing dot, followed by a port
-    # and/or a path: evil.example/x, evil.example:8080/login, evil.example./login.
-    # Lowercase only, so stack names such as Node.js/TypeScript or ASP.NET/C# stay.
-    r"|(?<![A-Za-z0-9.-])(?:[a-z0-9-]+\.)+[a-z]{2,}\.?(?::\d+(?:/\S*)?|/\S*)"
+    # an all-lowercase host, optionally with a trailing dot, followed by a path:
+    # evil.example/x, evil.example./login. Lowercase only, so stack names such as
+    # Node.js/TypeScript or ASP.NET/C# stay.
+    r"|(?<![A-Za-z0-9.-])(?:[a-z0-9-]+\.)+[a-z]{2,}\.?/\S*"
+    # a host in any case, optionally with a trailing dot, followed by a port and
+    # maybe a path: evil.example:8080/login, Evil.example:8080. A port isn't prose.
+    r"|(?<![A-Za-z0-9.-])(?i:(?:[a-z0-9-]+\.)+[a-z]{2,})\.?:\d+(?:/\S*)?"
     # an IPv4 address, optionally with a port, followed by a path: 192.0.2.7/login
     r"|(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?/\S*"
 )
@@ -642,16 +645,19 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
     - each of these, up to the next whitespace (trailing ``.,;:!?`` kept):
       ``http://``, ``https://`` and protocol-relative ``//`` URLs, also inside
       quotes, ``<...>`` or ``href="..."`` or glued to a word; ``www.`` hosts;
-      ``mailto:`` and ``tel:`` URIs; an all-lowercase host followed by a port
-      and/or a path, with or without a trailing dot (``evil.example/x``,
-      ``evil.example:8080/login``, ``evil.example./login``); an IPv4 address
-      followed by a path (``192.0.2.7/login``); and the site's own domain, in
-      any case, anywhere except in an email address.
+      ``mailto:`` and ``tel:`` URIs; an all-lowercase host followed by a path,
+      with or without a trailing dot (``evil.example/x``, ``evil.example./login``);
+      a host in any case followed by a port (``Evil.example:8080/login``); an
+      IPv4 address followed by a path (``192.0.2.7/login``); and the site's own
+      domain, in any case, anywhere except in a plain email address (right
+      after an ``@`` it is stripped only when a path or port follows:
+      ``x@MarkAndrewMarquez.com/page``).
 
-    Kept as text: plain email addresses, a host/path whose host has an
-    uppercase letter (``Node.js/TypeScript``, ``ASP.NET/C#``), bare hosts with
-    no path or port, and entity-encoded URLs. The text around a removed URL is
-    left as it is.
+    Kept as text: plain email addresses (``mark@markandrewmarquez.com``,
+    ``x@evil.example``), a host/path with no port whose host has an uppercase
+    letter (``Node.js/TypeScript``, ``ASP.NET/C#``), bare hosts with no path or
+    port, and entity-encoded URLs. The text around a removed URL is left as it
+    is.
 
     The link passes and the tidy steps run in rounds, at most 3, until the text
     stops changing, so closing up a space or an empty ``()`` can't rebuild a
@@ -668,8 +674,12 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
         return None
 
     domain = re.escape(urlsplit(hit.url).netloc.removeprefix("www."))
-    # The site's own domain in any token, except right after the @ of an email.
-    own_site = re.compile(rf"(?<![\w.@-])[\w.-]*{domain}\S*", re.IGNORECASE)
+    # The site's own domain in any token, except in a plain email address: right
+    # after an @ it is stripped only when a path or port follows (x@site.com/page).
+    own_site = re.compile(
+        rf"(?<![\w.@-])[\w.-]*{domain}\S*|(?<=@)[\w.-]*{domain}(?=[/?#]|:\d)\S*",
+        re.IGNORECASE,
+    )
     # Tidying can join pieces into a link ("www .evil.example" -> "www.evil.example"),
     # so the link passes run again until the text stops changing. If the last
     # round still changed it, its tidy may have rebuilt a link no pass has seen:

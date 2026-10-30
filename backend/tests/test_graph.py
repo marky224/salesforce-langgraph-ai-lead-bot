@@ -1014,6 +1014,10 @@ MODEL_LINK_SHAPES = [
     "Try www((())).evil.example now.",
     "See markandrewmarquez((())).com/portfolio/made-up-page now.",
     "Go to evil((())).example/login now.",
+    # The site's domain after an @ but with a path, and a mixed-case host with a port.
+    "See @MarkAndrewMarquez.com/portfolio/made-up-page now.",
+    "Write to x@MarkAndrewMarquez.com/portfolio/made-up-page now.",
+    "It is at Evil.example:8080/login now.",
 ]
 
 # Shapes whose cleanup may fail closed to the no-match reply (the rounds
@@ -1028,6 +1032,7 @@ FAIL_CLOSED_SHAPES = {
 MODEL_PROSE_TO_KEEP = [
     "Email sarah.chen@contoso.com for the slides.",
     "Write to mark@markandrewmarquez.com for the slides.",
+    "Email x@evil.example for the slides.",
     # A host/path rule for lowercase hosts only keeps stack names.
     "He built it with Node.js/TypeScript and ASP.NET/C# on Azure.",
 ]
@@ -1053,7 +1058,7 @@ class TestSiteAnswerLinks:
             "evil.example", "markandrewmarquez", "//", "http", "www.", "mailto", "tel:",
             "192.0.2.7", "8080", "[", "]",
         ):
-            assert fragment not in body, (fragment, body)
+            assert fragment not in body.lower(), (fragment, body)
         assert link_line == f"Read more: [{M365_TITLE}]({M365_URL})"
         assert body.split()[0] == model_reply.split()[0]
 
