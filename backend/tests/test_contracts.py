@@ -33,3 +33,24 @@ class TestEnumScoreTableContract:
 
     def test_company_size_table_matches_enum(self):
         assert set(_COMPANY_SIZE_SCORES) == {c.value for c in CompanySize}
+
+
+class TestSiteQuestionContract:
+    """
+    The router's ``site_question`` answer is a detour, not a stage. If it ever
+    became a ConversationStage value it would enter the shared .value contract
+    (scorer, prompts, Salesforce, the widget's ConversationStage typedef) and
+    reach the SSE ``done`` frame.
+    """
+
+    def test_site_question_is_not_a_conversation_stage(self):
+        from app.graph.nodes import SITE_QUESTION
+        from app.models.schemas import ConversationStage
+
+        assert SITE_QUESTION == "site_question"
+        assert SITE_QUESTION not in {stage.value for stage in ConversationStage}
+
+    def test_site_answer_is_a_router_destination(self):
+        from app.graph.edges import NODE_SITE_ANSWER, get_all_route_destinations
+
+        assert NODE_SITE_ANSWER in get_all_route_destinations()["route_after_router"]

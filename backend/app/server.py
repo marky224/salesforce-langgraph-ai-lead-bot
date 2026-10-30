@@ -25,6 +25,7 @@ Or via Docker::
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from collections.abc import AsyncGenerator
@@ -53,6 +54,7 @@ from app.models.schemas import (
     ConversationStage,
     HealthResponse,
 )
+from app.tools.site_index import run_site_index_refresh
 from app.tracing import build_tracer
 
 logger = logging.getLogger(__name__)
@@ -160,9 +162,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     1. Configure logging.
     2. Instantiate the LLM provider.
     3. Inject the LLM into the graph nodes.
-    4. Compile the LangGraph with a checkpointer.
+    4. Start the site-index refresh in the background (not awaited, so startup
+       never waits on the network or fails because of the index).
+    5. Compile the LangGraph with a checkpointer.
 
     On shutdown:
+    - Cancel the site-index refresh.
     - Log a clean shutdown message.
     """
     global _graph, _trace_base, _tracer  # noqa: PLW0603
@@ -195,14 +200,30 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     }
     _tracer = build_tracer(settings)
 
+    # Site index for TARS site questions: load now and every refresh interval.
+    # An empty SITE_INDEX_URL turns retrieval off (no task, no fetch).
+    site_index_task: asyncio.Task[None] | None = None
+    if settings.site_index_url:
+        site_index_task = asyncio.create_task(
+            run_site_index_refresh(
+                settings.site_index_url, settings.site_index_refresh_seconds
+            )
+        )
+
     # Open the checkpointer (Postgres if DATABASE_URL set, else MemorySaver) and
     # keep it open for the whole process so the DB connection lives for the
     # app's lifetime.
-    async with open_checkpointer(settings) as checkpointer:
-        _graph = build_graph(checkpointer=checkpointer)
-        logger.info("LangGraph compiled and ready")
+    try:
+        async with open_checkpointer(settings) as checkpointer:
+            _graph = build_graph(checkpointer=checkpointer)
+            logger.info("LangGraph compiled and ready")
 
-        yield
+            yield
+    finally:
+        if site_index_task is not None:
+            site_index_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await site_index_task
 
     # --- Shutdown ---
     if _tracer is not None:
@@ -391,6 +412,9 @@ async def chat_stream(request: Request, payload: ChatRequest) -> StreamingRespon
         data: {"token": " there"}
         data: {"token": "!"}
         data: {"done": true, "thread_id": "abc", "stage": "discovery"}
+
+    A site answer (``site_answer`` node) is not streamed token by token: its
+    reply is checked first and sent as a single ``token`` event.
     """
     graph = _get_graph()
     thread_id = payload.thread_id or str(uuid.uuid4())
@@ -418,6 +442,10 @@ async def chat_stream(request: Request, payload: ChatRequest) -> StreamingRespon
             "greeting", "discovery", "qualification",
             "objection_handling", "lead_capture", "confirmation", "error",
         }
+        # Nodes whose reply is checked before it is shown (site_answer strips any
+        # URL the model wrote): their LLM tokens are never streamed; the finished
+        # reply goes out as one token event when the node ends.
+        _BUFFERED_NODES = {"site_answer"}
 
         try:
             async for event in graph.astream_events(
@@ -443,6 +471,17 @@ async def chat_stream(request: Request, payload: ChatRequest) -> StreamingRespon
                 # Capture final state when the graph completes
                 elif kind == "on_chain_end":
                     output = event.get("data", {}).get("output", {})
+                    name = event.get("name")
+                    if (
+                        name in _BUFFERED_NODES
+                        and event.get("metadata", {}).get("langgraph_node") == name
+                        and isinstance(output, dict)
+                    ):
+                        messages = output.get("messages") or []
+                        last = messages[-1] if messages else None
+                        if isinstance(last, AIMessage) and isinstance(last.content, str) and last.content:
+                            collected_reply += last.content
+                            yield f"data: {_sse_json({'token': last.content})}\n\n"
                     if isinstance(output, dict):
                         if "stage" in output:
                             raw_stage = output["stage"]

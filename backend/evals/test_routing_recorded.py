@@ -6,6 +6,10 @@ fails closed when a reworded ROUTER_PROMPT anchor changes the request body. Scor
 against an ``acceptable_next`` set per case (discovery vs qualification is
 legitimately ambiguous). Floor is the recorded baseline for
 ``grok-4.3``; refresh when the cassette is re-recorded.
+
+The router can also answer ``site_question`` (a detour to the site_answer node,
+not a stage): the ``site-*`` rows must get it, and sales messages that mention
+the same technologies Mark writes about must not.
 """
 
 from __future__ import annotations
@@ -21,7 +25,7 @@ pytestmark = pytest.mark.eval_recorded
 # Recorded baseline for grok-4.3 is 1.0 (every case hit its
 # acceptable set). The floor keeps headroom for one genuinely-ambiguous case to
 # drift on a future re-record, while still failing on a real router regression
-# (2+ misses across 16 cases). See _private/docs/build/14-evals.md.
+# (3+ misses across 27 cases). See _private/docs/build/14-evals.md.
 ROUTING_ACCURACY_FLOOR = 0.90
 
 
@@ -46,5 +50,20 @@ async def test_routing_recorded():
     assert agg["accuracy"] >= ROUTING_ACCURACY_FLOOR, agg
 
     # Hard contract: never skip greeting -> lead_capture, even when the visitor
-    # volunteers contact info up front (prompts.py:464).
+    # volunteers contact info up front (ROUTER_PROMPT rules).
     assert by_id["no-skip-greeting-to-leadcapture"] != "lead_capture", by_id
+
+    # Site questions: every unambiguous one is a detour to site_answer...
+    for case in (
+        "site-article-from-discovery",
+        "site-writeup-from-qualification",
+        "site-howbuilt-from-leadcapture",
+        "site-greeting-read-post",
+        "site-mixed-pain-and-question",
+    ):
+        assert by_id[case] == "site_question", (case, by_id[case])
+    # ...and a sales message about the same technology is not (role-drift guard).
+    assert by_id["sales-salesforce-pain-not-site"] != "site_question", by_id
+    # A first message with a site cue reaches the router at stage greeting; the
+    # router must not send it back to the greeting node.
+    assert by_id["greeting-site-cue-sales-opener"] != "greeting", by_id

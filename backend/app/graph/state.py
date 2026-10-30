@@ -91,6 +91,11 @@ class GraphState(TypedDict, total=False):
     error : str | None
         Human-readable error message if something goes wrong in an
         external call (LLM, Salesforce).  Checked by the error node.
+
+    site_question : bool
+        True when the latest visitor message asks about Mark's own articles
+        or projects.  ``site_answer`` answers it and clears the flag.  A
+        detour, not a stage: ``stage`` keeps the value it had.
     """
 
     # --- Conversation history (append-only via reducer) --------------------
@@ -122,6 +127,9 @@ class GraphState(TypedDict, total=False):
     # --- Control flow helpers ----------------------------------------------
     retry_count: int
     error: str | None
+
+    # --- Site questions (a detour, not a stage) ----------------------------
+    site_question: bool
 
 
 # ---------------------------------------------------------------------------
@@ -156,4 +164,5 @@ def create_initial_state() -> GraphState:
         salesforce_task_id=None,
         retry_count=0,
         error=None,
+        site_question=False,
     )

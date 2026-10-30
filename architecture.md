@@ -69,7 +69,7 @@ stateDiagram-v2
     greeting --> WAIT: Reply sent
 
     extraction --> discovery: Stage = GREETING (fast-path)
-    extraction --> router: Other stages
+    extraction --> router: Other stages, or GREETING + site cue
     extraction --> scoring: Stage = CONFIRMATION + confirmed
     extraction --> error: Error present
 
@@ -79,12 +79,14 @@ stateDiagram-v2
     router --> lead_capture: Ready for contact info
     router --> confirmation: Contact info complete
     router --> scoring: Stage = COMPLETE
+    router --> site_answer: Site question (stage unchanged)
 
     discovery --> WAIT
     qualification --> WAIT
     objection_handling --> WAIT
     lead_capture --> WAIT
     confirmation --> WAIT
+    site_answer --> WAIT
 
     WAIT --> entry_point: Next human message
 

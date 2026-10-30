@@ -12,6 +12,9 @@ Node categories:
   (lead info, qualification signals, objections) and patches state dicts.
 - **Scoring node** — computes a 0-100 lead score from qualification data.
 - **Salesforce node** — creates Lead + Task records via the Salesforce API.
+- **Site answer node** — answers a question about Mark's own articles and
+  projects from the site index, with the page's link, then hands back to the
+  stage the visitor was in (it never changes ``stage``).
 - **Error node** — produces a graceful fallback reply when something breaks.
 
 All LLM calls go through a shared ``_invoke_llm`` helper so the provider
@@ -22,8 +25,11 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
+import unicodedata
 from typing import Any
+from urllib.parse import urlsplit
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
@@ -39,15 +45,23 @@ from app.graph.prompts import (
     PERSONA,
     QUALIFICATION_PROMPT,
     ROUTER_PROMPT,
+    SITE_ANSWER_PROMPT,
+    SITE_NO_MATCH_REPLY,
+    SITE_RETURN_LINES,
+    SITE_UNAVAILABLE_REPLY,
     TRANSCRIPT_SUMMARY_PROMPT,
     format_known_info,
+    format_site_excerpts,
     format_transcript,
     get_missing_contact_fields,
     get_missing_qualification_fields,
+    site_return_hint,
 )
 from app.graph.state import GraphState
 from app.models.schemas import ConversationStage
 from app.tools.qualification import compute_lead_score
+from app.tools.site_index import get_site_index
+from app.tools.site_search import SiteHit, search_site
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +119,7 @@ _STATE_DEFAULTS: dict[str, Any] = {
     "salesforce_task_id": None,
     "retry_count": 0,
     "error": None,
+    "site_question": False,
 }
 
 
@@ -534,6 +549,264 @@ async def confirmation_node(state: GraphState) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Site answer node (a detour: questions about Mark's articles and projects)
+# ---------------------------------------------------------------------------
+
+_SITE_REPLY_MAX_SENTENCES = 4
+_SITE_REPLY_MAX_CHARS = 600
+# The model's text is cut to this before any regex runs: the cleanup does
+# synchronous CPU work inside the async node, and some passes grow with the
+# square of the input on long runs without whitespace.
+_SITE_RAW_MAX_CHARS = 4 * _SITE_REPLY_MAX_CHARS
+_SITE_TITLE_MAX_CHARS = 100
+_NO_ANSWER = "NO_ANSWER"
+# Rounds of (link passes, then tidy) before the reply is capped; see _finalize_site_reply.
+_LINK_PASS_ROUNDS = 3
+
+_MD_IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
+_MD_LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+# The destination of a link _MD_LINK can't parse (nested or escaped brackets,
+# any scheme such as mailto:).
+_MD_DESTINATION = re.compile(r"\]\([^)]*\)")
+# Link-ish runs, each removed up to the next whitespace (trailing .,;:!? kept).
+_LINKISH = re.compile(
+    # http://, https:// and protocol-relative // URLs, wherever they start
+    # (inside quotes, <...> or href="...", or glued to a word)
+    r"(?i:https?:)?//\S+"
+    # www. hosts
+    r"|(?i:www)\.\S+"
+    # mailto: and tel: URIs (not glued after a letter, so "hotel:" is safe)
+    r"|(?<![A-Za-z])(?i:mailto|tel):\S+"
+    # an all-lowercase host, optionally with a trailing dot, followed by a path:
+    # evil.example/x, evil.example./login. Lowercase only, so stack names such as
+    # Node.js/TypeScript or ASP.NET/C# stay.
+    r"|(?<![A-Za-z0-9.-])(?:[a-z0-9-]+\.)+[a-z]{2,}\.?/\S*"
+    # a host in any case, optionally with a trailing dot, followed by a port and
+    # maybe a path: evil.example:8080/login, Evil.example:8080. A port isn't prose.
+    r"|(?<![A-Za-z0-9.-])(?i:(?:[a-z0-9-]+\.)+[a-z]{2,})\.?:\d+(?:/\S*)?"
+    # an IPv4 address, optionally with a port, followed by a path: 192.0.2.7/login
+    r"|(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?/\S*"
+)
+# The listed invisible default-ignorable code points that aren't Cf (dropped
+# with Cf before the link passes): combining grapheme joiner, Hangul fillers,
+# Khmer inherent vowels, Mongolian free variation selectors, variation
+# selectors. Unassigned default-ignorables are left alone.
+_IGNORABLE = re.compile(
+    "[\u034f\u115f\u1160\u17b4\u17b5\u180b-\u180f\u3164\ufe00-\ufe0f\uffa0"
+    "\U000e0100-\U000e01ef]"
+)
+# Lookalike dots a browser shows like ".": fullwidth, ideographic, halfwidth
+# ideographic, small, one-dot leader. The first three also separate the labels
+# of a host name, as "." does (Python's encodings.idna.dots).
+_LOOKALIKE_DOTS = str.maketrans(
+    {"\uff0e": ".", "\u3002": ".", "\uff61": ".", "\ufe52": ".", "\u2024": "."}
+)
+# A markdown backslash escape before ASCII punctuation. CommonMark drops the
+# backslash when it renders, so www\.evil.example would show as a link.
+_MD_ESCAPE = re.compile(r"\\([!-/:-@\[-`{-~])")
+_SENTENCE_PUNCT = ".,;:!?"
+_SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+(?=[A-Z\"'‘“])")
+_TITLE_DROP = re.compile(r"[\[\]()<>]")
+
+
+def _current_stage(state: GraphState) -> ConversationStage:
+    """``state['stage']`` as the enum, whether the checkpoint restored an enum or a str."""
+    stage = state.get("stage", ConversationStage.DISCOVERY)
+    if isinstance(stage, ConversationStage):
+        return stage
+    try:
+        return ConversationStage(stage)
+    except ValueError:
+        return ConversationStage.DISCOVERY
+
+
+def _link_title(title: str) -> str:
+    """The chunk's page title as safe markdown link text."""
+    text = "".join(ch for ch in title if ch.isprintable())
+    text = " ".join(_TITLE_DROP.sub("", text).split())[:_SITE_TITLE_MAX_CHARS].rstrip()
+    return text or "the full write-up"
+
+
+def _keep_trailing_punct(match: re.Match[str]) -> str:
+    """Replacement that drops a link-ish run but keeps the punctuation it ended with."""
+    run = match.group(0)
+    return run[len(run.rstrip(_SENTENCE_PUNCT)):]
+
+
+def _strip_links(text: str, own_site: re.Pattern[str]) -> str:
+    """One round of the link passes (the shapes are listed in _finalize_site_reply)."""
+    text = _MD_ESCAPE.sub(r"\1", text)
+    text = _MD_IMAGE.sub("", text)
+    text = _MD_LINK.sub(r"\1", text)
+    text = _MD_DESTINATION.sub("", text)
+    text = text.replace("[", "").replace("]", "")
+    text = _LINKISH.sub(_keep_trailing_punct, text)
+    return own_site.sub(_keep_trailing_punct, text)
+
+
+def _tidy(text: str) -> str:
+    """``<``/``>`` to ``‹``/``›``, drop empty ``()``, collapse spaces, close up space before punctuation."""
+    text = text.replace("<", "‹").replace(">", "›")
+    text = re.sub(r"\(\s*\)", "", text)
+    text = " ".join(text.split())
+    return re.sub(r"\s+([.,;:!?])", r"\1", text)
+
+
+def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
+    """
+    Make the model's site answer safe to show, or ``None`` for no answer.
+
+    The only link in the reply is the chunk's own url, appended here as
+    ``Read more: [title](url)``. From the model's text it removes:
+
+    - first, every Unicode format character (category Cf: zero-width spaces,
+      soft hyphens, bidi overrides) and the listed default-ignorable code
+      points that aren't Cf (U+034F, U+115F-1160, U+17B4-17B5, U+180B-180F,
+      U+3164, U+FE00-FE0F, U+FFA0, U+E0100-E01EF; not the unassigned ones);
+      the lookalike dots U+FF0E, U+3002, U+FF61, U+FE52 and U+2024 become
+      ``.`` (no other normalisation), so none of these can hide a link from
+      the passes below;
+    - in every round below, first a backslash before ASCII punctuation
+      (CommonMark drops it when it renders, so ``www\\.evil.example`` would
+      show as a link);
+    - markdown images, and markdown links (keeping the link text);
+    - any leftover link destination ``](...)``, then every ``[`` and ``]``;
+    - each of these, up to the next whitespace (trailing ``.,;:!?`` kept):
+      ``http://``, ``https://`` and protocol-relative ``//`` URLs, also inside
+      quotes, ``<...>`` or ``href="..."`` or glued to a word; ``www.`` hosts;
+      ``mailto:`` and ``tel:`` URIs; an all-lowercase host followed by a path,
+      with or without a trailing dot (``evil.example/x``, ``evil.example./login``);
+      a host in any case followed by a port (``Evil.example:8080/login``); an
+      IPv4 address followed by a path (``192.0.2.7/login``); and the site's own
+      domain, in any case, anywhere except in a plain email address (right
+      after an ``@`` it is stripped when a path, a port, or a ``?``/``#`` with
+      more text follows, also past dots or hyphens:
+      ``x@MarkAndrewMarquez.com./page``, ``x@MarkAndrewMarquez.com.evil.example/x``).
+
+    Kept as text: plain email addresses, also at the end of a sentence
+    (``mark@markandrewmarquez.com?``, ``x@evil.example``); a host/path with no
+    port whose host has an uppercase letter (``Node.js/TypeScript``,
+    ``ASP.NET/C#``); bare hosts with no path or port; entity-encoded URLs; and
+    link shapes split by markdown emphasis or code-span markers
+    (``Go to _evil_.example/login``, ``Go to evi*l*.example/login``,
+    ``Go to `evil`.example/login``). Neither these nor entity-encoded URLs
+    make an href, but CommonMark shows them joined or decoded, as
+    ``evil.example/login``. The text around a removed URL is left as it is.
+    Known over-strips, accepted because they err safe: a host with a port is
+    removed in any case, so prose such as ``Node.js:20`` or ``ASP.NET:8`` goes
+    too; and after an email on the site's domain, a ``?`` followed by closing
+    punctuation counts as a query, so ``(Or email mark@markandrewmarquez.com?)``
+    becomes ``(Or email mark@`` and ``Really, mark@markandrewmarquez.com?!``
+    becomes ``Really, mark@?!``.
+
+    The unescape, the link passes and the tidy steps run in rounds, at most 3,
+    until the text stops changing, so closing up a space or an empty ``()``,
+    or unescaping a doubled backslash (``evil\\\\.example``), can't rebuild a
+    link, and no backslash escape is left for the renderer to drop. If the
+    third round still changed the text, the reply fails closed: ``None``, so
+    the visitor gets the no-match reply.
+
+    Also turns ``<``/``>`` into ``‹``/``›`` (the widget renders markdown into
+    HTML) and caps the text at 4 sentences and 600 characters; the cut drops
+    trailing spaces, ``,;:`` and backslashes before it adds ``...``, so it
+    leaves no backslash escape either. ``None`` when the model replied
+    NO_ANSWER, nothing is left after cleaning, or the rounds didn't settle.
+    """
+    text = raw.strip()[:_SITE_RAW_MAX_CHARS]
+    # Invisible characters (format characters such as zero-width space, soft
+    # hyphen and bidi overrides, plus the listed default-ignorables) would hide a
+    # link from every pass while the browser still shows it whole; lookalike dots
+    # would too.
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
+    text = _IGNORABLE.sub("", text).translate(_LOOKALIKE_DOTS).strip()
+    if _MD_ESCAPE.sub(r"\1", text).upper().startswith(_NO_ANSWER):
+        return None
+
+    domain = re.escape(urlsplit(hit.url).netloc.removeprefix("www."))
+    # The site's own domain in any token, except in a plain email address: right
+    # after an @ it is stripped only when a path, a port, or a ?/# with more text
+    # follows, also past dots or hyphens (x@site.com./page, x@site.com.evil.example/x).
+    # A ? or . that ends a sentence after an email doesn't count, but a ? before
+    # closing punctuation does (an accepted over-strip, listed in the docstring).
+    own_site = re.compile(
+        rf"(?<![\w.@-])[\w.-]*{domain}\S*"
+        rf"|(?<=@)[\w.-]*{domain}[\w.-]*(?=/|[?#]\S|:\d)\S*",
+        re.IGNORECASE,
+    )
+    # Tidying can join pieces into a link ("www .evil.example" -> "www.evil.example"),
+    # so the link passes run again until the text stops changing. If the last
+    # round still changed it, its tidy may have rebuilt a link no pass has seen:
+    # fail closed to the no-match reply.
+    for _ in range(_LINK_PASS_ROUNDS):
+        cleaned = _tidy(_strip_links(text, own_site))
+        if cleaned == text:
+            break
+        text = cleaned
+    else:
+        return None
+
+    text = " ".join(_SENTENCE_BREAK.split(text)[:_SITE_REPLY_MAX_SENTENCES])
+    if len(text) > _SITE_REPLY_MAX_CHARS:
+        text = text[: _SITE_REPLY_MAX_CHARS - 3].rsplit(" ", 1)[0].rstrip(" ,;:\\") + "..."
+    if not text.strip(" .,;:!?"):
+        return None
+    return f"{text}\n\nRead more: [{_link_title(hit.title)}]({hit.url})"
+
+
+async def site_answer_node(state: GraphState) -> dict:
+    """
+    Answer a question about Mark's own articles and projects, then hand back.
+
+    A detour, not a stage: it never writes ``stage``, so the next turn carries
+    on from the stage the visitor was in, and the reply ends with a sentence
+    that steers back to it. The answer comes only from the best-matching page
+    of the site index, and that page's url is the only link. With no index
+    loaded, or no chunk scoring at least ``site_search_min_score``, it sends a
+    fixed reply and makes no LLM call. Clears ``site_question``.
+    """
+    logger.info("Node: site_answer")
+
+    question = ""
+    for msg in reversed(state.get("messages", [])):
+        if isinstance(msg, HumanMessage):
+            question = msg.content if isinstance(msg.content, str) else ""
+            break
+    stage = _current_stage(state)
+    return_line = SITE_RETURN_LINES[stage]
+
+    index = get_site_index()
+    if index is None:
+        logger.info("site_answer outcome=unavailable")
+        reply = f"{SITE_UNAVAILABLE_REPLY} {return_line}"
+    else:
+        hit = search_site(
+            index.search, question, min_score=get_settings().site_search_min_score
+        )
+        if hit is None:
+            logger.info("site_answer outcome=no_match")
+            reply = f"{SITE_NO_MATCH_REPLY} {return_line}"
+        else:
+            prompt = SITE_ANSWER_PROMPT.format(
+                persona=PERSONA,
+                excerpts=format_site_excerpts(hit.chunks),
+                return_hint=site_return_hint(
+                    stage, _gs(state, "lead_data"), _gs(state, "qualification_data")
+                ),
+            )
+            raw = await _invoke_llm(prompt, list(state.get("messages", [])), node="site_answer")
+            answer = _finalize_site_reply(raw, hit)
+            logger.info(
+                "site_answer outcome=%s score=%.3f url=%s",
+                "answered" if answer else "no_answer",
+                hit.score,
+                hit.url,
+            )
+            reply = answer or f"{SITE_NO_MATCH_REPLY} {return_line}"
+
+    return {"messages": [AIMessage(content=reply)], "site_question": False}
+
+
+# ---------------------------------------------------------------------------
 # Extraction node
 # ---------------------------------------------------------------------------
 
@@ -693,6 +966,12 @@ async def salesforce_node(state: GraphState) -> dict:
 # Router node
 # ---------------------------------------------------------------------------
 
+# The router's answer for a question about Mark's own articles or projects.
+# A router output only, never a ConversationStage value: the enum's .value
+# strings are a shared contract (scorer, prompts, Salesforce, widget).
+SITE_QUESTION = "site_question"
+
+
 async def router_node(state: GraphState) -> dict:
     """
     Decide which conversation stage should come next.
@@ -700,6 +979,9 @@ async def router_node(state: GraphState) -> dict:
     Uses the ``ROUTER_PROMPT`` with an LLM call to make a contextual
     routing decision.  Returns the updated ``stage`` and optionally
     increments ``retry_count`` if the visitor tried to leave early.
+    When the router answers ``site_question`` it returns only
+    ``site_question=True`` (``stage`` unchanged); ``route_after_router``
+    then sends the turn to ``site_answer``.
 
     This node does NOT produce a user-visible message — it only updates
     the ``stage`` field for the conditional edge to read.
@@ -729,6 +1011,11 @@ async def router_node(state: GraphState) -> dict:
     reasoning = parsed.get("reasoning", "")
     logger.info("Router decision: %s — %s", next_stage_str, reasoning)
 
+    # A site question is a detour, not a stage: flag it for site_answer and
+    # leave ``stage`` (and the early-exit count) as they are.
+    if next_stage_str == SITE_QUESTION:
+        return {"site_question": True}
+
     # Map string to enum (fallback to discovery if unrecognised)
     try:
         next_stage = ConversationStage(next_stage_str)
@@ -736,7 +1023,8 @@ async def router_node(state: GraphState) -> dict:
         logger.warning("Unrecognised stage '%s', defaulting to discovery", next_stage_str)
         next_stage = ConversationStage.DISCOVERY
 
-    result: dict[str, Any] = {"stage": next_stage}
+    # Every other decision clears the flag, so a stale one can't misroute.
+    result: dict[str, Any] = {"stage": next_stage, "site_question": False}
 
     # Detect early-exit attempt: if visitor seems to be leaving and we
     # haven't retried yet, the router may keep the current stage.

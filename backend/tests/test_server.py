@@ -15,9 +15,15 @@ isolated from the others.
 
 from __future__ import annotations
 
+import asyncio
 import itertools
 import json
+import threading
+import time
+import urllib.error
 from contextlib import asynccontextmanager
+from email.message import Message
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -280,3 +286,238 @@ def test_lifespan_flushes_tracer_on_shutdown(monkeypatch):
         pass
 
     assert flushed == [1]  # flushed exactly once, because a tracer was active
+
+
+# ---------------------------------------------------------------------------
+# Site index: loaded in the background by the lifespan, never blocking startup
+# ---------------------------------------------------------------------------
+
+SITE_INDEX_URL = "https://www.markandrewmarquez.com/site-index.json"
+SITE_INDEX_FIXTURE = Path(__file__).parent / "fixtures" / "site_index_v1.json"
+
+
+class _FakeIndexResponse:
+    """The slice of an HTTP response that site_index.fetch_site_index reads."""
+
+    def __init__(self, body: bytes):
+        self._body = body
+        self.headers = Message()
+        self.headers["Content-Type"] = "application/json"
+
+    def read(self, size: int = -1) -> bytes:
+        return self._body if size < 0 else self._body[:size]
+
+    def geturl(self) -> str:
+        return SITE_INDEX_URL
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return None
+
+
+@pytest.fixture
+def lifespan_env(monkeypatch):
+    """Env for driving the real lifespan offline; resets the in-memory index."""
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
+
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
+    from app import server
+    from app.tools import site_index
+
+    @asynccontextmanager
+    async def _memory_checkpointer(_settings):
+        yield MemorySaver()
+
+    monkeypatch.setattr(server, "open_checkpointer", _memory_checkpointer)
+    site_index.set_site_index(None)
+    yield server, site_index
+    site_index.set_site_index(None)
+
+
+def _wait_for(predicate, timeout: float = 5.0) -> bool:
+    deadline = time.monotonic() + timeout
+    while not predicate():
+        if time.monotonic() > deadline:
+            return False
+        time.sleep(0.01)
+    return True
+
+
+def test_lifespan_never_fetches_the_site_index_when_url_is_blank(lifespan_env, monkeypatch):
+    server, site_index = lifespan_env
+    fetches: list[object] = []
+    started: list[tuple] = []
+
+    async def _record_refresh(*args):
+        started.append(args)
+
+    monkeypatch.setattr(site_index, "_urlopen", lambda request, timeout: fetches.append(request))
+    monkeypatch.setattr(server, "run_site_index_refresh", _record_refresh)
+
+    with TestClient(server.app) as test_client:  # conftest leaves SITE_INDEX_URL empty
+        assert test_client.get("/health").status_code == 200
+
+    assert started == []
+    assert fetches == []
+    assert site_index.get_site_index() is None
+
+
+def test_lifespan_loads_the_site_index_in_the_background(lifespan_env, monkeypatch):
+    server, site_index = lifespan_env
+    monkeypatch.setenv("SITE_INDEX_URL", SITE_INDEX_URL)
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
+    calls: list[tuple] = []
+
+    def _fake_urlopen(request, timeout):
+        calls.append((request.full_url, timeout))
+        return _FakeIndexResponse(SITE_INDEX_FIXTURE.read_bytes())
+
+    monkeypatch.setattr(site_index, "_urlopen", _fake_urlopen)
+
+    with TestClient(server.app):
+        assert _wait_for(lambda: site_index.get_site_index() is not None)
+
+    assert calls[0] == (SITE_INDEX_URL, 10.0)
+    index = site_index.get_site_index()
+    assert index is not None
+    assert len(index.chunks) == 13
+
+
+def test_startup_does_not_wait_for_or_fail_on_the_site_index(lifespan_env, monkeypatch):
+    """A hung, then failing, fetch neither delays startup nor degrades readiness."""
+    server, site_index = lifespan_env
+    monkeypatch.setenv("SITE_INDEX_URL", SITE_INDEX_URL)
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
+    entered = threading.Event()
+    release = threading.Event()
+    done = threading.Event()
+
+    def _hanging_urlopen(request, timeout):
+        entered.set()
+        release.wait(5)
+        done.set()
+        raise urllib.error.URLError("connection refused")
+
+    monkeypatch.setattr(site_index, "_urlopen", _hanging_urlopen)
+
+    # Build the LLM once first, so its provider package is already imported:
+    # the time bound below is for the lifespan, not a first-time import (this
+    # test may be the first in the process to build the LLM).
+    from app.config import get_llm
+
+    get_llm()
+
+    started = time.monotonic()
+    with TestClient(server.app) as test_client:
+        # Startup returned at once (it normally takes a few hundredths of a second),
+        # so it didn't wait on the fetch even briefly...
+        assert time.monotonic() - started < 1.0
+        # ...and the first fetch is still in flight: had the lifespan awaited it,
+        # startup would only return once release.wait timed out.
+        assert entered.wait(5)
+        assert not done.is_set()
+        assert test_client.get("/health").status_code == 200
+        assert test_client.get("/health/ready").status_code == 200
+        release.set()
+        assert test_client.get("/health").status_code == 200
+
+    assert site_index.get_site_index() is None
+
+
+def test_shutdown_cancels_the_site_index_refresh(lifespan_env, monkeypatch):
+    """The lifespan cancels the refresh task and waits for it before shutting down."""
+    server, _ = lifespan_env
+    monkeypatch.setenv("SITE_INDEX_URL", SITE_INDEX_URL)
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
+    events: list[str] = []
+
+    async def _refresh_until_cancelled(url, interval_seconds):
+        events.append("started")
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            events.append("cancelled")
+            raise
+
+    def _record_shutdown(msg, *args, **kwargs):
+        if msg.startswith("Shutting down"):
+            events.append("shutdown")
+
+    monkeypatch.setattr(server, "run_site_index_refresh", _refresh_until_cancelled)
+    monkeypatch.setattr(server.logger, "info", _record_shutdown)
+
+    with TestClient(server.app):
+        assert _wait_for(lambda: "started" in events)
+
+    # Cancelled by the lifespan itself, before its shutdown log line, not by the
+    # event loop's teardown afterwards.
+    assert events == ["started", "cancelled", "shutdown"]
+
+
+def test_chat_stream_sends_a_site_answer_once_and_whole(client):
+    """
+    A site turn's reply reaches /chat/stream exactly once: the checked reply as
+    sent by the node, never the model's own tokens (which here carry a URL).
+    """
+    from app import server
+    from app.graph.nodes import set_llm
+    from app.tools import site_index
+
+    site_index.set_site_index(site_index.parse_site_index(
+        SITE_INDEX_FIXTURE.read_bytes(),
+        content_type="application/json",
+        final_url=SITE_INDEX_URL,
+        allowed_netloc="www.markandrewmarquez.com",
+    ))
+    try:
+        set_llm(GenericFakeChatModel(messages=iter([
+            AIMessage(content="Hi, I'm TARS. What brings you here?"),  # /chat/init greeting
+            AIMessage(content="{}"),  # extraction
+            AIMessage(content=json.dumps({"next_stage": "site_question"})),  # router
+            AIMessage(content="It runs ten security checks. See https://evil.example/x for more."),
+        ])))
+        headers = {"X-Forwarded-For": "203.0.113.40"}
+        thread_id = client.post("/chat/init", headers=headers).json()["thread_id"]
+
+        resp = client.post(
+            "/chat/stream",
+            json={
+                "message": "I read Mark's post. What does M365 Guardian's weekly security report check?",
+                "thread_id": thread_id,
+            },
+            headers=headers,
+        )
+
+        events = _parse_sse(resp.text)
+        streamed = "".join(e["token"] for e in events if "token" in e)
+        state = server._graph.get_state({"configurable": {"thread_id": thread_id}})
+        final_reply = state.values["messages"][-1].content
+        assert streamed == final_reply
+        assert final_reply == (
+            "It runs ten security checks. See for more."
+            "\n\nRead more: [M365 Guardian An LLM-Powered Microsoft 365 Administration Chatbot]"
+            "(https://www.markandrewmarquez.com/portfolio/m365-guardian/)"
+        )
+        assert "evil.example" not in resp.text
+
+        done = [e for e in events if e.get("done")]
+        assert len(done) == 1
+        assert done[0]["stage"] == "greeting"  # the stage the detour left
+        assert done[0]["is_complete"] is False
+    finally:
+        site_index.set_site_index(None)

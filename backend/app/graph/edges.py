@@ -31,6 +31,7 @@ Design notes:
 from __future__ import annotations
 
 import logging
+import re
 
 from app.config import get_settings
 from app.graph.state import GraphState
@@ -54,6 +55,7 @@ NODE_SCORING = "scoring"
 NODE_SALESFORCE = "salesforce"
 NODE_ERROR = "error"
 NODE_TURN_CAP = "turn_cap"
+NODE_SITE_ANSWER = "site_answer"
 
 # LangGraph special targets
 END = "__end__"
@@ -85,7 +87,9 @@ def route_after_extraction(state: GraphState) -> str:
     Fast-path rules (no LLM call needed):
     - If there's an error → error node.
     - If stage is COMPLETE → scoring node.
-    - If stage is GREETING → always go to discovery next (first real turn).
+    - If stage is GREETING → discovery next (first real turn), unless the
+      message mentions the site's content (an article, a project, Mark...):
+      then the router decides whether it is a site question.
     - If stage is CONFIRMATION → scoring (visitor confirmed, submit to SF).
 
     Otherwise → delegate to the LLM-based router node for a contextual
@@ -103,8 +107,12 @@ def route_after_extraction(state: GraphState) -> str:
         logger.info("Edge: extraction → scoring (stage is COMPLETE)")
         return NODE_SCORING
 
-    # First turn after greeting — always move to discovery
+    # First turn after greeting — move to discovery, unless it may be a site
+    # question: then the router (which sends a sales opener to discovery) decides.
     if stage == ConversationStage.GREETING:
+        if _mentions_site_content(state):
+            logger.info("Edge: extraction → router (post-greeting, site cue)")
+            return NODE_ROUTER
         logger.info("Edge: extraction → discovery (post-greeting)")
         return NODE_DISCOVERY
 
@@ -135,8 +143,13 @@ def route_after_router(state: GraphState) -> str:
     Called after the router node has updated ``state["stage"]``.
 
     Maps the stage enum to the corresponding node name.  If the stage
-    is unrecognised, falls back to discovery.
+    is unrecognised, falls back to discovery.  A site question (the router
+    set ``site_question``) goes to ``site_answer`` with ``stage`` unchanged.
     """
+    if state.get("site_question"):
+        logger.info("Edge: router → site_answer (site question)")
+        return NODE_SITE_ANSWER
+
     stage = state.get("stage", ConversationStage.DISCOVERY)
 
     # Normalise string to enum if needed
@@ -303,6 +316,25 @@ def route_entry_point(state: GraphState) -> str:
 # Helpers
 # ---------------------------------------------------------------------------
 
+# Words that suggest a first message is about the site's own content. Only a
+# cheap gate for the greeting fast path: the router makes the real call.
+_SITE_CUE = re.compile(
+    r"\b(articles?|posts?|blog|wrote|written|write-?ups?|portfolio|case stud(?:y|ies)"
+    r"|projects?|site|website|mark'?s?)\b",
+    re.IGNORECASE,
+)
+
+
+def _mentions_site_content(state: GraphState) -> bool:
+    """Does the latest human message mention the site's content?"""
+    from langchain_core.messages import HumanMessage
+
+    for msg in reversed(state.get("messages", [])):
+        if isinstance(msg, HumanMessage):
+            return isinstance(msg.content, str) and bool(_SITE_CUE.search(msg.content))
+    return False
+
+
 def _latest_message_is_affirmative(state: GraphState) -> bool:
     """
     Quick heuristic check: does the latest human message look like a
@@ -382,6 +414,7 @@ def get_all_route_destinations() -> dict[str, list[str]]:
             NODE_LEAD_CAPTURE,
             NODE_CONFIRMATION,
             NODE_SCORING,
+            NODE_SITE_ANSWER,
         ],
         "route_after_conversation_node": [NODE_SCORING, END],
         "route_after_scoring": [NODE_ERROR, NODE_SALESFORCE],

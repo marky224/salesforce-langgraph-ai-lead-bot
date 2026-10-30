@@ -25,8 +25,9 @@ import logging
 from enum import Enum
 from functools import lru_cache
 from typing import Any
+from urllib.parse import urlsplit
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.logging_ctx import JsonLogFormatter, RequestContextFilter
@@ -213,6 +214,42 @@ class Settings(BaseSettings):
             "short-circuits to a polite close with no further LLM calls."
         ),
     )
+
+    # --- Site index (TARS answers questions about the portfolio articles) --
+
+    site_index_url: str = Field(
+        default="https://www.markandrewmarquez.com/site-index.json",
+        description=(
+            "The portfolio site's site-index.json (contract v1), loaded in the "
+            "background at startup and every site_index_refresh_seconds (a failed "
+            "load is retried after 60 s). An https URL, or empty to turn retrieval off."
+        ),
+    )
+    site_index_refresh_seconds: int = Field(
+        default=3600,
+        ge=60,
+        description="Seconds between site-index reloads.",
+    )
+    site_search_min_score: float = Field(
+        default=0.4,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Minimum normalised BM25 score (0-1) for the best site chunk to count "
+            "as a match."
+        ),
+    )
+
+    @field_validator("site_index_url")
+    @classmethod
+    def _site_index_url_is_https_or_empty(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            return ""
+        parts = urlsplit(value)
+        if parts.scheme != "https" or not parts.netloc:
+            raise ValueError("must be an https:// URL, or empty to turn retrieval off")
+        return value
 
     # --- Computed helpers --------------------------------------------------
 
