@@ -414,7 +414,8 @@ async def chat_stream(request: Request, payload: ChatRequest) -> StreamingRespon
         data: {"done": true, "thread_id": "abc", "stage": "discovery"}
 
     A site answer (``site_answer`` node) is not streamed token by token: its
-    reply is checked first and sent as a single ``token`` event.
+    reply is checked first and sent as a single ``token`` event.  The fixed
+    replies of ``turn_cap`` and ``error`` (no LLM call) are sent the same way.
     """
     graph = _get_graph()
     thread_id = payload.thread_id or str(uuid.uuid4())
@@ -440,12 +441,13 @@ async def chat_stream(request: Request, payload: ChatRequest) -> StreamingRespon
         # Only stream tokens from these nodes (not extraction/router/scoring)
         _CONVERSATIONAL_NODES = {
             "greeting", "discovery", "qualification",
-            "objection_handling", "lead_capture", "confirmation", "error",
+            "objection_handling", "lead_capture", "confirmation",
         }
         # Nodes whose reply is checked before it is shown (site_answer strips any
-        # URL the model wrote): their LLM tokens are never streamed; the finished
-        # reply goes out as one token event when the node ends.
-        _BUFFERED_NODES = {"site_answer"}
+        # URL the model wrote) or is fixed text with no LLM call (turn_cap,
+        # error): their LLM tokens are never streamed; the finished reply goes
+        # out as one token event when the node ends.
+        _BUFFERED_NODES = {"site_answer", "turn_cap", "error"}
 
         try:
             async for event in graph.astream_events(

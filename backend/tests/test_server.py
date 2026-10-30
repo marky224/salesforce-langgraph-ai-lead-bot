@@ -24,7 +24,7 @@ import urllib.error
 from contextlib import asynccontextmanager
 from email.message import Message
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -521,3 +521,101 @@ def test_chat_stream_sends_a_site_answer_once_and_whole(client):
         assert done[0]["is_complete"] is False
     finally:
         site_index.set_site_index(None)
+
+
+# ---------------------------------------------------------------------------
+# Fixed replies (turn_cap, error): no LLM call, so nothing to token-stream
+# ---------------------------------------------------------------------------
+# Each reply must reach /chat/stream exactly once, as the node wrote it.
+
+GREETING = "Hi, I'm TARS. What brings you here?"  # the /chat/init reply
+
+
+def _init_then_stream(client, ip: str, message: str, seed: dict | None = None):
+    """
+    Start a thread with /chat/init, optionally write ``seed`` into its state,
+    then send one /chat/stream turn. Returns the SSE events and the thread's
+    last message.
+    """
+    from app import server
+
+    headers = {"X-Forwarded-For": ip}
+    thread_id = client.post("/chat/init", headers=headers).json()["thread_id"]
+    config = {"configurable": {"thread_id": thread_id}}
+    if seed:
+        server._graph.update_state(config, seed, as_node="greeting")
+
+    resp = client.post(
+        "/chat/stream", json={"message": message, "thread_id": thread_id}, headers=headers
+    )
+    return _parse_sse(resp.text), server._graph.get_state(config).values["messages"][-1]
+
+
+def _assert_streamed_once(events: list[dict], last, reply: str) -> None:
+    assert last.content == reply
+    assert "".join(e["token"] for e in events if "token" in e) == reply
+    assert not any("error" in e for e in events)
+    assert len([e for e in events if e.get("done")]) == 1
+
+
+def test_chat_stream_sends_the_turn_cap_reply_once(client, monkeypatch):
+    from app.config import get_settings
+    from app.graph.nodes import set_llm, turn_cap_node
+
+    monkeypatch.setenv("MAX_THREAD_MESSAGES", "2")  # the greeting + this message
+    get_settings.cache_clear()
+    set_llm(GenericFakeChatModel(messages=iter([AIMessage(content=GREETING)])))  # turn_cap calls no LLM
+
+    events, last = _init_then_stream(client, "203.0.113.41", "hello")
+
+    reply = asyncio.run(turn_cap_node({}))["messages"][0].content
+    _assert_streamed_once(events, last, reply)
+
+
+def test_chat_stream_sends_the_salesforce_failure_reply_once(client):
+    from app.graph.nodes import error_node, set_llm
+    from app.models.schemas import ConversationStage
+
+    set_llm(GenericFakeChatModel(messages=iter([
+        AIMessage(content=GREETING),
+        AIMessage(content="{}"),  # extraction
+        AIMessage(content="Ada from Acme wants a demo."),  # scoring's transcript summary
+    ])))
+    sf = MagicMock()
+    sf.query.return_value = {"records": []}  # dedup miss → create is reached
+    sf.Lead.create.side_effect = ConnectionError("Salesforce unreachable")
+
+    # A confirmed lead: the turn runs extraction → scoring → salesforce → error.
+    with patch("app.tools.salesforce._get_sf_client", return_value=sf):
+        events, last = _init_then_stream(
+            client,
+            "203.0.113.42",
+            "Yes, that's correct",
+            seed={
+                "stage": ConversationStage.CONFIRMATION,
+                "lead_data": {
+                    "first_name": "Ada",
+                    "last_name": "Lovelace",
+                    "email": "ada@example.com",
+                    "company": "Acme",
+                },
+            },
+        )
+
+    sf.Lead.create.assert_called_once()
+    reply = asyncio.run(error_node({"error": "Salesforce error: Salesforce unreachable"}))
+    _assert_streamed_once(events, last, reply["messages"][0].content)
+
+
+def test_chat_stream_sends_the_generic_error_reply_once(client):
+    """No node sets a non-Salesforce ``error`` today, so the test writes one into state."""
+    from app.graph.nodes import error_node, set_llm
+
+    set_llm(GenericFakeChatModel(messages=iter([AIMessage(content=GREETING), AIMessage(content="{}")])))
+
+    events, last = _init_then_stream(
+        client, "203.0.113.43", "hello", seed={"error": "Model call timed out"}
+    )
+
+    reply = asyncio.run(error_node({"error": "Model call timed out"}))
+    _assert_streamed_once(events, last, reply["messages"][0].content)
