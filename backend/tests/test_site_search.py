@@ -60,6 +60,12 @@ class TestTokenize:
             "posting learning knew known knowing wanted wanting wondered"
         ) == []
 
+    @pytest.mark.parametrize(
+        "word", ["experienced", "experiencing", "blogged", "blogging", "wonder"]
+    )
+    def test_more_framing_word_forms_are_dropped(self, word):
+        assert tokenize(word) == []
+
     def test_stopwords_that_end_in_s_are_dropped_before_the_fold(self):
         # Without the first check, "this" and "does" would fold to "thi" and "doe".
         assert tokenize("this does canaries") == ["canarie"]
@@ -122,6 +128,11 @@ class TestRank:
             ("Is there an article explaining how lead scoring works?", "lead scoring works"),
             ("Which article showed how lead scoring works?", "lead scoring works"),
             ("Which post told how lead scoring works?", "lead scoring works"),
+            ("Is Mark experienced with lead scoring?", "lead scoring"),
+            ("Is he experiencing lead scoring issues?", "lead scoring issues"),
+            ("Has Mark blogged about lead scoring?", "lead scoring"),
+            ("Is he blogging about lead scoring?", "lead scoring"),
+            ("I wonder if Mark wrote about lead scoring", "lead scoring"),
             ("Which of the websites covers terraform canaries?", "covers terraform canaries"),
         ],
     )

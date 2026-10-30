@@ -91,6 +91,7 @@ _STOPWORD_TEXT = """
     worked working learn learned learnt experience experiences
     explained explaining showed shown showing told telling reading writing posted
     posting learning knew known knowing wanted wanting wondered
+    experienced experiencing blogged blogging wonder
 """
 STOPWORDS: frozenset[str] = frozenset(_STOPWORD_TEXT.split())
 
