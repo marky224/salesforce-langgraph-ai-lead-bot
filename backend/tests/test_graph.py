@@ -1159,8 +1159,9 @@ class TestSiteAnswerLinks:
 
         reply = (await site_answer_node(_site_state(M365_QUESTION)))["messages"][0].content
 
-        # The raw body: the code itself must drop or map each one (the visible-text
-        # check above would hide the combining marks among them).
+        # The raw body: the visible-text check above drops combining marks (Mn)
+        # itself but keeps the Hangul fillers (Lo: U+115F, U+1160, U+3164,
+        # U+FFA0), so a filler the code missed would pass it.
         assert "example/login" not in reply.split("\n\n")[0], reply
 
     @pytest.mark.asyncio
