@@ -596,6 +596,9 @@ _IGNORABLE = re.compile(
 )
 # Lookalike dots a browser shows like ".": fullwidth, ideographic, small, one-dot leader.
 _LOOKALIKE_DOTS = str.maketrans({"\uff0e": ".", "\u3002": ".", "\ufe52": ".", "\u2024": "."})
+# A markdown backslash escape before ASCII punctuation. CommonMark drops the
+# backslash when it renders, so www\.evil.example would show as a link.
+_MD_ESCAPE = re.compile(r"\\([!-/:-@\[-`{-~])")
 _SENTENCE_PUNCT = ".,;:!?"
 _SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+(?=[A-Z\"'‘“])")
 _TITLE_DROP = re.compile(r"[\[\]()<>]")
@@ -656,6 +659,8 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
       U+FFA0, U+E0100-E01EF); the lookalike dots U+FF0E, U+3002, U+FE52 and
       U+2024 become ``.`` (no other normalisation), so none of these can hide
       a link from the passes below;
+    - a backslash before ASCII punctuation (CommonMark drops it when it
+      renders, so ``www\\.evil.example`` would show as a link);
     - markdown images, and markdown links (keeping the link text);
     - any leftover link destination ``](...)``, then every ``[`` and ``]``;
     - each of these, up to the next whitespace (trailing ``.,;:!?`` kept):
@@ -693,6 +698,7 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
     # would too.
     text = "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
     text = _IGNORABLE.sub("", text).translate(_LOOKALIKE_DOTS).strip()
+    text = _MD_ESCAPE.sub(r"\1", text)
     if text.upper().startswith(_NO_ANSWER):
         return None
 

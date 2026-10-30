@@ -1033,6 +1033,11 @@ MODEL_LINK_SHAPES = [
     "Visit www\ufe0f.evil.example today.",
     "See markandrewmarquez\u034f.com/portfolio/made-up-page now.",
     "Go to evil\uff0eexample/login now.",
+    # A markdown backslash escape, which CommonMark drops when it renders.
+    "It is at https:\\/\\/evil.example now.",
+    "See markandrewmarquez\\.com/portfolio/made-up-page now.",
+    "Go to evil\\.example/login now.",
+    "Visit www\\.evil.example today.",
 ]
 
 # Shapes whose cleanup may fail closed to the no-match reply (the rounds
@@ -1073,8 +1078,10 @@ class TestSiteAnswerLinks:
             return
         body, link_line = reply.split("\n\n")
         # Roughly what the visitor sees: invisible characters (Cf, combining marks)
-        # don't show, and lookalike characters read like their ASCII forms.
+        # don't show, lookalike characters read like their ASCII forms, and
+        # CommonMark drops a backslash before ASCII punctuation.
         shown = "".join(ch for ch in body if unicodedata.category(ch) not in ("Cf", "Mn"))
+        shown = re.sub(r"\\([!-/:-@\[-`{-~])", r"\1", shown)
         visible = unicodedata.normalize("NFKC", shown).lower()
         for fragment in (
             "evil.example", "markandrewmarquez", "//", "http", "www.", "mailto", "tel:",
