@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -971,3 +972,48 @@ class TestSiteRouting:
             HumanMessage(content="We're drowning in manual data entry."),
         ]
         assert route_after_extraction(base_state) == "discovery"
+
+
+# Every shape a model-written link has been seen to take; each must vanish.
+MODEL_LINK_SHAPES = [
+    'It is at "https://evil.example/x" now.',
+    "It is at 'https://evil.example/x' now.",
+    "It is at <https://evil.example/x> now.",
+    'It is at <a href="https://evil.example/x">this page</a> now.',
+    "It is at xhttps://evil.example/x now.",
+    "It is at [the [full] write-up](//evil.example/login) now.",
+    "It is at [the write-up\\]](//evil.example/login) now.",
+    "It is at [the [full] write-up](mailto:x@evil.example) now.",
+    "It is at <https://www.markandrewmarquez.com/portfolio/made-up-page/> now.",
+    "It is at evil.example/x now.",
+]
+
+
+class TestSiteAnswerLinks:
+    """No link the model writes survives, in any shape; only the chunk link is left."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("model_reply", MODEL_LINK_SHAPES)
+    async def test_a_model_written_link_never_survives(self, site_index, mock_llm, model_reply):
+        mock_llm.ainvoke.return_value = MagicMock(content=model_reply)
+
+        reply = (await site_answer_node(_site_state(M365_QUESTION)))["messages"][0].content
+
+        body, link_line = reply.split("\n\n")
+        for fragment in ("evil.example", "markandrewmarquez", "//", "http", "www.", "mailto", "[", "]"):
+            assert fragment not in body, (fragment, body)
+        assert link_line == f"Read more: [{M365_TITLE}]({M365_URL})"
+        assert body.startswith("It is at")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("model_reply", MODEL_LINK_SHAPES)
+    async def test_rendered_as_commonmark_the_only_href_is_the_chunk_url(
+        self, site_index, mock_llm, model_reply
+    ):
+        markdown_it = pytest.importorskip("markdown_it")
+        mock_llm.ainvoke.return_value = MagicMock(content=model_reply)
+
+        reply = (await site_answer_node(_site_state(M365_QUESTION)))["messages"][0].content
+
+        html = markdown_it.MarkdownIt("commonmark").render(reply)
+        assert re.findall(r'href="([^"]*)"', html) == [M365_URL]

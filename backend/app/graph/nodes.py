@@ -558,9 +558,16 @@ _NO_ANSWER = "NO_ANSWER"
 
 _MD_IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 _MD_LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
-# A URL stops before trailing punctuation, so the sentence keeps its full stop.
-_URL_TAIL = r"(?=[.,;:!?)\]]*(?:\s|$))"
-_URL = re.compile(rf"(?i)\b(?:https?://|www\.)[^\s<>\"']+?{_URL_TAIL}")
+# The destination of a link _MD_LINK can't parse (nested or escaped brackets,
+# any scheme such as mailto:).
+_MD_DESTINATION = re.compile(r"\]\([^)]*\)")
+# A link-ish run, removed up to the next whitespace: a scheme or protocol-relative
+# URL (also inside quotes, <...> or href="..."), a www. host, or a bare host
+# followed by a path (evil.example/x).
+_LINKISH = re.compile(
+    r"(?:https?:)?//\S+|www\.\S+|(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}/\S*", re.IGNORECASE
+)
+_SENTENCE_PUNCT = ".,;:!?"
 _SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+(?=[A-Z\"'‘“])")
 _TITLE_DROP = re.compile(r"[\[\]()<>]")
 
@@ -583,26 +590,37 @@ def _link_title(title: str) -> str:
     return text or "the full write-up"
 
 
+def _keep_trailing_punct(match: re.Match[str]) -> str:
+    """Replacement that drops a link-ish run but keeps the punctuation it ended with."""
+    run = match.group(0)
+    return run[len(run.rstrip(_SENTENCE_PUNCT)):]
+
+
 def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
     """
     Make the model's site answer safe to show, or ``None`` for no answer.
 
-    Removes every link and URL the model wrote (the only link is the chunk's
-    own url, appended here), turns ``<``/``>`` into ``‹``/``›`` (the widget
-    renders markdown into HTML), caps the text at 4 sentences and 600 characters,
-    and appends ``Read more: [title](url)``. ``None`` when the model replied
-    NO_ANSWER or nothing is left after cleaning.
+    Removes every link and URL the model wrote, in any shape: markdown links
+    and images (keeping link text), every ``[`` and ``]`` left over, and each
+    URL, ``www.`` host, bare ``host/path`` and mention of the site's own domain
+    up to the next whitespace. The only link is the chunk's own url, appended
+    here as ``Read more: [title](url)``. Also turns ``<``/``>`` into ``‹``/``›``
+    (the widget renders markdown into HTML) and caps the text at 4 sentences
+    and 600 characters. ``None`` when the model replied NO_ANSWER or nothing is
+    left after cleaning. The text around a removed URL is left as it is.
     """
     text = raw.strip()
     if text.upper().startswith(_NO_ANSWER):
         return None
 
     domain = re.escape(urlsplit(hit.url).netloc.removeprefix("www."))
-    own_site = re.compile(rf"(?i)\b(?:[\w-]+\.)*{domain}[^\s<>\"']*?{_URL_TAIL}")
+    own_site = re.compile(rf"[\w.-]*{domain}\S*", re.IGNORECASE)
     text = _MD_IMAGE.sub("", text)
     text = _MD_LINK.sub(r"\1", text)
-    text = _URL.sub("", text)
-    text = own_site.sub("", text)
+    text = _MD_DESTINATION.sub("", text)
+    text = text.replace("[", "").replace("]", "")
+    text = _LINKISH.sub(_keep_trailing_punct, text)
+    text = own_site.sub(_keep_trailing_punct, text)
     text = text.replace("<", "‹").replace(">", "›")
     text = re.sub(r"\(\s*\)", "", text)
     text = " ".join(text.split())
