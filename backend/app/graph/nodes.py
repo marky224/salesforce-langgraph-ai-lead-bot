@@ -676,10 +676,12 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
       ``x@MarkAndrewMarquez.com./page``, ``x@MarkAndrewMarquez.com.evil.example/x``).
 
     Kept as text: plain email addresses, also at the end of a sentence
-    (``mark@markandrewmarquez.com?``, ``x@evil.example``), a host/path with no port whose host has an uppercase
-    letter (``Node.js/TypeScript``, ``ASP.NET/C#``), bare hosts with no path or
-    port, and entity-encoded URLs. The text around a removed URL is left as it
-    is.
+    (``mark@markandrewmarquez.com?``, ``x@evil.example``); a host/path with no
+    port whose host has an uppercase letter (``Node.js/TypeScript``,
+    ``ASP.NET/C#``); bare hosts with no path or port; and entity-encoded URLs.
+    The text around a removed URL is left as it is. Known over-strip, accepted
+    because it errs safe: a host with a port is removed in any case, so prose
+    such as ``Node.js:20`` or ``ASP.NET:8`` goes too.
 
     The link passes and the tidy steps run in rounds, at most 3, until the text
     stops changing, so closing up a space or an empty ``()`` can't rebuild a
