@@ -1028,11 +1028,13 @@ MODEL_LINK_SHAPES = [
     "Visit www\u200b.evil.example today.",
     "See markandrewmarquez\u200b.com/portfolio/made-up-page now.",
     "Go to evil\u00ad.example/login now.",
-    # Invisible characters that aren't Cf, and a lookalike dot.
+    # Invisible characters that aren't Cf, and lookalike dots.
     "Go to evil\u034f.example/login now.",
     "Visit www\ufe0f.evil.example today.",
     "See markandrewmarquez\u034f.com/portfolio/made-up-page now.",
     "Go to evil\uff0eexample/login now.",
+    "Go to evil\uff61example/login now.",
+    "See markandrewmarquez\uff61com/portfolio/made-up-page now.",
     # A markdown backslash escape, which CommonMark drops when it renders.
     "It is at https:\\/\\/evil.example now.",
     "See markandrewmarquez\\.com/portfolio/made-up-page now.",
@@ -1086,11 +1088,12 @@ class TestSiteAnswerLinks:
             return
         body, link_line = reply.split("\n\n")
         # Roughly what the visitor sees: invisible characters (Cf, combining marks)
-        # don't show, lookalike characters read like their ASCII forms, and
-        # CommonMark drops a backslash before ASCII punctuation.
+        # don't show, lookalike characters read like their ASCII forms, an
+        # ideographic full stop (what NFKC makes of U+FF61) separates host labels
+        # like a dot, and CommonMark drops a backslash before ASCII punctuation.
         shown = "".join(ch for ch in body if unicodedata.category(ch) not in ("Cf", "Mn"))
         shown = re.sub(r"\\([!-/:-@\[-`{-~])", r"\1", shown)
-        visible = unicodedata.normalize("NFKC", shown).lower()
+        visible = unicodedata.normalize("NFKC", shown).replace("\u3002", ".").lower()
         for fragment in (
             "evil.example", "markandrewmarquez", "//", "http", "www.", "mailto", "tel:",
             "192.0.2.7", "8080", "[", "]",

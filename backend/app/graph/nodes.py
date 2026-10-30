@@ -587,15 +587,20 @@ _LINKISH = re.compile(
     # an IPv4 address, optionally with a port, followed by a path: 192.0.2.7/login
     r"|(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?/\S*"
 )
-# Invisible default-ignorable code points that aren't Cf (dropped with Cf before
-# the link passes): combining grapheme joiner, Hangul fillers, Khmer inherent
-# vowels, Mongolian free variation selectors, variation selectors.
+# The listed invisible default-ignorable code points that aren't Cf (dropped
+# with Cf before the link passes): combining grapheme joiner, Hangul fillers,
+# Khmer inherent vowels, Mongolian free variation selectors, variation
+# selectors. Unassigned default-ignorables are left alone.
 _IGNORABLE = re.compile(
     "[\u034f\u115f\u1160\u17b4\u17b5\u180b-\u180f\u3164\ufe00-\ufe0f\uffa0"
     "\U000e0100-\U000e01ef]"
 )
-# Lookalike dots a browser shows like ".": fullwidth, ideographic, small, one-dot leader.
-_LOOKALIKE_DOTS = str.maketrans({"\uff0e": ".", "\u3002": ".", "\ufe52": ".", "\u2024": "."})
+# Lookalike dots a browser shows like ".": fullwidth, ideographic, halfwidth
+# ideographic, small, one-dot leader. The first three also separate the labels
+# of a host name, as "." does (Python's encodings.idna.dots).
+_LOOKALIKE_DOTS = str.maketrans(
+    {"\uff0e": ".", "\u3002": ".", "\uff61": ".", "\ufe52": ".", "\u2024": "."}
+)
 # A markdown backslash escape before ASCII punctuation. CommonMark drops the
 # backslash when it renders, so www\.evil.example would show as a link.
 _MD_ESCAPE = re.compile(r"\\([!-/:-@\[-`{-~])")
@@ -655,11 +660,12 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
     ``Read more: [title](url)``. From the model's text it removes:
 
     - first, every Unicode format character (category Cf: zero-width spaces,
-      soft hyphens, bidi overrides) and the other default-ignorable code points
-      (U+034F, U+115F-1160, U+17B4-17B5, U+180B-180F, U+3164, U+FE00-FE0F,
-      U+FFA0, U+E0100-E01EF); the lookalike dots U+FF0E, U+3002, U+FE52 and
-      U+2024 become ``.`` (no other normalisation), so none of these can hide
-      a link from the passes below;
+      soft hyphens, bidi overrides) and the listed default-ignorable code
+      points that aren't Cf (U+034F, U+115F-1160, U+17B4-17B5, U+180B-180F,
+      U+3164, U+FE00-FE0F, U+FFA0, U+E0100-E01EF; not the unassigned ones);
+      the lookalike dots U+FF0E, U+3002, U+FF61, U+FE52 and U+2024 become
+      ``.`` (no other normalisation), so none of these can hide a link from
+      the passes below;
     - in every round below, first a backslash before ASCII punctuation
       (CommonMark drops it when it renders, so ``www\\.evil.example`` would
       show as a link);
@@ -699,7 +705,7 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
     """
     text = raw.strip()[:_SITE_RAW_MAX_CHARS]
     # Invisible characters (format characters such as zero-width space, soft
-    # hyphen and bidi overrides, plus the other default-ignorables) would hide a
+    # hyphen and bidi overrides, plus the listed default-ignorables) would hide a
     # link from every pass while the browser still shows it whole; lookalike dots
     # would too.
     text = "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
