@@ -1019,6 +1019,11 @@ MODEL_LINK_SHAPES = [
     "See @MarkAndrewMarquez.com/portfolio/made-up-page now.",
     "Write to x@MarkAndrewMarquez.com/portfolio/made-up-page now.",
     "It is at Evil.example:8080/login now.",
+    # The site's domain after an @, with a dot or hyphen before the path.
+    "Write to x@MarkAndrewMarquez.com./portfolio/made-up-page now.",
+    "See @MarkAndrewMarquez.com./portfolio/made-up-page now.",
+    "Write to x@MarkAndrewMarquez.com.evil.example/login now.",
+    "Write to x@MarkAndrewMarquez.com-evil.example/login now.",
     # An invisible format character (zero-width space, soft hyphen) inside a link.
     "Visit www\u200b.evil.example today.",
     "See markandrewmarquez\u200b.com/portfolio/made-up-page now.",
@@ -1038,6 +1043,9 @@ MODEL_PROSE_TO_KEEP = [
     "Email sarah.chen@contoso.com for the slides.",
     "Write to mark@markandrewmarquez.com for the slides.",
     "Email x@evil.example for the slides.",
+    # An email at the end of a sentence keeps its whole address.
+    "Want to reach him? Email mark@markandrewmarquez.com?",
+    "Email mark@markandrewmarquez.com.",
     # A host/path rule for lowercase hosts only keeps stack names.
     "He built it with Node.js/TypeScript and ASP.NET/C# on Azure.",
 ]

@@ -654,11 +654,12 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
       a host in any case followed by a port (``Evil.example:8080/login``); an
       IPv4 address followed by a path (``192.0.2.7/login``); and the site's own
       domain, in any case, anywhere except in a plain email address (right
-      after an ``@`` it is stripped only when a path or port follows:
-      ``x@MarkAndrewMarquez.com/page``).
+      after an ``@`` it is stripped when a path, a port, or a ``?``/``#`` with
+      more text follows, also past dots or hyphens:
+      ``x@MarkAndrewMarquez.com./page``, ``x@MarkAndrewMarquez.com.evil.example/x``).
 
-    Kept as text: plain email addresses (``mark@markandrewmarquez.com``,
-    ``x@evil.example``), a host/path with no port whose host has an uppercase
+    Kept as text: plain email addresses, also at the end of a sentence
+    (``mark@markandrewmarquez.com?``, ``x@evil.example``), a host/path with no port whose host has an uppercase
     letter (``Node.js/TypeScript``, ``ASP.NET/C#``), bare hosts with no path or
     port, and entity-encoded URLs. The text around a removed URL is left as it
     is.
@@ -682,9 +683,12 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
 
     domain = re.escape(urlsplit(hit.url).netloc.removeprefix("www."))
     # The site's own domain in any token, except in a plain email address: right
-    # after an @ it is stripped only when a path or port follows (x@site.com/page).
+    # after an @ it is stripped only when a path, a port, or a ?/# with more text
+    # follows, also past dots or hyphens (x@site.com./page, x@site.com.evil.example/x).
+    # A sentence-ending ? or . after an email doesn't count.
     own_site = re.compile(
-        rf"(?<![\w.@-])[\w.-]*{domain}\S*|(?<=@)[\w.-]*{domain}(?=[/?#]|:\d)\S*",
+        rf"(?<![\w.@-])[\w.-]*{domain}\S*"
+        rf"|(?<=@)[\w.-]*{domain}[\w.-]*(?=/|[?#]\S|:\d)\S*",
         re.IGNORECASE,
     )
     # Tidying can join pieces into a link ("www .evil.example" -> "www.evil.example"),
