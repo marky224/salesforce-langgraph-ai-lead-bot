@@ -1038,6 +1038,14 @@ MODEL_LINK_SHAPES = [
     "See markandrewmarquez\\.com/portfolio/made-up-page now.",
     "Go to evil\\.example/login now.",
     "Visit www\\.evil.example today.",
+    # An escaped backslash, and a backslash tidying closes up against a dot: the
+    # unescape runs in every round.
+    "Go to evil\\\\.example/login now.",
+    "See markandrewmarquez\\\\.com/portfolio/made-up-page now.",
+    "Visit www\\\\.evil.example today.",
+    "It is at https:\\\\/\\\\/evil.example now.",
+    "Go to evil\\ .example/login now.",
+    "Go to evil\\ ().example/login now.",
 ]
 
 # Shapes whose cleanup may fail closed to the no-match reply (the rounds
@@ -1088,8 +1096,18 @@ class TestSiteAnswerLinks:
             "192.0.2.7", "8080", "[", "]",
         ):
             assert fragment not in visible, (fragment, body)
+        # No escape is left for the renderer to drop, so it shows the text as cleaned.
+        assert not re.search(r"\\[!-/:-@\[-`{-~]", body), body
         assert link_line == f"Read more: [{M365_TITLE}]({M365_URL})"
         assert body.split()[0] == model_reply.split()[0]
+
+    @pytest.mark.asyncio
+    async def test_an_escaped_no_answer_gives_the_fixed_reply(self, site_index, mock_llm):
+        mock_llm.ainvoke.return_value = MagicMock(content="NO\\_ANSWER")
+
+        reply = (await site_answer_node(_site_state(M365_QUESTION)))["messages"][0].content
+
+        assert reply == f"{SITE_NO_MATCH_REPLY} {SITE_RETURN_LINES[ConversationStage.QUALIFICATION]}"
 
     @pytest.mark.asyncio
     async def test_a_bidi_override_never_reaches_the_reply(self, site_index, mock_llm):

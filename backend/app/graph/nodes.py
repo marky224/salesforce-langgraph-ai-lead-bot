@@ -630,6 +630,7 @@ def _keep_trailing_punct(match: re.Match[str]) -> str:
 
 def _strip_links(text: str, own_site: re.Pattern[str]) -> str:
     """One round of the link passes (the shapes are listed in _finalize_site_reply)."""
+    text = _MD_ESCAPE.sub(r"\1", text)
     text = _MD_IMAGE.sub("", text)
     text = _MD_LINK.sub(r"\1", text)
     text = _MD_DESTINATION.sub("", text)
@@ -659,8 +660,9 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
       U+FFA0, U+E0100-E01EF); the lookalike dots U+FF0E, U+3002, U+FE52 and
       U+2024 become ``.`` (no other normalisation), so none of these can hide
       a link from the passes below;
-    - a backslash before ASCII punctuation (CommonMark drops it when it
-      renders, so ``www\\.evil.example`` would show as a link);
+    - in every round below, first a backslash before ASCII punctuation
+      (CommonMark drops it when it renders, so ``www\\.evil.example`` would
+      show as a link);
     - markdown images, and markdown links (keeping the link text);
     - any leftover link destination ``](...)``, then every ``[`` and ``]``;
     - each of these, up to the next whitespace (trailing ``.,;:!?`` kept):
@@ -683,10 +685,12 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
     because it errs safe: a host with a port is removed in any case, so prose
     such as ``Node.js:20`` or ``ASP.NET:8`` goes too.
 
-    The link passes and the tidy steps run in rounds, at most 3, until the text
-    stops changing, so closing up a space or an empty ``()`` can't rebuild a
-    link. If the third round still changed the text, the reply fails closed:
-    ``None``, so the visitor gets the no-match reply.
+    The unescape, the link passes and the tidy steps run in rounds, at most 3,
+    until the text stops changing, so closing up a space or an empty ``()``,
+    or unescaping a doubled backslash (``evil\\\\.example``), can't rebuild a
+    link, and the settled text has no backslash before ASCII punctuation left
+    for the renderer to drop. If the third round still changed the text, the
+    reply fails closed: ``None``, so the visitor gets the no-match reply.
 
     Also turns ``<``/``>`` into ``‹``/``›`` (the widget renders markdown into
     HTML) and caps the text at 4 sentences and 600 characters. ``None`` when
@@ -700,8 +704,7 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
     # would too.
     text = "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
     text = _IGNORABLE.sub("", text).translate(_LOOKALIKE_DOTS).strip()
-    text = _MD_ESCAPE.sub(r"\1", text)
-    if text.upper().startswith(_NO_ANSWER):
+    if _MD_ESCAPE.sub(r"\1", text).upper().startswith(_NO_ANSWER):
         return None
 
     domain = re.escape(urlsplit(hit.url).netloc.removeprefix("www."))
