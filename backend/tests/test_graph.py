@@ -1058,6 +1058,11 @@ FAIL_CLOSED_SHAPES = {
     "Go to evil((())).example/login now.",
 }
 
+# Each listed non-Cf default-ignorable (both ends of every range) and each
+# lookalike dot the cleanup maps to ".".
+DROPPED_INVISIBLES = "\u115f\u1160\u17b4\u17b5\u180b\u180f\u3164\ufe00\uffa0\U000e0100\U000e01ef"
+MAPPED_DOTS = "\u3002\ufe52\u2024\uff61"
+
 # Ordinary prose the link cleanup must leave exactly as written.
 MODEL_PROSE_TO_KEEP = [
     "Email sarah.chen@contoso.com for the slides.",
@@ -1120,6 +1125,29 @@ class TestSiteAnswerLinks:
         reply = (await site_answer_node(_site_state(M365_QUESTION)))["messages"][0].content
 
         assert "\u202e" not in reply
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "model_reply",
+        [
+            pytest.param(f"Go to evil{ch}.example/login now.", id=f"drop-U+{ord(ch):04X}")
+            for ch in DROPPED_INVISIBLES
+        ]
+        + [
+            pytest.param(f"Go to evil{ch}example/login now.", id=f"dot-U+{ord(ch):04X}")
+            for ch in MAPPED_DOTS
+        ],
+    )
+    async def test_every_listed_invisible_and_lookalike_dot_is_caught(
+        self, site_index, mock_llm, model_reply
+    ):
+        mock_llm.ainvoke.return_value = MagicMock(content=model_reply)
+
+        reply = (await site_answer_node(_site_state(M365_QUESTION)))["messages"][0].content
+
+        # The raw body: the code itself must drop or map each one (the visible-text
+        # check above would hide the combining marks among them).
+        assert "example/login" not in reply.split("\n\n")[0], reply
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("model_reply", MODEL_PROSE_TO_KEEP)
