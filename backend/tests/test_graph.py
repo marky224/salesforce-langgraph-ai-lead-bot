@@ -802,6 +802,20 @@ class TestSiteAnswerNode:
         assert body.endswith("...")
 
     @pytest.mark.asyncio
+    async def test_the_cut_leaves_no_backslash_escape_before_its_dots(self, site_index, mock_llm):
+        # A word ending in a backslash just before the cut would make "\...",
+        # which markdown shows as "...".
+        mock_llm.ainvoke.return_value = MagicMock(
+            content="It works. " + "abcd " * 115 + "www\\ zzzzzzzzzzzz more words here."
+        )
+
+        reply = (await site_answer_node(_site_state(M365_QUESTION)))["messages"][0].content
+
+        body = reply.split("\n\n")[0]
+        assert not re.search(r"\\[!-/:-@\[-`{-~]", body), body[-20:]
+        assert body.endswith(" www...")
+
+    @pytest.mark.asyncio
     async def test_the_prompt_quotes_one_pages_excerpts_as_data(self, site_index, mock_llm):
         mock_llm.ainvoke.return_value = MagicMock(content="It runs ten checks.")
 
@@ -1104,7 +1118,7 @@ class TestSiteAnswerLinks:
             "192.0.2.7", "8080", "[", "]",
         ):
             assert fragment not in visible, (fragment, body)
-        # No escape is left for the renderer to drop, so it shows the text as cleaned.
+        # No backslash escape left for the renderer to drop.
         assert not re.search(r"\\[!-/:-@\[-`{-~]", body), body
         assert link_line == f"Read more: [{M365_TITLE}]({M365_URL})"
         assert body.split()[0] == model_reply.split()[0]

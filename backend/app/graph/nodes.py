@@ -697,14 +697,15 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
     The unescape, the link passes and the tidy steps run in rounds, at most 3,
     until the text stops changing, so closing up a space or an empty ``()``,
     or unescaping a doubled backslash (``evil\\\\.example``), can't rebuild a
-    link, and the settled text has no backslash before ASCII punctuation left
-    for the renderer to drop. If the third round still changed the text, the
-    reply fails closed: ``None``, so the visitor gets the no-match reply.
+    link, and no backslash escape is left for the renderer to drop. If the
+    third round still changed the text, the reply fails closed: ``None``, so
+    the visitor gets the no-match reply.
 
     Also turns ``<``/``>`` into ``‹``/``›`` (the widget renders markdown into
-    HTML) and caps the text at 4 sentences and 600 characters. ``None`` when
-    the model replied NO_ANSWER, nothing is left after cleaning, or the rounds
-    didn't settle.
+    HTML) and caps the text at 4 sentences and 600 characters; the cut drops
+    trailing spaces, ``,;:`` and backslashes before it adds ``...``, so it
+    leaves no backslash escape either. ``None`` when the model replied
+    NO_ANSWER, nothing is left after cleaning, or the rounds didn't settle.
     """
     text = raw.strip()[:_SITE_RAW_MAX_CHARS]
     # Invisible characters (format characters such as zero-width space, soft
@@ -741,7 +742,7 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
 
     text = " ".join(_SENTENCE_BREAK.split(text)[:_SITE_REPLY_MAX_SENTENCES])
     if len(text) > _SITE_REPLY_MAX_CHARS:
-        text = text[: _SITE_REPLY_MAX_CHARS - 3].rsplit(" ", 1)[0].rstrip(" ,;:") + "..."
+        text = text[: _SITE_REPLY_MAX_CHARS - 3].rsplit(" ", 1)[0].rstrip(" ,;:\\") + "..."
     if not text.strip(" .,;:!?"):
         return None
     return f"{text}\n\nRead more: [{_link_title(hit.title)}]({hit.url})"
