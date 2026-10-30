@@ -469,6 +469,16 @@ do not mean qualification is done.
 info is substantially complete (at minimum: name + email + company).
 - complete: Conversation is finished.  Only after confirmation has been given.
 
+SITE QUESTIONS (a detour, not a stage):
+- site_question: the visitor asks about Mark's own work shown on this website: \
+an article, post, project, case study, how something here was built, or an \
+example of past work.  Use it even when the same message also describes their \
+own problem; the data is still captured.
+- Do NOT use it when the visitor talks about their own situation, needs, \
+budget, timeline, team, or contact details, asks what we charge or whether we \
+can help them, or raises a concern.  Those are sales turns, even when they \
+mention the same technologies Mark writes about.
+
 RULES:
 - Never skip from greeting directly to lead_capture.
 - If the visitor tries to leave early and retry_count is 0, stay in the \
@@ -487,7 +497,7 @@ stage afterward.
 Return ONLY a valid JSON object:
 
 {{
-  "next_stage": "<stage name>",
+  "next_stage": "<stage name, or site_question>",
   "reasoning": "One sentence explaining why."
 }}
 

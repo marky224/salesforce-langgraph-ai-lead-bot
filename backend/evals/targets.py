@@ -68,9 +68,11 @@ async def run_extraction(row: dict[str, Any], llm: Any) -> dict[str, Any]:
 async def run_routing(row: dict[str, Any], llm: Any) -> str:
     """
     Run ``router_node`` on one routing case and return the chosen next stage's
-    ``.value`` string. The router reads ``stage`` + the lead/qualification summaries
-    + the latest visitor message + ``retry_count``; the transcript isn't used, so a
-    single latest message reproduces the exact prompt the router sees in prod.
+    ``.value`` string, or ``"site_question"`` when the router flags a question
+    about the site (a detour that leaves ``stage`` unchanged). The router reads
+    ``stage`` + the lead/qualification summaries + the latest visitor message +
+    ``retry_count``; the transcript isn't used, so a single latest message
+    reproduces the exact prompt the router sees in prod.
     """
     nodes.set_llm(llm)
     state: dict[str, Any] = {
@@ -81,5 +83,7 @@ async def run_routing(row: dict[str, Any], llm: Any) -> str:
         "retry_count": row.get("retry_count", 0),
     }
     patch = await nodes.router_node(state)  # type: ignore[arg-type]
+    if patch.get("site_question"):
+        return nodes.SITE_QUESTION
     stage = patch["stage"]
     return stage.value if hasattr(stage, "value") else str(stage)

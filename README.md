@@ -144,6 +144,7 @@ See [architecture.md](architecture.md) for detailed Mermaid diagrams of the Lang
 - 7 conversation stages: greeting → discovery → qualification → objection handling → lead capture → confirmation → complete
 - Natural conversation flow — adapts dynamically if visitors volunteer information early
 - Objection handling with empathy and value reinforcement
+- Answers questions about Mark's portfolio articles from the site's published index, with a link to the page, then carries on with the conversation where it left off
 - Graceful degradation — captures whatever data is available if someone exits mid-conversation
 - Custom TARS robot avatar and dark-themed chat bubble UI
 
