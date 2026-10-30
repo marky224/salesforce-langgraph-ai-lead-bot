@@ -686,13 +686,18 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
     Kept as text: plain email addresses, also at the end of a sentence
     (``mark@markandrewmarquez.com?``, ``x@evil.example``); a host/path with no
     port whose host has an uppercase letter (``Node.js/TypeScript``,
-    ``ASP.NET/C#``); bare hosts with no path or port; and entity-encoded URLs.
-    The text around a removed URL is left as it is. Known over-strips, accepted
-    because they err safe: a host with a port is removed in any case, so prose
-    such as ``Node.js:20`` or ``ASP.NET:8`` goes too; and after an email on the
-    site's domain, a ``?`` followed by closing punctuation counts as a query,
-    so ``(Or email mark@markandrewmarquez.com?)`` becomes ``(Or email mark@``
-    and ``Really, mark@markandrewmarquez.com?!`` becomes ``Really, mark@?!``.
+    ``ASP.NET/C#``); bare hosts with no path or port; entity-encoded URLs; and
+    link shapes split by markdown emphasis or code-span markers
+    (``Go to _evil_.example/login``, ``Go to evi*l*.example/login``,
+    ``Go to `evil`.example/login``). Neither these nor entity-encoded URLs
+    make an href, but CommonMark shows them joined or decoded, as
+    ``evil.example/login``. The text around a removed URL is left as it is.
+    Known over-strips, accepted because they err safe: a host with a port is
+    removed in any case, so prose such as ``Node.js:20`` or ``ASP.NET:8`` goes
+    too; and after an email on the site's domain, a ``?`` followed by closing
+    punctuation counts as a query, so ``(Or email mark@markandrewmarquez.com?)``
+    becomes ``(Or email mark@`` and ``Really, mark@markandrewmarquez.com?!``
+    becomes ``Really, mark@?!``.
 
     The unescape, the link passes and the tidy steps run in rounds, at most 3,
     until the text stops changing, so closing up a space or an empty ``()``,
