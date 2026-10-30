@@ -1028,6 +1028,11 @@ MODEL_LINK_SHAPES = [
     "Visit www\u200b.evil.example today.",
     "See markandrewmarquez\u200b.com/portfolio/made-up-page now.",
     "Go to evil\u00ad.example/login now.",
+    # Invisible characters that aren't Cf, and a lookalike dot.
+    "Go to evil\u034f.example/login now.",
+    "Visit www\ufe0f.evil.example today.",
+    "See markandrewmarquez\u034f.com/portfolio/made-up-page now.",
+    "Go to evil\uff0eexample/login now.",
 ]
 
 # Shapes whose cleanup may fail closed to the no-match reply (the rounds
@@ -1067,8 +1072,10 @@ class TestSiteAnswerLinks:
             )
             return
         body, link_line = reply.split("\n\n")
-        # What the visitor sees: invisible format characters don't show.
-        visible = "".join(ch for ch in body if unicodedata.category(ch) != "Cf").lower()
+        # Roughly what the visitor sees: invisible characters (Cf, combining marks)
+        # don't show, and lookalike characters read like their ASCII forms.
+        shown = "".join(ch for ch in body if unicodedata.category(ch) not in ("Cf", "Mn"))
+        visible = unicodedata.normalize("NFKC", shown).lower()
         for fragment in (
             "evil.example", "markandrewmarquez", "//", "http", "www.", "mailto", "tel:",
             "192.0.2.7", "8080", "[", "]",

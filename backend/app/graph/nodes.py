@@ -587,6 +587,15 @@ _LINKISH = re.compile(
     # an IPv4 address, optionally with a port, followed by a path: 192.0.2.7/login
     r"|(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?/\S*"
 )
+# Invisible default-ignorable code points that aren't Cf (dropped with Cf before
+# the link passes): combining grapheme joiner, Hangul fillers, Khmer inherent
+# vowels, Mongolian free variation selectors, variation selectors.
+_IGNORABLE = re.compile(
+    "[\u034f\u115f\u1160\u17b4\u17b5\u180b-\u180f\u3164\ufe00-\ufe0f\uffa0"
+    "\U000e0100-\U000e01ef]"
+)
+# Lookalike dots a browser shows like ".": fullwidth, ideographic, small, one-dot leader.
+_LOOKALIKE_DOTS = str.maketrans({"\uff0e": ".", "\u3002": ".", "\ufe52": ".", "\u2024": "."})
 _SENTENCE_PUNCT = ".,;:!?"
 _SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+(?=[A-Z\"'‘“])")
 _TITLE_DROP = re.compile(r"[\[\]()<>]")
@@ -642,8 +651,11 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
     ``Read more: [title](url)``. From the model's text it removes:
 
     - first, every Unicode format character (category Cf: zero-width spaces,
-      soft hyphens, bidi overrides), so an invisible character can't hide a
-      link from the passes below;
+      soft hyphens, bidi overrides) and the other default-ignorable code points
+      (U+034F, U+115F-1160, U+17B4-17B5, U+180B-180F, U+3164, U+FE00-FE0F,
+      U+FFA0, U+E0100-E01EF); the lookalike dots U+FF0E, U+3002, U+FE52 and
+      U+2024 become ``.`` (no other normalisation), so none of these can hide
+      a link from the passes below;
     - markdown images, and markdown links (keeping the link text);
     - any leftover link destination ``](...)``, then every ``[`` and ``]``;
     - each of these, up to the next whitespace (trailing ``.,;:!?`` kept):
@@ -675,9 +687,12 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
     didn't settle.
     """
     text = raw.strip()[:_SITE_RAW_MAX_CHARS]
-    # Invisible format characters (zero-width space, soft hyphen, bidi overrides)
-    # would hide a link from every pass while the browser still shows it whole.
-    text = "".join(ch for ch in text if unicodedata.category(ch) != "Cf").strip()
+    # Invisible characters (format characters such as zero-width space, soft
+    # hyphen and bidi overrides, plus the other default-ignorables) would hide a
+    # link from every pass while the browser still shows it whole; lookalike dots
+    # would too.
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
+    text = _IGNORABLE.sub("", text).translate(_LOOKALIKE_DOTS).strip()
     if text.upper().startswith(_NO_ANSWER):
         return None
 
