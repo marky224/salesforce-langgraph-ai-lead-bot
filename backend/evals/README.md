@@ -1,6 +1,6 @@
-# backend/evals — offline extraction/routing gate + simulated-user scorecard
+# backend/evals — offline extraction/routing/site-answer gate + simulated-user scorecard
 
-An **opt-in** eval suite that measures extraction + routing against the **real prompts** and
+An **opt-in** eval suite that measures extraction, routing and site answers against the **real prompts** and
 **recorded real-model responses** — the gap the mock-based `backend/tests` suite can't cover. It also
 runs a **simulated-user scorecard** (PR C): whole conversations driven against the real graph by a
 second LLM role-playing personas. It is never collected by `pytest tests/`, never installed into the
@@ -15,7 +15,8 @@ prod image, and its deps live in `backend/requirements-eval.txt`.
 
 The gate **fails closed**: extraction/router invoke the LLM with `messages=[]`, so the request body is
 deterministic per case and cassettes are body-matched. A reworded prompt anchor changes the body, misses
-the cassette, and errors — instead of silently replaying a stale response.
+the cassette, and errors — instead of silently replaying a stale response. The site-answer gate passes
+the visitor's question as the only message, which is just as deterministic.
 
 ## Run
 
@@ -34,6 +35,16 @@ cd backend && python -m evals.run --mode live --model grok-4.3 --report md
 # simulated-user scorecard (live, needs a real XAI_API_KEY; spends tokens):
 cd backend && python -m evals.run --dimension sim --mode live --report md
 ```
+
+## Site answers (recorded)
+
+`test_site_answer_recorded.py` drives the `site_answer` node directly over the committed fixture index
+(`backend/tests/fixtures/site_index_v1.json`, public page text plus synthetic edge chunks) with grok-4.3
+replayed from `cassettes/site_answer.yaml`. Each row of `datasets/site_answer.jsonl` expects a `link`
+(answered, ending with that page's `Read more` link), `no_answer` (the fixed no-match reply, from the
+score threshold or the model's `NO_ANSWER`) or `either`. Every reply must carry no URL except its own
+page link, and nothing from the fixture's injected line. Rows under the threshold make no model call
+and have no cassette entry.
 
 ## Simulated-user scorecard (live, report-only)
 
@@ -84,7 +95,8 @@ summary's asked-for sentiment gloss; a task-specific prompt is the follow-up). D
 
 ## Add a case
 
-Append one JSON line to `datasets/extraction.jsonl` or `datasets/routing.jsonl`. Extraction `expected`
+Append one JSON line to `datasets/extraction.jsonl`, `datasets/routing.jsonl` or `datasets/site_answer.jsonl`.
+Extraction `expected`
 **must use the exact enum `.value` strings** from `app/models/schemas.py` (contract #1). Then record the
 new case's response:
 

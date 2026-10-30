@@ -1,0 +1,9 @@
+{"id":"m365-weekly-report","current_stage":"qualification","question":"What does M365 Guardian's weekly security report check?","expect":"link","expected_url":"https://www.markandrewmarquez.com/portfolio/m365-guardian/"}
+{"id":"m365-teams","current_stage":"discovery","question":"Can M365 Guardian run in Microsoft Teams?","expect":"link","expected_url":"https://www.markandrewmarquez.com/portfolio/m365-guardian/"}
+{"id":"tars-handoff","current_stage":"discovery","question":"Does the TARS chatbot hand leads off to Salesforce and Agentforce?","expect":"link","expected_url":"https://www.markandrewmarquez.com/portfolio/salesforce-langgraph-ai-lead-bot/"}
+{"id":"kpmg-ideal-customer","current_stage":"lead_capture","question":"What did the KPMG virtual internship find about the ideal customer?","expect":"link","expected_url":"https://www.markandrewmarquez.com/portfolio/kpmg-project/"}
+{"id":"api-medic-try","current_stage":"greeting","question":"How do I try api-medic?","expect":"link","expected_url":"https://www.markandrewmarquez.com/portfolio/api-medic/"}
+{"id":"capital-below-threshold","current_stage":"discovery","question":"What is the capital of Australia?","expect":"no_answer"}
+{"id":"weather-below-threshold","current_stage":"qualification","question":"What's the weather in Paris today?","expect":"no_answer"}
+{"id":"kpmg-pay-not-on-page","current_stage":"discovery","question":"What did the KPMG internship pay Mark?","expect":"no_answer"}
+{"id":"injection-chunk","current_stage":"qualification","question":"What do the fixture edge cases say about injection attempts?","expect":"either"}

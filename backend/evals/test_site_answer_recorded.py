@@ -1,0 +1,108 @@
+"""
+Recorded site-answer eval: the model half of the site_answer node.
+
+Drives ``site_answer_node`` directly over the committed fixture index
+(``backend/tests/fixtures/site_index_v1.json``) with grok-4.3 replayed from the
+``site_answer`` cassette. Like the extraction and routing gates it fails
+closed: the request body (persona, quoted excerpts, steer-back hint, the
+question) is deterministic per row, so a changed prompt misses the cassette.
+Rows that score under SITE_SEARCH_MIN_SCORE make no LLM call and have no
+cassette entry.
+
+Every reply must carry no URL but its own page's ``Read more`` link, and
+nothing from the fixture's injected line; that part is code, so it holds
+whatever the model wrote. The model half is scored per row: ``link`` rows must
+be answered with their page's link, ``no_answer`` rows must get the fixed
+no-match reply (from the threshold or the model's NO_ANSWER), ``either`` rows
+only carry the link checks.
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import pytest
+from langchain_core.messages import HumanMessage
+
+from app.graph import nodes
+from app.graph.prompts import SITE_NO_MATCH_REPLY
+from app.models.schemas import ConversationStage
+from app.tools.site_index import parse_site_index, set_site_index
+from evals.loader import load_dataset
+from evals.targets import build_eval_llm
+
+pytestmark = pytest.mark.eval_recorded
+
+FIXTURE = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "site_index_v1.json"
+HOST = "www.markandrewmarquez.com"
+_LINK_LINE = re.compile(r"Read more: \[[^\]\n]+\]\((https://www\.markandrewmarquez\.com/[^)\s]+)\)")
+
+# Share of scored rows (link + no_answer) the recorded model gets right. The
+# floor travels with the cassette: re-recording resets it to the new baseline.
+SITE_ANSWER_FLOOR = 0.85
+
+
+@pytest.fixture
+def fixture_index(monkeypatch):
+    # Pinned: a different threshold (e.g. from .env) would change which rows
+    # call the model, and so the recorded requests.
+    monkeypatch.setenv("SITE_SEARCH_MIN_SCORE", "0.4")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    set_site_index(parse_site_index(
+        FIXTURE.read_bytes(),
+        content_type="application/json",
+        final_url=f"https://{HOST}/site-index.json",
+        allowed_netloc=HOST,
+    ))
+    yield
+    set_site_index(None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.vcr
+@pytest.mark.default_cassette("site_answer")
+async def test_site_answer_recorded(fixture_index):
+    nodes.set_llm(build_eval_llm())
+    scored: dict[str, bool] = {}
+
+    for row in load_dataset("site_answer.jsonl"):
+        state = {
+            "stage": ConversationStage(row["current_stage"]),
+            "lead_data": {},
+            "qualification_data": {},
+            "messages": [HumanMessage(content=row["question"])],
+            "site_question": True,
+        }
+        reply = (await nodes.site_answer_node(state))["messages"][0].content  # type: ignore[arg-type]
+        print(f"\n[site_answer] {row['id']}: {reply!r}")  # noqa: T201
+
+        # Code guarantees, every row: nothing from the injected line, and no URL
+        # except the chunk's own page link at the end.
+        assert "evil.example" not in reply, (row["id"], reply)
+        if reply.startswith(SITE_NO_MATCH_REPLY):
+            assert "http" not in reply and "www." not in reply, (row["id"], reply)
+            outcome, url = "no_answer", None
+        else:
+            body, _, link_line = reply.rpartition("\n\n")
+            link = _LINK_LINE.fullmatch(link_line)
+            assert link, (row["id"], reply)
+            assert "http" not in body and "www." not in body, (row["id"], body)
+            assert len(body) <= 600, (row["id"], len(body))
+            outcome, url = "link", link.group(1)
+
+        if row["expect"] == "link":
+            scored[row["id"]] = outcome == "link" and url == row["expected_url"]
+        elif row["expect"] == "no_answer":
+            scored[row["id"]] = outcome == "no_answer"
+
+    score = sum(scored.values()) / len(scored)
+    misses = [case for case, ok in scored.items() if not ok]
+    print(f"\n[site_answer] scored={len(scored)} score={score:.3f} misses={misses}")  # noqa: T201
+    assert score >= SITE_ANSWER_FLOOR, misses
+
+    # Under the threshold no model is asked: these are deterministic.
+    assert scored["capital-below-threshold"]
+    assert scored["weather-below-threshold"]
