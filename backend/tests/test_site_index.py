@@ -207,6 +207,19 @@ class TestParse:
         assert [c.id for c in index.chunks] == ["page:0"]
         assert index.skipped == 1
 
+    @pytest.mark.parametrize(
+        "url",
+        [
+            f"https://{HOST}/portfolio/x\x1b[31mRED\x07/",  # ESC and BEL
+            f"https://{HOST}/portfolio/x\x7f/",  # DEL
+        ],
+        ids=["esc-bel", "del"],
+    )
+    def test_a_chunk_url_with_control_characters_is_skipped(self, url):
+        index = _parse(json.dumps(_doc(chunks=[_chunk(id="ok:0"), _chunk(id="bad:0", url=url)])).encode())
+        assert [c.id for c in index.chunks] == ["ok:0"]
+        assert index.skipped == 1
+
     def test_an_index_with_no_valid_chunk_is_rejected(self):
         body = json.dumps(_doc(chunks=[_chunk(text=""), _chunk(url="http://evil.example/")])).encode()
         with pytest.raises(SiteIndexError, match=r"no valid chunks \(of 2\)"):

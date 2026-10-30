@@ -143,6 +143,9 @@ def _parse_chunk(raw: Any, allowed_netloc: str) -> SiteChunk | None:
             return None
         values[field] = value
     url = values["url"]
+    # The url is logged and becomes the visitor's link: no control characters.
+    if not url.isprintable():
+        return None
     try:
         parts = urlsplit(url)
     except ValueError:
