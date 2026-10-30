@@ -1016,6 +1016,8 @@ MODEL_LINK_SHAPES = [
 MODEL_PROSE_TO_KEEP = [
     "Email sarah.chen@contoso.com for the slides.",
     "Write to mark@markandrewmarquez.com for the slides.",
+    # A host/path rule for lowercase hosts only keeps stack names.
+    "He built it with Node.js/TypeScript and ASP.NET/C# on Azure.",
 ]
 
 
