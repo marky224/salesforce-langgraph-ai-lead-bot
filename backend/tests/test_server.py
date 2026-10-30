@@ -412,6 +412,13 @@ def test_startup_does_not_wait_for_or_fail_on_the_site_index(lifespan_env, monke
 
     monkeypatch.setattr(site_index, "_urlopen", _hanging_urlopen)
 
+    # Build the LLM once first, so its provider package is already imported:
+    # the time bound below is for the lifespan, not a first-time import (this
+    # test may be the first in the process to build the LLM).
+    from app.config import get_llm
+
+    get_llm()
+
     started = time.monotonic()
     with TestClient(server.app) as test_client:
         # Startup returned at once (it normally takes a few hundredths of a second),
