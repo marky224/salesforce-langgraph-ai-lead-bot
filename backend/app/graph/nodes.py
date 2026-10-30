@@ -650,13 +650,18 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
 
     Kept as text: plain email addresses, a host/path whose host has an
     uppercase letter (``Node.js/TypeScript``, ``ASP.NET/C#``), bare hosts with
-    no path or port, and entity-encoded URLs. The text around a removed URL is left as it is. The
-    link passes run again after tidying, up to 3 rounds, so closing up a space
-    or an empty ``()`` can't rebuild a link.
+    no path or port, and entity-encoded URLs. The text around a removed URL is
+    left as it is.
+
+    The link passes and the tidy steps run in rounds, at most 3, until the text
+    stops changing, so closing up a space or an empty ``()`` can't rebuild a
+    link. If the third round still changed the text, the reply fails closed:
+    ``None``, so the visitor gets the no-match reply.
 
     Also turns ``<``/``>`` into ``‹``/``›`` (the widget renders markdown into
     HTML) and caps the text at 4 sentences and 600 characters. ``None`` when
-    the model replied NO_ANSWER or nothing is left after cleaning.
+    the model replied NO_ANSWER, nothing is left after cleaning, or the rounds
+    didn't settle.
     """
     text = raw.strip()[:_SITE_RAW_MAX_CHARS]
     if text.upper().startswith(_NO_ANSWER):
@@ -666,13 +671,16 @@ def _finalize_site_reply(raw: str, hit: SiteHit) -> str | None:
     # The site's own domain in any token, except right after the @ of an email.
     own_site = re.compile(rf"(?<![\w.@-])[\w.-]*{domain}\S*", re.IGNORECASE)
     # Tidying can join pieces into a link ("www .evil.example" -> "www.evil.example"),
-    # so the link passes run again until the text stops changing.
+    # so the link passes run again until the text stops changing. If the last
+    # round still changed it, its tidy may have rebuilt a link no pass has seen:
+    # fail closed to the no-match reply.
     for _ in range(_LINK_PASS_ROUNDS):
         cleaned = _tidy(_strip_links(text, own_site))
-        changed = cleaned != text
-        text = cleaned
-        if not changed:
+        if cleaned == text:
             break
+        text = cleaned
+    else:
+        return None
 
     text = " ".join(_SENTENCE_BREAK.split(text)[:_SITE_REPLY_MAX_SENTENCES])
     if len(text) > _SITE_REPLY_MAX_CHARS:

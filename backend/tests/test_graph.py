@@ -1010,7 +1010,19 @@ MODEL_LINK_SHAPES = [
     "It is at evil.example:8080/login now.",
     "It is at 192.0.2.7/login now.",
     "It is at evil.example./login now.",
+    # Nested empty () that three rounds of tidying would close up into a link.
+    "Try www((())).evil.example now.",
+    "See markandrewmarquez((())).com/portfolio/made-up-page now.",
+    "Go to evil((())).example/login now.",
 ]
+
+# Shapes whose cleanup may fail closed to the no-match reply (the rounds
+# didn't settle); the reply is accepted then, since it carries no link.
+FAIL_CLOSED_SHAPES = {
+    "Try www((())).evil.example now.",
+    "See markandrewmarquez((())).com/portfolio/made-up-page now.",
+    "Go to evil((())).example/login now.",
+}
 
 # Ordinary prose the link cleanup must leave exactly as written.
 MODEL_PROSE_TO_KEEP = [
@@ -1031,6 +1043,11 @@ class TestSiteAnswerLinks:
 
         reply = (await site_answer_node(_site_state(M365_QUESTION)))["messages"][0].content
 
+        if model_reply in FAIL_CLOSED_SHAPES and reply.startswith(SITE_NO_MATCH_REPLY):
+            assert reply == (
+                f"{SITE_NO_MATCH_REPLY} {SITE_RETURN_LINES[ConversationStage.QUALIFICATION]}"
+            )
+            return
         body, link_line = reply.split("\n\n")
         for fragment in (
             "evil.example", "markandrewmarquez", "//", "http", "www.", "mailto", "tel:",
@@ -1060,7 +1077,11 @@ class TestSiteAnswerLinks:
         reply = (await site_answer_node(_site_state(M365_QUESTION)))["messages"][0].content
 
         html = markdown_it.MarkdownIt("commonmark").render(reply)
-        assert re.findall(r'href="([^"]*)"', html) == [M365_URL]
+        hrefs = re.findall(r'href="([^"]*)"', html)
+        if model_reply in FAIL_CLOSED_SHAPES:
+            assert hrefs in ([M365_URL], [])  # the no-match reply has no link
+        else:
+            assert hrefs == [M365_URL]
 
 
 class TestSiteAnswerCleanupTime:
