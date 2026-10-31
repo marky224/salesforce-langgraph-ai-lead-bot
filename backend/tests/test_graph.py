@@ -508,6 +508,48 @@ class TestErrorNode:
         assert "technical hiccup" in result["messages"][0].content
         assert result["error"] is None  # error cleared
 
+    # A failed Salesforce write: the alert tells the team, so the reply promises
+    # a follow-up only by a channel the visitor gave (email first, then phone).
+
+    @pytest.mark.asyncio
+    async def test_salesforce_error_with_email_says_the_team_was_alerted(self, base_state):
+        base_state["error"] = "Salesforce error: connection refused"
+        base_state["lead_data"] = {"email": "ada@example.com", "phone": "210-555-0123"}
+
+        result = await error_node(base_state)
+
+        assert result["messages"][0].content == (
+            "I've got all your details, thank you! I hit a technical hiccup saving them "
+            "to our system, so the team has been alerted and someone will follow up with "
+            "you by email. Thanks for your patience!"
+        )
+
+    @pytest.mark.asyncio
+    async def test_salesforce_error_with_only_a_phone_says_follow_up_by_phone(self, base_state):
+        base_state["error"] = "Salesforce error: connection refused"
+        base_state["lead_data"] = {"first_name": "Ada", "phone": "210-555-0123"}
+
+        result = await error_node(base_state)
+
+        assert result["messages"][0].content == (
+            "I've got all your details, thank you! I hit a technical hiccup saving them "
+            "to our system, so the team has been alerted and someone will follow up with "
+            "you by phone. Thanks for your patience!"
+        )
+
+    @pytest.mark.asyncio
+    async def test_salesforce_error_without_contact_points_to_the_linkedin_link(self, base_state):
+        base_state["error"] = "Salesforce error: connection refused"
+        base_state["lead_data"] = {"company": "Acme"}
+
+        result = await error_node(base_state)
+
+        assert result["messages"][0].content == (
+            "Thanks for chatting! I hit a technical hiccup saving your details, and I don't "
+            "have a way to reach you, so please reach out directly using the LinkedIn link "
+            "on this page."
+        )
+
     @pytest.mark.asyncio
     async def test_generic_error_message(self, base_state):
         base_state["error"] = "LLM timeout"

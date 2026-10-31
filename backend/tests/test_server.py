@@ -593,19 +593,13 @@ def test_chat_stream_sends_the_salesforce_failure_reply_once(client):
             client,
             "203.0.113.42",
             "Yes, that's correct",
-            seed={
-                "stage": ConversationStage.CONFIRMATION,
-                "lead_data": {
-                    "first_name": "Ada",
-                    "last_name": "Lovelace",
-                    "email": "ada@example.com",
-                    "company": "Acme",
-                },
-            },
+            seed={"stage": ConversationStage.CONFIRMATION, "lead_data": CONFIRMED_LEAD},
         )
 
     sf.Lead.create.assert_called_once()
-    reply = asyncio.run(error_node({"error": "Salesforce error: Salesforce unreachable"}))
+    reply = asyncio.run(
+        error_node({"error": "Salesforce error: Salesforce unreachable", "lead_data": CONFIRMED_LEAD})
+    )
     _assert_streamed_once(events, last, reply["messages"][0].content)
 
 

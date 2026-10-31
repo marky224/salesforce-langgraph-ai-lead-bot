@@ -1064,18 +1064,31 @@ async def error_node(state: GraphState) -> dict:
 
     Clears the ``error`` field after handling so the graph doesn't
     get stuck in an error loop.
+
+    A failed Salesforce write is reported to the team by the alert on the
+    "Salesforce integration failed" log line, so the reply promises a
+    follow-up only when there is an email or phone to follow up with.
     """
     logger.warning("Node: error — %s", state.get("error", "Unknown error"))
 
     error_msg = state.get("error") or ""
 
     if "Salesforce" in error_msg:
-        reply = (
-            "I've captured all your information — thank you! I ran into a "
-            "small technical hiccup saving your details, but don't worry — "
-            "our team has been notified and someone will reach out to you "
-            "shortly. Thanks for your patience!"
-        )
+        lead_data = _gs(state, "lead_data")
+        channel = "email" if lead_data.get("email") else "phone" if lead_data.get("phone") else None
+        if channel:
+            reply = (
+                "I've got all your details, thank you! I hit a technical hiccup "
+                "saving them to our system, so the team has been alerted and "
+                f"someone will follow up with you by {channel}. Thanks for your "
+                "patience!"
+            )
+        else:
+            reply = (
+                "Thanks for chatting! I hit a technical hiccup saving your "
+                "details, and I don't have a way to reach you, so please reach "
+                "out directly using the LinkedIn link on this page."
+            )
     else:
         reply = (
             "I'm sorry, I hit a small snag on my end. Could you try sending "
