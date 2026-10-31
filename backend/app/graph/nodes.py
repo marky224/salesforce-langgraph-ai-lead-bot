@@ -955,6 +955,8 @@ async def salesforce_node(state: GraphState) -> dict:
         }
 
     except Exception as exc:
+        # The failed-write alert in Azure Monitor matches this exact text and
+        # the thread id on the line.
         logger.exception("Salesforce integration failed")
         return {
             "error": f"Salesforce error: {exc}",
