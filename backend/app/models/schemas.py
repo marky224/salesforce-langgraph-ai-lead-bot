@@ -259,7 +259,10 @@ class ChatResponse(BaseModel):
     reply: str = Field(description="Assistant's reply text")
     thread_id: str = Field(description="Thread ID (return to client for subsequent requests)")
     stage: ConversationStage = Field(description="Current conversation stage")
-    is_complete: bool = Field(default=False, description="True when the conversation has ended")
+    is_complete: bool = Field(
+        default=False,
+        description="True once the conversation has ended and the lead is saved in Salesforce",
+    )
     lead_id: str | None = Field(default=None, description="Salesforce Lead ID once created")
 
 

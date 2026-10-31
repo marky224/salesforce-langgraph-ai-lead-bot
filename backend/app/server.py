@@ -376,7 +376,9 @@ async def chat(request: Request, payload: ChatRequest) -> ChatResponse:
     # Extract the latest AI message
     reply = _extract_latest_ai_reply(result)
     stage = result.get("stage", ConversationStage.GREETING)
-    is_complete = stage == ConversationStage.COMPLETE
+    # Complete only once the Lead and its transcript Task are in Salesforce:
+    # a failed write keeps stage=complete but must not show the completion banner.
+    is_complete = stage == ConversationStage.COMPLETE and bool(result.get("salesforce_task_id"))
     lead_id = result.get("salesforce_lead_id")
 
     logger.info(
@@ -501,17 +503,21 @@ async def chat_stream(request: Request, payload: ChatRequest) -> StreamingRespon
 
         # Fetch the final checkpointed state so we can return the current
         # lead_data snapshot — the frontend uses this to render a live
-        # "contact info collected so far" panel during lead capture.
+        # "contact info collected so far" panel during lead capture — and
+        # whether the lead is saved in Salesforce.
         lead_data: dict[str, Any] = {}
+        lead_saved = False
         try:
             snapshot = await graph.aget_state(config)
             if snapshot and snapshot.values:
                 lead_data = snapshot.values.get("lead_data", {}) or {}
+                lead_saved = bool(snapshot.values.get("salesforce_task_id"))
         except Exception:
             logger.warning("Failed to fetch final state for thread %s", thread_id, exc_info=True)
 
-        # Send completion event
-        is_complete = final_stage == ConversationStage.COMPLETE
+        # Send completion event. Complete only once the Lead and its transcript
+        # Task are saved: a failed write keeps stage=complete but shows no banner.
+        is_complete = final_stage == ConversationStage.COMPLETE and lead_saved
         yield (
             f"data: {_sse_json({'done': True, 'thread_id': thread_id, 'stage': final_stage.value, 'is_complete': is_complete, 'lead_id': lead_id, 'lead_data': lead_data})}\n\n"
         )

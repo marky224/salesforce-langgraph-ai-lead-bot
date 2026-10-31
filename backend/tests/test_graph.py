@@ -17,7 +17,7 @@ import re
 import time
 import unicodedata
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
@@ -44,6 +44,7 @@ from app.graph.nodes import (
     objection_handler_node,
     qualification_node,
     router_node,
+    salesforce_node,
     scoring_node,
     set_llm,
     site_answer_node,
@@ -445,6 +446,52 @@ class TestRouterNode:
 
 
 # ---------------------------------------------------------------------------
+# Salesforce node tests (the Salesforce tools are mocked)
+# ---------------------------------------------------------------------------
+
+class TestSalesforceNode:
+    """A partial write (Lead saved, Task failed) keeps the Lead for the retry."""
+
+    @pytest.mark.asyncio
+    async def test_task_failure_keeps_the_new_lead_id(self, base_state):
+        base_state["lead_data"] = {"email": "ada@example.com", "company": "Acme"}
+
+        with (
+            patch("app.tools.salesforce.find_lead_by_email", AsyncMock(return_value=None)),
+            patch("app.tools.salesforce.create_lead", AsyncMock(return_value="00QNEW")),
+            patch(
+                "app.tools.salesforce.create_transcript_task",
+                AsyncMock(side_effect=RuntimeError("Salesforce Task creation failed")),
+            ),
+        ):
+            result = await salesforce_node(base_state)
+
+        assert result.get("salesforce_lead_id") == "00QNEW"
+        assert "Salesforce" in result["error"]
+        assert result["stage"] == ConversationStage.COMPLETE
+        assert "salesforce_task_id" not in result
+
+    @pytest.mark.asyncio
+    async def test_retry_reuses_the_threads_lead_and_skips_create(self, base_state):
+        """No email to dedup on, so only the thread's own Lead Id prevents a second Lead."""
+        base_state["salesforce_lead_id"] = "00QKEPT"
+        create_lead = AsyncMock(return_value="00QDUPLICATE")
+        create_task = AsyncMock(return_value="00TNEW")
+
+        with (
+            patch("app.tools.salesforce.find_lead_by_email", AsyncMock(return_value=None)),
+            patch("app.tools.salesforce.create_lead", create_lead),
+            patch("app.tools.salesforce.create_transcript_task", create_task),
+        ):
+            result = await salesforce_node(base_state)
+
+        create_lead.assert_not_awaited()
+        assert create_task.await_args.kwargs["lead_id"] == "00QKEPT"
+        assert result["salesforce_lead_id"] == "00QKEPT"
+        assert result["salesforce_task_id"] == "00TNEW"
+
+
+# ---------------------------------------------------------------------------
 # Error node tests
 # ---------------------------------------------------------------------------
 
@@ -460,6 +507,48 @@ class TestErrorNode:
         assert len(result["messages"]) == 1
         assert "technical hiccup" in result["messages"][0].content
         assert result["error"] is None  # error cleared
+
+    # A failed Salesforce write: the alert tells the team, so the reply promises
+    # a follow-up only by a channel the visitor gave (email first, then phone).
+
+    @pytest.mark.asyncio
+    async def test_salesforce_error_with_email_says_the_team_was_alerted(self, base_state):
+        base_state["error"] = "Salesforce error: connection refused"
+        base_state["lead_data"] = {"email": "ada@example.com", "phone": "210-555-0123"}
+
+        result = await error_node(base_state)
+
+        assert result["messages"][0].content == (
+            "I've got all your details, thank you! I hit a technical hiccup saving them "
+            "to our system, so the team has been alerted and someone will follow up with "
+            "you by email. Thanks for your patience!"
+        )
+
+    @pytest.mark.asyncio
+    async def test_salesforce_error_with_only_a_phone_says_follow_up_by_phone(self, base_state):
+        base_state["error"] = "Salesforce error: connection refused"
+        base_state["lead_data"] = {"first_name": "Ada", "phone": "210-555-0123"}
+
+        result = await error_node(base_state)
+
+        assert result["messages"][0].content == (
+            "I've got all your details, thank you! I hit a technical hiccup saving them "
+            "to our system, so the team has been alerted and someone will follow up with "
+            "you by phone. Thanks for your patience!"
+        )
+
+    @pytest.mark.asyncio
+    async def test_salesforce_error_without_contact_points_to_the_linkedin_link(self, base_state):
+        base_state["error"] = "Salesforce error: connection refused"
+        base_state["lead_data"] = {"company": "Acme"}
+
+        result = await error_node(base_state)
+
+        assert result["messages"][0].content == (
+            "Thanks for chatting! I hit a technical hiccup saving your details, and I don't "
+            "have a way to reach you, so please reach out directly using the LinkedIn link "
+            "on this page."
+        )
 
     @pytest.mark.asyncio
     async def test_generic_error_message(self, base_state):

@@ -417,3 +417,46 @@ class TestSalesforceFailure:
             assert len(last_ai) > 0
             # The error node should have fired
             assert result.get("error") is None or "Salesforce" in str(result.get("error", ""))
+
+    @pytest.mark.asyncio
+    async def test_retry_after_a_partial_write_creates_no_second_lead(self):
+        """
+        The Lead is saved but its Task fails; the visitor's next message retries
+        the write. With no email there is no dedup lookup, so only the Lead Id the
+        failed turn kept stops a second Lead.
+        """
+        set_llm(ContentBasedMockLLM())
+
+        with patch("app.tools.salesforce._get_sf_client") as mock_client:
+            sf = MagicMock()
+            sf.Lead.create.return_value = {"success": True, "id": "00Q000TEST00001"}
+            sf.Task.create.side_effect = [
+                ConnectionError("Salesforce unreachable"),
+                {"success": True, "id": "00T000TEST00001"},
+            ]
+            mock_client.return_value = sf
+
+            graph = build_graph()
+            config = {"configurable": {"thread_id": "e2e-sfpartial-001"}}
+
+            await graph.ainvoke({"messages": []}, config=config)
+            # A confirmation with a company but no email (no name, so no guard asks for one).
+            await graph.aupdate_state(
+                config,
+                {"stage": ConversationStage.CONFIRMATION, "lead_data": {"company": "TestCo"}},
+                as_node="greeting",
+            )
+            failed = await graph.ainvoke(
+                {"messages": [HumanMessage(content="Yes, that's correct")]}, config=config
+            )
+            result = await graph.ainvoke(
+                {"messages": [HumanMessage(content="ok thanks")]}, config=config
+            )
+
+        assert failed.get("salesforce_task_id") is None
+        sf.query.assert_not_called()  # no email, no dedup lookup
+        assert sf.Lead.create.call_count == 1
+        assert sf.Task.create.call_count == 2
+        assert sf.Task.create.call_args[0][0]["WhoId"] == "00Q000TEST00001"
+        assert result["salesforce_lead_id"] == "00Q000TEST00001"
+        assert result["salesforce_task_id"] == "00T000TEST00001"

@@ -18,6 +18,8 @@ from __future__ import annotations
 import asyncio
 import itertools
 import json
+import logging
+import re
 import threading
 import time
 import urllib.error
@@ -591,19 +593,13 @@ def test_chat_stream_sends_the_salesforce_failure_reply_once(client):
             client,
             "203.0.113.42",
             "Yes, that's correct",
-            seed={
-                "stage": ConversationStage.CONFIRMATION,
-                "lead_data": {
-                    "first_name": "Ada",
-                    "last_name": "Lovelace",
-                    "email": "ada@example.com",
-                    "company": "Acme",
-                },
-            },
+            seed={"stage": ConversationStage.CONFIRMATION, "lead_data": CONFIRMED_LEAD},
         )
 
     sf.Lead.create.assert_called_once()
-    reply = asyncio.run(error_node({"error": "Salesforce error: Salesforce unreachable"}))
+    reply = asyncio.run(
+        error_node({"error": "Salesforce error: Salesforce unreachable", "lead_data": CONFIRMED_LEAD})
+    )
     _assert_streamed_once(events, last, reply["messages"][0].content)
 
 
@@ -619,3 +615,136 @@ def test_chat_stream_sends_the_generic_error_reply_once(client):
 
     reply = asyncio.run(error_node({"error": "Model call timed out"}))
     _assert_streamed_once(events, last, reply["messages"][0].content)
+
+
+# ---------------------------------------------------------------------------
+# A failed Salesforce write: the log line the alert matches
+# ---------------------------------------------------------------------------
+
+CONFIRMED_LEAD = {
+    "first_name": "Ada",
+    "last_name": "Lovelace",
+    "email": "ada@example.com",
+    "company": "Acme",
+}
+
+
+def _failing_sf() -> MagicMock:
+    sf = MagicMock()
+    sf.query.return_value = {"records": []}  # dedup miss → create is reached
+    sf.Lead.create.side_effect = ConnectionError("Salesforce unreachable")
+    return sf
+
+
+def _confirm_lead(client, ip: str, sf: MagicMock, endpoint: str = "/chat/stream"):
+    """
+    Start a thread at confirmation with ``CONFIRMED_LEAD`` and send the visitor's
+    "yes" to ``endpoint``: extraction → scoring → salesforce (→ error when the
+    write fails). Returns the response.
+    """
+    from app import server
+    from app.graph.nodes import set_llm
+    from app.models.schemas import ConversationStage
+
+    set_llm(GenericFakeChatModel(messages=iter([
+        AIMessage(content=GREETING),
+        AIMessage(content="{}"),  # extraction
+        AIMessage(content="Ada from Acme wants a demo."),  # scoring's transcript summary
+    ])))
+    headers = {"X-Forwarded-For": ip}
+    thread_id = client.post("/chat/init", headers=headers).json()["thread_id"]
+    server._graph.update_state(
+        {"configurable": {"thread_id": thread_id}},
+        {"stage": ConversationStage.CONFIRMATION, "lead_data": CONFIRMED_LEAD},
+        as_node="greeting",
+    )
+    with patch("app.tools.salesforce._get_sf_client", return_value=sf):
+        return client.post(
+            endpoint, json={"message": "Yes, that's correct", "thread_id": thread_id}, headers=headers
+        )
+
+
+class _Capture(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__()
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+def test_salesforce_failure_log_line_matches_the_alert_query(client):
+    """
+    The failed-write alert in Azure Monitor finds this exact text in ContainerAppConsoleLogs_CL
+    and takes the thread id from the same line, in the text or the JSON log
+    format. The regexes are the alert query's two ``extract`` patterns.
+    """
+    from app.config import _build_formatter
+    from app.logging_ctx import RequestContextFilter
+
+    capture = _Capture()
+    capture.addFilter(RequestContextFilter())  # stamps thread_id, as the app's handler does
+    nodes_logger = logging.getLogger("app.graph.nodes")
+    nodes_logger.addHandler(capture)
+    try:
+        resp = _confirm_lead(client, "203.0.113.44", _failing_sf())
+    finally:
+        nodes_logger.removeHandler(capture)
+
+    thread_id = next(e for e in _parse_sse(resp.text) if e.get("done"))["thread_id"]
+    [record] = [r for r in capture.records if r.getMessage() == "Salesforce integration failed"]
+    assert record.levelno == logging.ERROR
+
+    text_line = _build_formatter("text").format(record).splitlines()[0]
+    assert text_line.endswith("| Salesforce integration failed")
+    text_match = re.search(r"thread=(\S+)", text_line)
+    assert text_match and text_match.group(1) == thread_id
+
+    json_line = _build_formatter("json").format(record)
+    assert json.loads(json_line)["message"] == "Salesforce integration failed"
+    json_match = re.search(r'"thread_id": ?"([^"]+)"', json_line)
+    assert json_match and json_match.group(1) == thread_id
+
+
+# ---------------------------------------------------------------------------
+# is_complete: true only once the Lead and its Task are saved
+# ---------------------------------------------------------------------------
+# The widget shows its "someone will reach out" banner on is_complete, so a
+# failed write must not set it (stage stays complete; the SSE shape is unchanged).
+
+
+def _saving_sf() -> MagicMock:
+    sf = MagicMock()
+    sf.query.return_value = {"records": []}  # dedup miss → create
+    sf.Lead.create.return_value = {"success": True, "id": "00Q000TEST00001"}
+    sf.Task.create.return_value = {"success": True, "id": "00T000TEST00001"}
+    return sf
+
+
+def test_chat_stream_failed_write_is_not_complete(client):
+    resp = _confirm_lead(client, "203.0.113.45", _failing_sf())
+
+    [done] = [e for e in _parse_sse(resp.text) if e.get("done")]
+    assert done["stage"] == "complete"
+    assert done["is_complete"] is False
+    assert done["lead_id"] is None
+
+
+def test_chat_failed_write_is_not_complete(client):
+    resp = _confirm_lead(client, "203.0.113.46", _failing_sf(), endpoint="/chat")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["stage"] == "complete"
+    assert body["is_complete"] is False
+    assert body["lead_id"] is None
+
+
+def test_chat_stream_saved_lead_is_complete(client):
+    """Guard: the success path still reports complete, with the Lead Id."""
+    resp = _confirm_lead(client, "203.0.113.47", _saving_sf())
+
+    [done] = [e for e in _parse_sse(resp.text) if e.get("done")]
+    assert done["stage"] == "complete"
+    assert done["is_complete"] is True
+    assert done["lead_id"] == "00Q000TEST00001"
