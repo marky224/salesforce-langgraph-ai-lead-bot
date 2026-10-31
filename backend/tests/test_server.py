@@ -710,3 +710,47 @@ def test_salesforce_failure_log_line_matches_the_alert_query(client):
     assert json.loads(json_line)["message"] == "Salesforce integration failed"
     json_match = re.search(r'"thread_id": ?"([^"]+)"', json_line)
     assert json_match and json_match.group(1) == thread_id
+
+
+# ---------------------------------------------------------------------------
+# is_complete: true only once the Lead and its Task are saved
+# ---------------------------------------------------------------------------
+# The widget shows its "someone will reach out" banner on is_complete, so a
+# failed write must not set it (stage stays complete; the SSE shape is unchanged).
+
+
+def _saving_sf() -> MagicMock:
+    sf = MagicMock()
+    sf.query.return_value = {"records": []}  # dedup miss → create
+    sf.Lead.create.return_value = {"success": True, "id": "00Q000TEST00001"}
+    sf.Task.create.return_value = {"success": True, "id": "00T000TEST00001"}
+    return sf
+
+
+def test_chat_stream_failed_write_is_not_complete(client):
+    resp = _confirm_lead(client, "203.0.113.45", _failing_sf())
+
+    [done] = [e for e in _parse_sse(resp.text) if e.get("done")]
+    assert done["stage"] == "complete"
+    assert done["is_complete"] is False
+    assert done["lead_id"] is None
+
+
+def test_chat_failed_write_is_not_complete(client):
+    resp = _confirm_lead(client, "203.0.113.46", _failing_sf(), endpoint="/chat")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["stage"] == "complete"
+    assert body["is_complete"] is False
+    assert body["lead_id"] is None
+
+
+def test_chat_stream_saved_lead_is_complete(client):
+    """Guard: the success path still reports complete, with the Lead Id."""
+    resp = _confirm_lead(client, "203.0.113.47", _saving_sf())
+
+    [done] = [e for e in _parse_sse(resp.text) if e.get("done")]
+    assert done["stage"] == "complete"
+    assert done["is_complete"] is True
+    assert done["lead_id"] == "00Q000TEST00001"
