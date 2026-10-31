@@ -153,3 +153,59 @@ async def test_refuses_without_database_url(monkeypatch, sf):
 
     opened.assert_not_called()
     sf.Task.create.assert_not_called()
+
+
+@pytest.fixture
+def recorded_runs(monkeypatch):
+    """
+    LangSmith tracing exported in the shell, with a fake key, but nothing is sent:
+    the tracer's two persist hooks are replaced by recorders that keep each run
+    and the client that would have uploaded it.
+    """
+    from langchain_core.tracers.langchain import LangChainTracer
+    from langsmith import utils as ls_utils
+
+    monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    monkeypatch.setenv("LANGSMITH_API_KEY", "ls-test-not-real")
+    get_settings.cache_clear()
+    ls_utils.get_env_var.cache_clear()  # langsmith caches env reads
+    posted: list = []
+    patched: list = []
+    clients: dict = {}
+
+    def _post(self, run):
+        clients[run.id] = self.client
+        posted.append((self.client, run))
+
+    def _patch(run):
+        patched.append((clients.get(run.id), run))
+
+    monkeypatch.setattr(LangChainTracer, "_persist_run_single", _post)
+    monkeypatch.setattr(LangChainTracer, "_update_run_single", staticmethod(_patch))
+    yield posted, patched
+    ls_utils.get_env_var.cache_clear()  # don't leave "tracing on" cached for later tests
+
+
+@pytest.mark.asyncio
+async def test_send_with_tracing_on_masks_every_run(memory, sf, recorded_runs):
+    """
+    With LANGSMITH_TRACING exported, every run of the replay goes through the
+    server's masked tracer (build_tracer), never LangChain's unmasked env tracer,
+    so the stored email and phone never leave the process.
+    """
+    posted, patched = recorded_runs
+    _seed(memory, lead_data={**LEAD, "phone": "210-555-0123"})
+    posted.clear()  # the seeding above isn't the command's run; only the replay counts
+    patched.clear()
+
+    assert await resend_lead.resend(THREAD, send=True) == 0
+
+    assert "salesforce" in {run.name for _, run in posted}  # the replay was traced
+    for client, run in posted:
+        assert client._anonymizer is not None, f"unmasked tracer for run {run.name!r}"
+        masked = str(client._hide_run_inputs(run.inputs))
+        assert "ada@example.com" not in masked and "210-555-0123" not in masked, run.name
+    for client, run in patched:
+        assert client is not None and client._anonymizer is not None, run.name
+        masked = str(client._hide_run_outputs(run.outputs or {}))
+        assert "ada@example.com" not in masked and "210-555-0123" not in masked, run.name

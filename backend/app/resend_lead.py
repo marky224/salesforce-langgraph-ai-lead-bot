@@ -10,9 +10,14 @@ the thread id, and the failed-write alert in Azure Monitor emails it.
 This command reads that state from the durable checkpointer and shows it.
 With ``--send`` it replays only the ``salesforce`` node on the thread: the
 same Lead reuse, dedup and writes as the live turn, with no LLM call and no
-new message.  If the write fails again it logs the same line (so the alert
-fires again), and the error node appends its reply to the thread, which the
-visitor doesn't see.
+new message.  If the write fails again the command exits 1 with "The write
+failed again": that is the signal.  The failure line is logged to this
+terminal only, not to the Container Apps logs, so no alert fires.  The error
+node also appends its reply to the thread, which the visitor doesn't see.
+
+With LangSmith tracing on (``LANGSMITH_TRACING`` or ``LANGCHAIN_TRACING_V2``),
+the replay runs with the server's masked tracer (``app.tracing.build_tracer``),
+so emails and phone numbers are masked before any run leaves the process.
 
 Run from ``backend/`` with ``DATABASE_URL`` and the Salesforce settings in the
 environment or the root ``.env``::
@@ -36,6 +41,7 @@ from app.config import configure_logging, get_settings
 from app.graph.checkpointer import open_checkpointer
 from app.graph.graph import build_graph
 from app.models.schemas import ConversationStage
+from app.tracing import build_tracer
 
 _CONTACT_FIELDS = ("first_name", "last_name", "email", "phone", "company", "title")
 
@@ -60,7 +66,13 @@ async def resend(thread_id: str, send: bool) -> int:
         print("DATABASE_URL is not set, so there are no stored threads to read.", file=sys.stderr)
         return 2
 
-    config = {"configurable": {"thread_id": thread_id}}
+    config: dict[str, Any] = {"configurable": {"thread_id": thread_id}}
+    # The server's masked tracer, attached as server._run_config does: with tracing
+    # on, emails and phones are masked before any run leaves the process, and
+    # LangChain adds no unmasked tracer of its own from the environment.
+    tracer = build_tracer(settings)
+    if tracer is not None:
+        config["callbacks"] = [tracer]
     async with open_checkpointer(settings) as checkpointer:
         graph = build_graph(checkpointer)
         snapshot = await graph.aget_state(config)
