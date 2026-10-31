@@ -17,7 +17,7 @@ import re
 import time
 import unicodedata
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
@@ -44,6 +44,7 @@ from app.graph.nodes import (
     objection_handler_node,
     qualification_node,
     router_node,
+    salesforce_node,
     scoring_node,
     set_llm,
     site_answer_node,
@@ -442,6 +443,52 @@ class TestRouterNode:
 
         result = await router_node(conversation_state)
         assert result.get("retry_count") == 1
+
+
+# ---------------------------------------------------------------------------
+# Salesforce node tests (the Salesforce tools are mocked)
+# ---------------------------------------------------------------------------
+
+class TestSalesforceNode:
+    """A partial write (Lead saved, Task failed) keeps the Lead for the retry."""
+
+    @pytest.mark.asyncio
+    async def test_task_failure_keeps_the_new_lead_id(self, base_state):
+        base_state["lead_data"] = {"email": "ada@example.com", "company": "Acme"}
+
+        with (
+            patch("app.tools.salesforce.find_lead_by_email", AsyncMock(return_value=None)),
+            patch("app.tools.salesforce.create_lead", AsyncMock(return_value="00QNEW")),
+            patch(
+                "app.tools.salesforce.create_transcript_task",
+                AsyncMock(side_effect=RuntimeError("Salesforce Task creation failed")),
+            ),
+        ):
+            result = await salesforce_node(base_state)
+
+        assert result.get("salesforce_lead_id") == "00QNEW"
+        assert "Salesforce" in result["error"]
+        assert result["stage"] == ConversationStage.COMPLETE
+        assert "salesforce_task_id" not in result
+
+    @pytest.mark.asyncio
+    async def test_retry_reuses_the_threads_lead_and_skips_create(self, base_state):
+        """No email to dedup on, so only the thread's own Lead Id prevents a second Lead."""
+        base_state["salesforce_lead_id"] = "00QKEPT"
+        create_lead = AsyncMock(return_value="00QDUPLICATE")
+        create_task = AsyncMock(return_value="00TNEW")
+
+        with (
+            patch("app.tools.salesforce.find_lead_by_email", AsyncMock(return_value=None)),
+            patch("app.tools.salesforce.create_lead", create_lead),
+            patch("app.tools.salesforce.create_transcript_task", create_task),
+        ):
+            result = await salesforce_node(base_state)
+
+        create_lead.assert_not_awaited()
+        assert create_task.await_args.kwargs["lead_id"] == "00QKEPT"
+        assert result["salesforce_lead_id"] == "00QKEPT"
+        assert result["salesforce_task_id"] == "00TNEW"
 
 
 # ---------------------------------------------------------------------------

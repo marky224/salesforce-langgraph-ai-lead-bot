@@ -908,10 +908,14 @@ async def salesforce_node(state: GraphState) -> dict:
     imports and to keep this module testable with mocks.
 
     On success, populates ``salesforce_lead_id`` and ``salesforce_task_id``.
-    On failure, sets ``error`` so the error node can respond.
+    On failure, sets ``error`` so the error node can respond; if the Lead was
+    already written (the Task step failed), ``salesforce_lead_id`` is kept so
+    a retry or a re-send adds only the Task.
     """
     logger.info("Node: salesforce")
 
+    # Set once a Lead exists, so the except block can keep it.
+    lead_id: str | None = None
     try:
         # Late import — the tools module depends on config which may not
         # be available during testing / import time.
@@ -924,14 +928,20 @@ async def salesforce_node(state: GraphState) -> dict:
         # Build the full transcript text
         transcript_text = format_transcript(state.get("messages", []))
 
-        # Dedup: reuse an existing Lead for this email rather than creating a
-        # duplicate (repeat visitors / retries shouldn't spam the CRM). The
-        # transcript Task still attaches; the org side owns Rating/derivation.
+        # Dedup: reuse the Lead this thread already wrote (a retry after the
+        # Task step failed), else an existing Lead for this email, rather than
+        # creating a duplicate (repeat visitors / retries shouldn't spam the
+        # CRM). The transcript Task still attaches; the org side owns
+        # Rating/derivation.
         lead_data = _gs(state, "lead_data")
-        existing_id = await find_lead_by_email(lead_data.get("email"))
+        existing_id = state.get("salesforce_lead_id") or await find_lead_by_email(
+            lead_data.get("email")
+        )
         if existing_id:
             lead_id = existing_id
-            logger.info("Reusing existing Salesforce Lead %s (dedup by email)", lead_id)
+            logger.info(
+                "Reusing existing Salesforce Lead %s (this thread's or dedup by email)", lead_id
+            )
         else:
             lead_id = await create_lead(
                 lead_data=lead_data,
@@ -958,10 +968,14 @@ async def salesforce_node(state: GraphState) -> dict:
         # The failed-write alert in Azure Monitor matches this exact text and
         # the thread id on the line.
         logger.exception("Salesforce integration failed")
-        return {
+        result: dict[str, Any] = {
             "error": f"Salesforce error: {exc}",
             "stage": ConversationStage.COMPLETE,
         }
+        if lead_id:
+            # The Lead exists: keep its Id so a retry or a re-send adds only the Task.
+            result["salesforce_lead_id"] = lead_id
+        return result
 
 
 # ---------------------------------------------------------------------------
