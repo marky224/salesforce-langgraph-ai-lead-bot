@@ -65,6 +65,7 @@ stateDiagram-v2
 
     entry_point --> greeting: No human messages
     entry_point --> extraction: Has human messages
+    entry_point --> after_save: Lead already saved
 
     greeting --> WAIT: Reply sent
 
@@ -87,6 +88,7 @@ stateDiagram-v2
     lead_capture --> WAIT
     confirmation --> WAIT
     site_answer --> WAIT
+    after_save --> WAIT: Fixed reply sent
 
     WAIT --> entry_point: Next human message
 

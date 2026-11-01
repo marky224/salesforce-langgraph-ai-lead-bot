@@ -642,6 +642,113 @@ class TestTurnCapRouting:
 
 
 # ---------------------------------------------------------------------------
+# After-save node + entry gate (a message after the lead is saved)
+# ---------------------------------------------------------------------------
+# The routes are compared with the string "after_save" and after_save_node is
+# imported inside the tests, so on a base without them these fail on the
+# assertion (routing) rather than at import time for the whole module.
+
+class TestAfterSaveRouting:
+    """route_entry_point sends a saved lead to after_save, before extraction and the cap."""
+
+    @staticmethod
+    def _complete_state(**ids):
+        state = TestTurnCapRouting._state_with_n_messages(5)
+        state["stage"] = ConversationStage.COMPLETE
+        state.update(ids)
+        return state
+
+    @staticmethod
+    def _cap(monkeypatch, cap: str) -> None:
+        monkeypatch.setenv("MAX_THREAD_MESSAGES", cap)
+        from app.config import get_settings
+
+        get_settings.cache_clear()
+
+    def test_a_saved_lead_routes_to_after_save(self, monkeypatch):
+        self._cap(monkeypatch, "40")
+        state = self._complete_state(salesforce_lead_id="00Q1", salesforce_task_id="00T1")
+        assert route_entry_point(state) == "after_save"
+
+    def test_a_stage_restored_as_a_string_routes_to_after_save(self, monkeypatch):
+        """The Postgres serde can restore stage as a plain str (contract 4)."""
+        self._cap(monkeypatch, "40")
+        state = self._complete_state(salesforce_lead_id="00Q1", salesforce_task_id="00T1")
+        state["stage"] = "complete"
+        assert route_entry_point(state) == "after_save"
+
+    def test_a_saved_lead_past_the_cap_routes_to_after_save(self, monkeypatch):
+        self._cap(monkeypatch, "4")
+        state = self._complete_state(salesforce_lead_id="00Q1", salesforce_task_id="00T1")
+        assert route_entry_point(state) == "after_save"
+
+    @pytest.mark.parametrize(
+        "ids",
+        [{}, {"salesforce_lead_id": "00Q1"}],
+        ids=["failed_write", "partial_write"],
+    )
+    def test_an_unsaved_write_still_retries_through_extraction(self, monkeypatch, ids):
+        self._cap(monkeypatch, "40")
+        assert route_entry_point(self._complete_state(**ids)) == NODE_EXTRACTION
+
+
+class TestAfterSaveNode:
+    """after_save_node — fixed reply naming the follow-up channel, no LLM call."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("lead_data", "expected"),
+        [
+            (
+                {"email": "ada@example.com", "phone": "210-555-0123"},
+                "Your details are already with the team, and someone will follow up "
+                "with you by email. This chat is wrapped up, so I can't add or "
+                "change anything here; just mention it when they reach out.",
+            ),
+            (
+                {"phone": "210-555-0123"},
+                "Your details are already with the team, and someone will follow up "
+                "with you by phone. This chat is wrapped up, so I can't add or "
+                "change anything here; just mention it when they reach out.",
+            ),
+            (
+                {"company": "Acme"},
+                "Your notes are already with the team, but I don't have a way for "
+                "them to reach you, and this chat is wrapped up. Please reach out "
+                "directly using the LinkedIn link on this page.",
+            ),
+        ],
+        ids=["email", "phone_only", "no_contact"],
+    )
+    async def test_reply_names_how_the_team_will_follow_up(self, base_state, lead_data, expected):
+        from app.graph.nodes import after_save_node
+
+        base_state["lead_data"] = lead_data
+
+        result = await after_save_node(base_state)
+
+        assert len(result["messages"]) == 1
+        assert isinstance(result["messages"][0], AIMessage)
+        assert result["messages"][0].content == expected
+
+    @pytest.mark.asyncio
+    async def test_makes_no_llm_call_and_returns_only_the_reply(self, base_state, mock_llm):
+        from app.graph.nodes import after_save_node
+
+        base_state.update(
+            stage=ConversationStage.COMPLETE,
+            salesforce_lead_id="00Q1",
+            salesforce_task_id="00T1",
+            lead_data={"email": "ada@example.com"},
+        )
+
+        result = await after_save_node(base_state)
+
+        assert set(result) == {"messages"}  # stage and the Salesforce ids stay as they are
+        mock_llm.ainvoke.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # Structured-output tests (abuse... PR 3 C3)
 # ---------------------------------------------------------------------------
 

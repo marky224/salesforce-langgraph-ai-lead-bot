@@ -748,3 +748,92 @@ def test_chat_stream_saved_lead_is_complete(client):
     assert done["stage"] == "complete"
     assert done["is_complete"] is True
     assert done["lead_id"] == "00Q000TEST00001"
+
+
+# ---------------------------------------------------------------------------
+# A message after the lead is saved: the fixed after-save reply, no new write
+# ---------------------------------------------------------------------------
+# The LLM mock answers "{}" to every call, so a graph that still re-ran the
+# write would get through extraction and the transcript summary to Salesforce.
+
+
+def _counting_llm() -> AsyncMock:
+    from app.graph.nodes import set_llm
+
+    llm = AsyncMock()
+    llm.ainvoke = AsyncMock(return_value=MagicMock(content="{}"))
+    set_llm(llm)
+    return llm
+
+
+def test_chat_after_a_saved_lead_gets_the_after_save_reply(client):
+    ip = "203.0.113.48"
+    thread_id = _confirm_lead(client, ip, _saving_sf(), endpoint="/chat").json()["thread_id"]
+    llm = _counting_llm()
+    sf = _saving_sf()
+
+    with patch("app.tools.salesforce._get_sf_client", return_value=sf):
+        resp = client.post(
+            "/chat",
+            json={"message": "When will I hear back?", "thread_id": thread_id},
+            headers={"X-Forwarded-For": ip},
+        )
+
+    sf.Task.create.assert_not_called()
+    sf.Lead.create.assert_not_called()
+    llm.ainvoke.assert_not_awaited()
+
+    from app.graph.nodes import after_save_node
+
+    reply = asyncio.run(after_save_node({"lead_data": CONFIRMED_LEAD}))["messages"][0].content
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["reply"] == reply
+    assert body["stage"] == "complete"
+    assert body["is_complete"] is True
+    assert body["lead_id"] == "00Q000TEST00001"
+
+
+def test_chat_stream_after_a_saved_lead_replies_once_and_writes_nothing(client):
+    """
+    A later message on a saved thread tries no write, even with Salesforce down:
+    no failed-write alert line for a lead that is already saved, the after-save
+    reply sent once, and the done frame still complete with the Lead Id.
+    """
+    from app import server
+
+    ip = "203.0.113.49"
+    first = _confirm_lead(client, ip, _saving_sf())
+    thread_id = next(e for e in _parse_sse(first.text) if e.get("done"))["thread_id"]
+    llm = _counting_llm()
+    sf = _failing_sf()
+    sf.Task.create.side_effect = ConnectionError("Salesforce unreachable")
+
+    capture = _Capture()
+    nodes_logger = logging.getLogger("app.graph.nodes")
+    nodes_logger.addHandler(capture)
+    try:
+        with patch("app.tools.salesforce._get_sf_client", return_value=sf):
+            resp = client.post(
+                "/chat/stream",
+                json={"message": "When will I hear back?", "thread_id": thread_id},
+                headers={"X-Forwarded-For": ip},
+            )
+    finally:
+        nodes_logger.removeHandler(capture)
+
+    sf.Task.create.assert_not_called()
+    sf.Lead.create.assert_not_called()
+    assert not [r for r in capture.records if r.getMessage() == "Salesforce integration failed"]
+    llm.ainvoke.assert_not_awaited()
+
+    from app.graph.nodes import after_save_node
+
+    reply = asyncio.run(after_save_node({"lead_data": CONFIRMED_LEAD}))["messages"][0].content
+    events = _parse_sse(resp.text)
+    last = server._graph.get_state({"configurable": {"thread_id": thread_id}}).values["messages"][-1]
+    _assert_streamed_once(events, last, reply)
+    [done] = [e for e in events if e.get("done")]
+    assert done["stage"] == "complete"
+    assert done["is_complete"] is True
+    assert done["lead_id"] == "00Q000TEST00001"
