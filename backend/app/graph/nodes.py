@@ -180,29 +180,49 @@ def get_parse_failure_count() -> int:
 # LLM call telemetry (token / cost / latency capture)
 # ---------------------------------------------------------------------------
 
-# USD per 1M tokens, keyed by a model-name substring. Only models we actually
-# run are listed; an unknown model logs tokens with ``cost_usd=None``. The model
-# A/B (2026-06-11) moved prod from the reasoning build to grok-4.3 — same per-token
-# price (input $1.25 / output $2.50 per docs.x.ai); the reasoning entry is kept for
-# the recorded-eval baseline and A/B reruns.
-_MODEL_PRICING: dict[str, tuple[float, float]] = {
-    "grok-4.3": (1.25, 2.50),  # current prod (model A/B winner); (input_per_1m, output_per_1m)
-    "grok-4.20-0309-reasoning": (1.25, 2.50),  # prior prod / recorded-eval baseline
+# USD per 1M tokens, keyed by a model-name substring: (input, cached input,
+# output). Only models we actually run are listed; an unknown model logs tokens
+# with ``cost_usd=None``. Prices are docs.x.ai's tier for prompts under 200k
+# tokens (a thread's prompts stay far below it). The model A/B (2026-06-11) moved
+# prod from the reasoning build to grok-4.3 — same per-token price; the reasoning
+# entry is kept for the recorded-eval baseline and A/B reruns.
+_MODEL_PRICING: dict[str, tuple[float, float, float]] = {
+    "grok-4.3": (1.25, 0.20, 2.50),  # current prod (model A/B winner)
+    "grok-4.20-0309-reasoning": (1.25, 0.20, 2.50),  # prior prod / recorded-eval baseline
 }
 
 
-def _compute_cost_usd(model: str, input_tokens: int, output_tokens: int) -> float | None:
-    """USD cost for one call, or ``None`` if the model isn't in the price table."""
-    for key, (in_price, out_price) in _MODEL_PRICING.items():
+def _compute_cost_usd(
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    *,
+    cached_tokens: int = 0,
+    reasoning_tokens: int = 0,
+) -> float | None:
+    """
+    USD cost for one call, or ``None`` if the model isn't in the price table.
+
+    ``cached_tokens`` is the part of ``input_tokens`` read from the prompt cache,
+    priced at the cached rate. ``reasoning_tokens`` is billed as output on top of
+    ``output_tokens``, so pass only reasoning that ``output_tokens`` leaves out.
+    """
+    for key, (in_price, cached_price, out_price) in _MODEL_PRICING.items():
         if key in model:
-            return round(input_tokens / 1e6 * in_price + output_tokens / 1e6 * out_price, 6)
+            return round(
+                (input_tokens - cached_tokens) / 1e6 * in_price
+                + cached_tokens / 1e6 * cached_price
+                + (output_tokens + reasoning_tokens) / 1e6 * out_price,
+                6,
+            )
     return None
 
 
 def _log_llm_call(node: str, response: Any, latency_ms: int) -> None:
     """
     Emit one structured ``llm_call`` event: which node called the model, the
-    model name, latency, token counts, and computed USD cost.
+    model name, latency, token counts (incl. reasoning and cached input), and
+    the USD cost as the provider bills it.
 
     Defensive: ``usage_metadata`` is ``None`` on a streamed call unless the model
     was built with ``stream_usage=True`` (see config.py), and a test fake may omit
@@ -219,16 +239,33 @@ def _log_llm_call(node: str, response: Any, latency_ms: int) -> None:
     input_tokens = usage.get("input_tokens") or 0
     output_tokens = usage.get("output_tokens") or 0
     total_tokens = usage.get("total_tokens") or (input_tokens + output_tokens)
-    cost_usd = _compute_cost_usd(model, input_tokens, output_tokens)
+    cached_tokens = (usage.get("input_token_details") or {}).get("cache_read") or 0
+    reasoning_tokens = (usage.get("output_token_details") or {}).get("reasoning") or 0
+    # xAI bills reasoning as output but reports it outside completion_tokens
+    # (total = input + output + reasoning); OpenAI counts it inside output_tokens
+    # (total = input + output). Price only the reasoning output_tokens leaves out.
+    reasoning_not_in_output = min(
+        reasoning_tokens, max(0, total_tokens - input_tokens - output_tokens)
+    )
+    cost_usd = _compute_cost_usd(
+        model,
+        input_tokens,
+        output_tokens,
+        cached_tokens=cached_tokens,
+        reasoning_tokens=reasoning_not_in_output,
+    )
 
     logger.info(
-        "llm_call node=%s model=%s latency_ms=%d in=%d out=%d cost_usd=%s",
+        "llm_call node=%s model=%s latency_ms=%d in=%d out=%d cost_usd=%s "
+        "reasoning=%d cached_in=%d",
         node,
         model,
         latency_ms,
         input_tokens,
         output_tokens,
         cost_usd,
+        reasoning_tokens,
+        cached_tokens,
         extra={
             "llm_call": {
                 "node": node,
@@ -237,6 +274,8 @@ def _log_llm_call(node: str, response: Any, latency_ms: int) -> None:
                 "input_tokens": input_tokens,
                 "output_tokens": output_tokens,
                 "total_tokens": total_tokens,
+                "reasoning_tokens": reasoning_tokens,
+                "cached_input_tokens": cached_tokens,
                 "cost_usd": cost_usd,
             }
         },
