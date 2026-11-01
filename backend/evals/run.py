@@ -332,10 +332,11 @@ def main() -> int:
         print("error: --dimension sim requires --mode live (no cassette to replay)", file=sys.stderr)
         return 2
 
+    from evals._config import force_tracing_off
+
     os.environ.setdefault("LLM_PROVIDER", "xai")
     os.environ["LLM_STRUCTURED_OUTPUT"] = "false"
-    os.environ["LANGSMITH_TRACING"] = "false"
-    os.environ["LANGCHAIN_TRACING_V2"] = "false"
+    force_tracing_off()
     if args.mode == "recorded":
         # Replay needs no real secret (VCR intercepts every call).
         os.environ.setdefault("XAI_API_KEY", "xai-dummy-for-replay")
