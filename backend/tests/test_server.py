@@ -261,7 +261,9 @@ def test_lifespan_flushes_tracer_on_shutdown(monkeypatch):
     """In-flight traces are flushed on shutdown when tracing is enabled.
 
     Background uploads can be dropped if the process exits mid-flight, so the
-    lifespan calls ``wait_for_all_tracers()`` — but only when a tracer is active.
+    lifespan flushes the masked tracer's own client (``wait_for_futures()``), then
+    LangChain's cached client (``wait_for_all_tracers()``), which is the only one
+    that call flushes — but only when a tracer is active.
     """
     monkeypatch.setenv("LLM_PROVIDER", "openai")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
@@ -280,14 +282,18 @@ def test_lifespan_flushes_tracer_on_shutdown(monkeypatch):
 
     monkeypatch.setattr(server, "open_checkpointer", _memory_checkpointer)
 
-    flushed: list[int] = []
-    monkeypatch.setattr(server, "wait_for_all_tracers", lambda: flushed.append(1))
+    from langchain_core.tracers.langchain import LangChainTracer
+
+    flushed: list = []
+    monkeypatch.setattr(LangChainTracer, "wait_for_futures", lambda self: flushed.append(self))
+    monkeypatch.setattr(server, "wait_for_all_tracers", lambda: flushed.append("cached"))
 
     # Startup builds a real (offline) tracer; the context exit runs the shutdown path.
     with TestClient(server.app):
         pass
 
-    assert flushed == [1]  # flushed exactly once, because a tracer was active
+    # Our tracer once, then LangChain's cached client once, because a tracer was active.
+    assert flushed == [server._tracer, "cached"]
 
 
 # ---------------------------------------------------------------------------
