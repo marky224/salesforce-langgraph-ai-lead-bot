@@ -961,6 +961,8 @@ async def test_llm_call_cost_matches_the_xai_billed_cost(
     event = next(r.llm_call for r in caplog.records if hasattr(r, "llm_call"))
     assert event["cost_usd"] == pytest.approx(ticks / 1e10, abs=1e-6)
     assert event["output_tokens"] == completion
+    assert event.get("reasoning_tokens") == reasoning
+    assert event.get("cached_input_tokens") == cached
 
 
 @pytest.mark.asyncio

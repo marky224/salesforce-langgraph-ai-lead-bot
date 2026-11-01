@@ -221,7 +221,8 @@ def _compute_cost_usd(
 def _log_llm_call(node: str, response: Any, latency_ms: int) -> None:
     """
     Emit one structured ``llm_call`` event: which node called the model, the
-    model name, latency, token counts, and computed USD cost.
+    model name, latency, token counts (incl. reasoning and cached input), and
+    the USD cost as the provider bills it.
 
     Defensive: ``usage_metadata`` is ``None`` on a streamed call unless the model
     was built with ``stream_usage=True`` (see config.py), and a test fake may omit
@@ -255,13 +256,16 @@ def _log_llm_call(node: str, response: Any, latency_ms: int) -> None:
     )
 
     logger.info(
-        "llm_call node=%s model=%s latency_ms=%d in=%d out=%d cost_usd=%s",
+        "llm_call node=%s model=%s latency_ms=%d in=%d out=%d cost_usd=%s "
+        "reasoning=%d cached_in=%d",
         node,
         model,
         latency_ms,
         input_tokens,
         output_tokens,
         cost_usd,
+        reasoning_tokens,
+        cached_tokens,
         extra={
             "llm_call": {
                 "node": node,
@@ -270,6 +274,8 @@ def _log_llm_call(node: str, response: Any, latency_ms: int) -> None:
                 "input_tokens": input_tokens,
                 "output_tokens": output_tokens,
                 "total_tokens": total_tokens,
+                "reasoning_tokens": reasoning_tokens,
+                "cached_input_tokens": cached_tokens,
                 "cost_usd": cost_usd,
             }
         },
