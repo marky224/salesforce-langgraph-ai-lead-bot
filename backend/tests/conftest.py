@@ -84,8 +84,10 @@ def no_langsmith_requests(monkeypatch):
     that records the call and raises instead. Each Client's background thread
     reads its server info on start and uploads queued runs later, so teardown
     waits for that read, then flushes each Client's queue while the patch holds.
+    It also flushes LangChain's cached client (``langsmith.run_trees._CLIENT``, the
+    one LangChain's env tracer uses), which an earlier test may have built.
     """
-    from langsmith import Client
+    from langsmith import Client, run_trees
 
     clients: list = []
     calls: list[str] = []
@@ -105,6 +107,9 @@ def no_langsmith_requests(monkeypatch):
     deadline = time.monotonic() + 5
     while any(client._info is None for client in clients) and time.monotonic() < deadline:
         time.sleep(0.01)
+    cached = run_trees._CLIENT
+    if cached is not None and all(client is not cached for client in clients):
+        clients.append(cached)
     for client in clients:
         client.flush(timeout=5)
     assert not calls, f"the test called LangSmith: {calls}"
