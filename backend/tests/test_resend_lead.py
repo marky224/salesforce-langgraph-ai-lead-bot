@@ -155,17 +155,24 @@ async def test_refuses_without_database_url(monkeypatch, sf):
     sf.Task.create.assert_not_called()
 
 
+_TRACING_FLAGS = ("LANGSMITH_TRACING", "LANGCHAIN_TRACING_V2", "LANGSMITH_TRACING_V2", "LANGCHAIN_TRACING")
+
+
 @pytest.fixture
-def recorded_runs(monkeypatch):
+def recorded_runs(monkeypatch, request):
     """
     LangSmith tracing exported in the shell, with a fake key, but nothing is sent:
     the tracer's two persist hooks are replaced by recorders that keep each run
-    and the client that would have uploaded it.
+    and the client that would have uploaded it. The flag set is LANGSMITH_TRACING,
+    or the one a test passes as the fixture's param; the other three are unset.
     """
     from langchain_core.tracers.langchain import LangChainTracer
     from langsmith import utils as ls_utils
 
-    monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    flag = getattr(request, "param", "LANGSMITH_TRACING")
+    for name in _TRACING_FLAGS:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv(flag, "true")
     monkeypatch.setenv("LANGSMITH_API_KEY", "ls-test-not-real")
     get_settings.cache_clear()
     ls_utils.get_env_var.cache_clear()  # langsmith caches env reads
@@ -187,9 +194,14 @@ def recorded_runs(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "recorded_runs",
+    ["LANGSMITH_TRACING", "LANGSMITH_TRACING_V2", "LANGCHAIN_TRACING"],
+    indirect=True,
+)
 async def test_send_with_tracing_on_masks_every_run(memory, sf, recorded_runs):
     """
-    With LANGSMITH_TRACING exported, every run of the replay goes through the
+    With any one tracing flag exported, every run of the replay goes through the
     server's masked tracer (build_tracer), never LangChain's unmasked env tracer,
     so the stored email and phone never leave the process.
     """
@@ -209,3 +221,62 @@ async def test_send_with_tracing_on_masks_every_run(memory, sf, recorded_runs):
         assert client is not None and client._anonymizer is not None, run.name
         masked = str(client._hide_run_outputs(run.outputs or {}))
         assert "ada@example.com" not in masked and "210-555-0123" not in masked, run.name
+
+
+@pytest.fixture
+def flushed(monkeypatch):
+    """Each tracer flush, recorded as the client it would flush (nothing is uploaded)."""
+    from langchain_core.tracers.langchain import LangChainTracer
+
+    clients: list = []
+    monkeypatch.setattr(LangChainTracer, "wait_for_futures", lambda self: clients.append(self.client))
+    return clients
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("write_fails", "status"),
+    [pytest.param(False, 0, id="sent"), pytest.param(True, 1, id="failed-again")],
+)
+async def test_send_with_tracing_on_flushes_the_masked_tracer_once(
+    memory, sf, recorded_runs, flushed, write_fails, status
+):
+    """Trace uploads run on a background thread, so the command flushes them before it exits."""
+    _seed(memory)
+    if write_fails:
+        sf.Lead.create.side_effect = ConnectionError("Salesforce unreachable")
+
+    assert await resend_lead.resend(THREAD, send=True) == status
+
+    assert len(flushed) == 1
+    assert flushed[0]._anonymizer is not None  # the masked tracer's own client
+
+
+@pytest.mark.asyncio
+async def test_send_with_tracing_on_flushes_when_the_replay_raises(
+    memory, sf, recorded_runs, flushed, monkeypatch
+):
+    """A failed write doesn't raise (it routes to error); a replay that raises still flushes."""
+    _seed(memory)
+
+    def _graph_whose_replay_raises(checkpointer):
+        graph = build_graph(checkpointer)
+        graph.ainvoke = AsyncMock(side_effect=RuntimeError("replay failed"))
+        return graph
+
+    monkeypatch.setattr(resend_lead, "build_graph", _graph_whose_replay_raises)
+
+    with pytest.raises(RuntimeError, match="replay failed"):
+        await resend_lead.resend(THREAD, send=True)
+
+    assert len(flushed) == 1
+    assert flushed[0]._anonymizer is not None
+
+
+@pytest.mark.asyncio
+async def test_send_with_tracing_off_flushes_nothing(memory, sf, flushed):
+    _seed(memory)
+
+    assert await resend_lead.resend(THREAD, send=True) == 0
+
+    assert flushed == []

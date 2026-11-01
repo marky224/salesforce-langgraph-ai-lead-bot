@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 
+import pytest
 from langchain_core.tracers import LangChainTracer
 
 from app.config import Settings
@@ -75,7 +76,12 @@ def test_email_regex_stays_linear_on_long_text():
 
 def test_build_tracer_none_when_disabled():
     # Init kwargs override any local .env, so this is hermetic.
-    settings = Settings(langsmith_tracing=False, langchain_tracing_v2=False)
+    settings = Settings(
+        langsmith_tracing=False,
+        langchain_tracing_v2=False,
+        langsmith_tracing_v2=False,
+        langchain_tracing=False,
+    )
     assert build_tracer(settings) is None
 
 
@@ -97,3 +103,30 @@ def test_build_tracer_uses_settings_api_key(monkeypatch):
     tracer = build_tracer(Settings(langsmith_tracing=True, langsmith_api_key="ls-from-settings"))
     assert isinstance(tracer, LangChainTracer)
     assert tracer.client.api_key == "ls-from-settings"
+
+
+_TRACING_FLAGS = ("LANGSMITH_TRACING", "LANGCHAIN_TRACING_V2", "LANGSMITH_TRACING_V2", "LANGCHAIN_TRACING")
+
+
+@pytest.mark.parametrize("flag", _TRACING_FLAGS)
+def test_every_flag_langsmith_traces_on_builds_the_masked_tracer(monkeypatch, flag):
+    """Each of the four names LangSmith turns tracing on from, set alone, gets our masked tracer.
+
+    Otherwise LangChain would add its own unmasked tracer from the environment.
+    """
+    from langsmith import utils as ls_utils
+
+    for name in _TRACING_FLAGS:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv(flag, "true")
+    monkeypatch.setenv("LANGSMITH_API_KEY", "ls-test-not-real")
+    ls_utils.get_env_var.cache_clear()  # langsmith caches env reads
+    try:
+        assert ls_utils.tracing_is_enabled() is True  # LangSmith would trace...
+        settings = Settings(_env_file=None)
+        assert settings.tracing_enabled is True  # ...so we build the masked tracer
+        tracer = build_tracer(settings)
+        assert isinstance(tracer, LangChainTracer)
+        assert tracer.client._anonymizer is not None
+    finally:
+        ls_utils.get_env_var.cache_clear()  # don't leave "tracing on" cached for later tests
