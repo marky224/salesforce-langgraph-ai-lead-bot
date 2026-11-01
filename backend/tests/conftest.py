@@ -77,11 +77,13 @@ def langsmith_offline(monkeypatch):
 @pytest.fixture(autouse=True)
 def no_langsmith_requests(monkeypatch):
     """
-    Fail a test whose langsmith Client tries an HTTP request; none is sent.
+    Fail a test whose langsmith Client tries an HTTP request, including runs it
+    queued for upload; none is sent.
 
     GET /info and the run uploads go through ``Client.request_with_retries``, so
     that records the call and raises instead. Each Client's background thread
-    reads its server info on start, so teardown waits for that read first.
+    reads its server info on start and uploads queued runs later, so teardown
+    waits for that read, then flushes each Client's queue while the patch holds.
     """
     from langsmith import Client
 
@@ -103,4 +105,6 @@ def no_langsmith_requests(monkeypatch):
     deadline = time.monotonic() + 5
     while any(client._info is None for client in clients) and time.monotonic() < deadline:
         time.sleep(0.01)
+    for client in clients:
+        client.flush(timeout=5)
     assert not calls, f"the test called LangSmith: {calls}"
