@@ -270,9 +270,12 @@ def test_lifespan_flushes_tracer_on_shutdown(monkeypatch):
     monkeypatch.setenv("LANGSMITH_TRACING", "true")
     monkeypatch.setenv("LANGSMITH_API_KEY", "ls-test-not-real")
 
+    from langsmith import utils as ls_utils
+
     from app.config import get_settings
 
     get_settings.cache_clear()
+    ls_utils.get_env_var.cache_clear()  # langsmith caches env reads
 
     from app import server
 
@@ -288,12 +291,15 @@ def test_lifespan_flushes_tracer_on_shutdown(monkeypatch):
     monkeypatch.setattr(LangChainTracer, "wait_for_futures", lambda self: flushed.append(self))
     monkeypatch.setattr(server, "wait_for_all_tracers", lambda: flushed.append("cached"))
 
-    # Startup builds a real (offline) tracer; the context exit runs the shutdown path.
-    with TestClient(server.app):
-        pass
+    try:
+        # Startup builds a real (offline) tracer; the context exit runs the shutdown path.
+        with TestClient(server.app):
+            pass
 
-    # Our tracer once, then LangChain's cached client once, because a tracer was active.
-    assert flushed == [server._tracer, "cached"]
+        # Our tracer once, then LangChain's cached client once, because a tracer was active.
+        assert flushed == [server._tracer, "cached"]
+    finally:
+        ls_utils.get_env_var.cache_clear()  # don't leave "tracing on" cached for later tests
 
 
 # ---------------------------------------------------------------------------
