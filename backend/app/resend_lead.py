@@ -18,7 +18,8 @@ node also appends its reply to the thread, which the visitor doesn't see.
 With LangSmith tracing on (any of ``LANGSMITH_TRACING``, ``LANGSMITH_TRACING_V2``,
 ``LANGCHAIN_TRACING_V2`` or ``LANGCHAIN_TRACING``), the replay runs with the
 server's masked tracer (``app.tracing.build_tracer``), so emails and phone
-numbers are masked before any run leaves the process.
+numbers are masked before any run leaves the process, and the command flushes
+its traces before it exits.
 
 Run from ``backend/`` with ``DATABASE_URL`` and the Salesforce settings in the
 environment or the root ``.env``::
@@ -94,8 +95,16 @@ async def resend(thread_id: str, send: bool) -> int:
 
         # Replay only the salesforce node: record "scoring" as the last step, so
         # its edge (route_after_scoring) runs salesforce next, then resume.
-        await graph.aupdate_state(config, None, as_node="scoring")
-        await graph.ainvoke(None, config)
+        try:
+            await graph.aupdate_state(config, None, as_node="scoring")
+            await graph.ainvoke(None, config)
+        finally:
+            if tracer is not None:
+                # Uploads run on the tracer client's background thread: flush them
+                # before the command exits, even if the replay raised. Not
+                # wait_for_all_tracers(): it flushes only LangSmith's global client,
+                # and the masked tracer has its own.
+                tracer.wait_for_futures()
         after = (await graph.aget_state(config)).values
 
     lead_id, task_id = after.get("salesforce_lead_id"), after.get("salesforce_task_id")

@@ -221,3 +221,41 @@ async def test_send_with_tracing_on_masks_every_run(memory, sf, recorded_runs):
         assert client is not None and client._anonymizer is not None, run.name
         masked = str(client._hide_run_outputs(run.outputs or {}))
         assert "ada@example.com" not in masked and "210-555-0123" not in masked, run.name
+
+
+@pytest.fixture
+def flushed(monkeypatch):
+    """Each tracer flush, recorded as the client it would flush (nothing is uploaded)."""
+    from langchain_core.tracers.langchain import LangChainTracer
+
+    clients: list = []
+    monkeypatch.setattr(LangChainTracer, "wait_for_futures", lambda self: clients.append(self.client))
+    return clients
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("write_fails", "status"),
+    [pytest.param(False, 0, id="sent"), pytest.param(True, 1, id="failed-again")],
+)
+async def test_send_with_tracing_on_flushes_the_masked_tracer_once(
+    memory, sf, recorded_runs, flushed, write_fails, status
+):
+    """Trace uploads run on a background thread, so the command flushes them before it exits."""
+    _seed(memory)
+    if write_fails:
+        sf.Lead.create.side_effect = ConnectionError("Salesforce unreachable")
+
+    assert await resend_lead.resend(THREAD, send=True) == status
+
+    assert len(flushed) == 1
+    assert flushed[0]._anonymizer is not None  # the masked tracer's own client
+
+
+@pytest.mark.asyncio
+async def test_send_with_tracing_off_flushes_nothing(memory, sf, flushed):
+    _seed(memory)
+
+    assert await resend_lead.resend(THREAD, send=True) == 0
+
+    assert flushed == []
