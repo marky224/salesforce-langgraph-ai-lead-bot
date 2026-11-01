@@ -32,6 +32,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 
 from app.graph.edges import (
+    NODE_AFTER_SAVE,
     NODE_CONFIRMATION,
     NODE_DISCOVERY,
     NODE_ERROR,
@@ -54,6 +55,7 @@ from app.graph.edges import (
     route_entry_point,
 )
 from app.graph.nodes import (
+    after_save_node,
     confirmation_node,
     discovery_node,
     error_node,
@@ -132,7 +134,11 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> StateGraph:
     # ``stage`` as it was (its reply is sent whole, not streamed; see server.py)
     graph.add_node(NODE_SITE_ANSWER, site_answer_node)
 
-    logger.debug("Registered %d nodes", 13)
+    # After the save: a fixed reply, no LLM call and no write (sent whole;
+    # see server.py)
+    graph.add_node(NODE_AFTER_SAVE, after_save_node)
+
+    logger.debug("Registered %d nodes", 14)
 
     # ------------------------------------------------------------------
     # 2. Set conditional entry point
@@ -147,6 +153,7 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> StateGraph:
             NODE_GREETING: NODE_GREETING,
             NODE_EXTRACTION: NODE_EXTRACTION,
             NODE_TURN_CAP: NODE_TURN_CAP,
+            NODE_AFTER_SAVE: NODE_AFTER_SAVE,
         },
     )
 
@@ -244,11 +251,14 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> StateGraph:
     # --- Site answer → end (the next message resumes from the unchanged stage) ---
     graph.add_edge(NODE_SITE_ANSWER, END)
 
+    # --- After save → end (stage stays complete, so it fires again on the next message) ---
+    graph.add_edge(NODE_AFTER_SAVE, END)
+
     # ------------------------------------------------------------------
     # 4. Compile with checkpointer
     # ------------------------------------------------------------------
 
     compiled = graph.compile(checkpointer=checkpointer)
-    logger.info("Graph compiled successfully with %d nodes", 13)
+    logger.info("Graph compiled successfully with %d nodes", 14)
 
     return compiled

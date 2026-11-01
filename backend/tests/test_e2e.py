@@ -18,7 +18,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from app.graph.graph import build_graph
 from app.graph.nodes import set_llm
@@ -460,3 +460,96 @@ class TestSalesforceFailure:
         assert sf.Task.create.call_args[0][0]["WhoId"] == "00Q000TEST00001"
         assert result["salesforce_lead_id"] == "00Q000TEST00001"
         assert result["salesforce_task_id"] == "00T000TEST00001"
+
+
+# ---------------------------------------------------------------------------
+# E2E: a message after the lead is saved
+# ---------------------------------------------------------------------------
+
+SARAH = {"first_name": "Sarah", "last_name": "Chen", "email": "sarah@acme.com", "company": "Acme Corp"}
+
+
+class TestAfterSave:
+    """Once the Lead and its Task are saved, later messages get a fixed reply and write nothing."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("message", "extraction"),
+        [
+            ("When will I hear back?", {}),
+            ("What did Mark write about LangGraph on his site?", {}),
+            ("Also, my phone is 555-0100", {"lead_data": {"phone": "555-0100"}}),
+        ],
+        ids=["question", "site_question", "new_phone"],
+    )
+    async def test_a_message_after_a_saved_lead_writes_nothing(
+        self, mock_salesforce, message, extraction
+    ):
+        llm = ContentBasedMockLLM(extraction_responses=[{}, extraction])
+        set_llm(llm)
+        graph = build_graph()
+        config = {"configurable": {"thread_id": "e2e-aftersave-001"}}
+
+        await graph.ainvoke({"messages": []}, config=config)
+        await graph.aupdate_state(
+            config,
+            {"stage": ConversationStage.CONFIRMATION, "lead_data": SARAH},
+            as_node="greeting",
+        )
+        saved = await graph.ainvoke(
+            {"messages": [HumanMessage(content="Yes, looks good!")]}, config=config
+        )
+        assert saved["salesforce_task_id"] == "00T000TEST00001"
+        calls_at_save = llm._call_count
+
+        result = await graph.ainvoke({"messages": [HumanMessage(content=message)]}, config=config)
+
+        assert mock_salesforce.Task.create.call_count == 1  # no second transcript Task
+        assert mock_salesforce.Lead.update.call_count == 1  # Chat_Transcript_ID__c, at the save only
+        mock_salesforce.Lead.create.assert_called_once()
+        assert llm._call_count == calls_at_save  # no extraction, no transcript summary
+        assert "phone" not in result["lead_data"]  # nothing after the save is extracted
+        last = result["messages"][-1]
+        assert isinstance(last, AIMessage)
+        assert "by email" in last.content
+        assert result["salesforce_lead_id"] == "00Q000TEST00001"
+        assert result["salesforce_task_id"] == "00T000TEST00001"
+
+    @pytest.mark.asyncio
+    async def test_a_failed_write_retries_then_stops_once_saved(self):
+        set_llm(ContentBasedMockLLM())
+
+        with patch("app.tools.salesforce._get_sf_client") as mock_client:
+            sf = MagicMock()
+            sf.query.return_value = {"records": []}  # dedup miss → create is reached
+            sf.Lead.create.side_effect = [
+                ConnectionError("Salesforce unreachable"),
+                {"success": True, "id": "00Q000TEST00001"},
+            ]
+            sf.Task.create.return_value = {"success": True, "id": "00T000TEST00001"}
+            mock_client.return_value = sf
+
+            graph = build_graph()
+            config = {"configurable": {"thread_id": "e2e-aftersave-retry-001"}}
+
+            async def say(text):
+                return await graph.ainvoke({"messages": [HumanMessage(content=text)]}, config=config)
+
+            await graph.ainvoke({"messages": []}, config=config)
+            await graph.aupdate_state(
+                config,
+                {"stage": ConversationStage.CONFIRMATION, "lead_data": SARAH},
+                as_node="greeting",
+            )
+            failed = await say("Yes, looks good!")
+            retried = await say("Did that go through?")
+            result = await say("Thanks!")
+
+        assert failed.get("salesforce_task_id") is None
+        # The message after a failed write still retries it, and the retry saves.
+        assert retried["salesforce_lead_id"] == "00Q000TEST00001"
+        assert retried["salesforce_task_id"] == "00T000TEST00001"
+        # Once saved, the next message writes nothing.
+        assert sf.Task.create.call_count == 1
+        assert sf.Lead.create.call_count == 2
+        assert "by email" in result["messages"][-1].content
