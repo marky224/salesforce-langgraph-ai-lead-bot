@@ -19,8 +19,10 @@ import unicodedata
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
+from langchain_openai import ChatOpenAI
 
 from app.graph.edges import NODE_EXTRACTION, NODE_TURN_CAP, route_entry_point
 from app.graph.graph import build_graph
@@ -892,6 +894,167 @@ def test_compute_cost_usd_known_and_unknown():
     """Direct unit check of the price-table lookup and the None fallback."""
     assert _compute_cost_usd("grok-4.20-0309-reasoning", 1_000_000, 1_000_000) == pytest.approx(3.75)
     assert _compute_cost_usd("mystery-model", 1000, 1000) is None
+
+
+# Recorded grok-4.3 calls (backend/evals/cassettes/<file>.yaml, call #n): prompt
+# tokens (of them cached), completion, reasoning and total tokens, and the cost
+# xAI billed in cost_in_usd_ticks (1e10 ticks = $1). xAI reports reasoning
+# outside completion_tokens: total = prompt + completion + reasoning.
+_XAI_RECORDED_CALLS = [
+    pytest.param(923, 128, 27, 319, 1269, 18_843_500, id="extraction-0"),
+    pytest.param(828, 128, 41, 487, 1356, 22_206_000, id="routing-1"),
+    pytest.param(958, 128, 42, 901, 1901, 34_206_000, id="site_answer-6"),
+]
+
+# extraction.yaml call #0's usage block as xAI returned it.
+_XAI_EXTRACTION_USAGE = {
+    "completion_tokens": 27,
+    "completion_tokens_details": {
+        "accepted_prediction_tokens": 0,
+        "audio_tokens": 0,
+        "reasoning_tokens": 319,
+        "rejected_prediction_tokens": 0,
+    },
+    "cost_in_usd_ticks": 18_843_500,
+    "num_sources_used": 0,
+    "prompt_tokens": 923,
+    "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 128,
+        "image_tokens": 0,
+        "text_tokens": 923,
+    },
+    "total_tokens": 1269,
+}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("prompt", "cached", "completion", "reasoning", "total", "ticks"), _XAI_RECORDED_CALLS
+)
+async def test_llm_call_cost_matches_the_xai_billed_cost(
+    caplog, prompt, cached, completion, reasoning, total, ticks
+):
+    """
+    cost_usd is what xAI billed: reasoning priced as output, cached input at its
+    own rate. The message has usage_metadata and no token_usage, the shape of a
+    streamed call (/chat/stream), where xAI's billed cost never reaches the app.
+    """
+    response = AIMessage(
+        content="ok",
+        usage_metadata={
+            "input_tokens": prompt,
+            "output_tokens": completion,
+            "total_tokens": total,
+            "input_token_details": {"cache_read": cached},
+            "output_token_details": {"reasoning": reasoning},
+        },
+        response_metadata={"model_name": "grok-4.3"},
+    )
+    llm = MagicMock()
+    llm.ainvoke = AsyncMock(return_value=response)
+    set_llm(llm)
+
+    with caplog.at_level(logging.INFO, logger="app.graph.nodes"):
+        await _invoke_llm("system", [HumanMessage(content="hi")], node="extraction")
+
+    event = next(r.llm_call for r in caplog.records if hasattr(r, "llm_call"))
+    assert event["cost_usd"] == pytest.approx(ticks / 1e10, abs=1e-6)
+    assert event["output_tokens"] == completion
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True], ids=["non_streamed", "streamed"])
+async def test_xai_usage_through_chat_openai_logs_the_billed_cost(caplog, streaming):
+    """
+    A real ChatOpenAI (the xai provider's client) over a mocked transport, no
+    network: langchain-openai's own usage mapping, streamed (the usage in a last
+    chunk with no choices) and not, gives the billed cost.
+    """
+    stream_flags: list[bool] = []
+    base = {"id": "chatcmpl-test", "created": 0, "model": "grok-4.3"}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        stream_flags.append(bool(body.get("stream")))
+        if not body.get("stream"):
+            return httpx.Response(
+                200,
+                json={
+                    **base,
+                    "object": "chat.completion",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": "{}"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": _XAI_EXTRACTION_USAGE,
+                },
+            )
+        chunk = {**base, "object": "chat.completion.chunk"}
+        chunks = [
+            {
+                **chunk,
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {"role": "assistant", "content": "{}"},
+                        "finish_reason": None,
+                    }
+                ],
+            },
+            {**chunk, "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+            {**chunk, "choices": [], "usage": _XAI_EXTRACTION_USAGE},
+        ]
+        sse = "".join(f"data: {json.dumps(c)}\n\n" for c in chunks) + "data: [DONE]\n\n"
+        return httpx.Response(200, text=sse, headers={"content-type": "text/event-stream"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        set_llm(
+            ChatOpenAI(
+                model="grok-4.3",
+                api_key="test-key",
+                base_url="https://api.x.ai/v1",
+                stream_usage=True,
+                streaming=streaming,
+                max_retries=0,
+                http_async_client=client,
+            )
+        )
+        with caplog.at_level(logging.INFO, logger="app.graph.nodes"):
+            await _invoke_llm("system", [HumanMessage(content="hi")], node="extraction")
+
+    assert stream_flags == [streaming]
+    event = next(r.llm_call for r in caplog.records if hasattr(r, "llm_call"))
+    assert event["cost_usd"] == pytest.approx(0.00188435, abs=1e-6)
+
+
+@pytest.mark.asyncio
+async def test_llm_call_cost_does_not_add_reasoning_already_in_output_tokens(caplog):
+    """Usage that counts reasoning inside output_tokens (OpenAI's shape) adds none."""
+    response = AIMessage(
+        content="ok",
+        usage_metadata={
+            "input_tokens": 75,
+            "output_tokens": 1186,
+            "total_tokens": 1261,
+            "output_token_details": {"reasoning": 1024},
+        },
+        # Only grok models are priced, so the OpenAI-shaped usage is priced as grok-4.3.
+        response_metadata={"model_name": "grok-4.3"},
+    )
+    llm = MagicMock()
+    llm.ainvoke = AsyncMock(return_value=response)
+    set_llm(llm)
+
+    with caplog.at_level(logging.INFO, logger="app.graph.nodes"):
+        await _invoke_llm("system", [HumanMessage(content="hi")], node="discovery")
+
+    event = next(r.llm_call for r in caplog.records if hasattr(r, "llm_call"))
+    # 75/1e6 * 1.25 + 1186/1e6 * 2.50; adding the 1024 reasoning again would give 0.005619
+    assert event["cost_usd"] == pytest.approx(0.003059, abs=1e-6)
 
 
 # ---------------------------------------------------------------------------
