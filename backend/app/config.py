@@ -275,7 +275,8 @@ class Settings(BaseSettings):
     @property
     def tracing_enabled(self) -> bool:
         """True if any of the four env names LangSmith turns tracing on from is set."""
-        # Wider than LangSmith's exact "true" (e.g. "1"): we then trace, but masked.
+        # We attach the masked tracer whenever any of our flags is on: a run then
+        # traces masked or fails closed in langchain_core, never unmasked.
         return (
             self.langsmith_tracing
             or self.langchain_tracing_v2
