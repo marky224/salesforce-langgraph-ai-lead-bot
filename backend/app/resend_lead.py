@@ -15,9 +15,10 @@ failed again": that is the signal.  The failure line is logged to this
 terminal only, not to the Container Apps logs, so no alert fires.  The error
 node also appends its reply to the thread, which the visitor doesn't see.
 
-With LangSmith tracing on (``LANGSMITH_TRACING`` or ``LANGCHAIN_TRACING_V2``),
-the replay runs with the server's masked tracer (``app.tracing.build_tracer``),
-so emails and phone numbers are masked before any run leaves the process.
+With LangSmith tracing on (any of ``LANGSMITH_TRACING``, ``LANGSMITH_TRACING_V2``,
+``LANGCHAIN_TRACING_V2`` or ``LANGCHAIN_TRACING``), the replay runs with the
+server's masked tracer (``app.tracing.build_tracer``), so emails and phone
+numbers are masked before any run leaves the process.
 
 Run from ``backend/`` with ``DATABASE_URL`` and the Salesforce settings in the
 environment or the root ``.env``::

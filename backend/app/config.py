@@ -174,7 +174,7 @@ class Settings(BaseSettings):
         default=False,
         description=(
             "Legacy LangSmith on-switch (env LANGCHAIN_TRACING_V2). Prefer "
-            "langsmith_tracing; either one enables tracing (see tracing_enabled)."
+            "langsmith_tracing; any of the four flags enables tracing (see tracing_enabled)."
         ),
     )
     langsmith_tracing: bool = Field(
@@ -182,6 +182,20 @@ class Settings(BaseSettings):
         description=(
             "Canonical LangSmith on-switch (env LANGSMITH_TRACING). When on, an "
             "email-masking LangChainTracer is attached to every graph run."
+        ),
+    )
+    langsmith_tracing_v2: bool = Field(
+        default=False,
+        description=(
+            "LangSmith on-switch (env LANGSMITH_TRACING_V2), also read by LangSmith. "
+            "Prefer langsmith_tracing; any of the four flags enables tracing (see tracing_enabled)."
+        ),
+    )
+    langchain_tracing: bool = Field(
+        default=False,
+        description=(
+            "Legacy LangSmith on-switch (env LANGCHAIN_TRACING), also read by LangSmith. "
+            "Prefer langsmith_tracing; any of the four flags enables tracing (see tracing_enabled)."
         ),
     )
     langsmith_api_key: SecretStr | None = Field(
@@ -260,8 +274,14 @@ class Settings(BaseSettings):
 
     @property
     def tracing_enabled(self) -> bool:
-        """True if either the canonical or legacy LangSmith tracing flag is set."""
-        return self.langsmith_tracing or self.langchain_tracing_v2
+        """True if any of the four env names LangSmith turns tracing on from is set."""
+        # Wider than LangSmith's exact "true" (e.g. "1"): we then trace, but masked.
+        return (
+            self.langsmith_tracing
+            or self.langchain_tracing_v2
+            or self.langsmith_tracing_v2
+            or self.langchain_tracing
+        )
 
     # --- Convenience -------------------------------------------------------
 

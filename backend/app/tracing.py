@@ -70,8 +70,9 @@ def build_tracer(settings: Settings) -> Any | None:
     """
     Return a PII-masking ``LangChainTracer`` when tracing is enabled, else ``None``.
 
-    Enabled via ``LANGSMITH_TRACING`` (canonical) or the legacy
-    ``LANGCHAIN_TRACING_V2`` (see ``Settings.tracing_enabled``). The tracer's
+    Enabled by any of the four names LangSmith reads: ``LANGSMITH_TRACING``
+    (canonical), ``LANGSMITH_TRACING_V2``, ``LANGCHAIN_TRACING_V2`` or
+    ``LANGCHAIN_TRACING`` (see ``Settings.tracing_enabled``). The tracer's
     ``Client`` reads ``LANGSMITH_API_KEY`` / endpoint from the environment;
     ``LANGSMITH_PROJECT`` names the project.
     """

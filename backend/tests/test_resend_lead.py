@@ -155,17 +155,24 @@ async def test_refuses_without_database_url(monkeypatch, sf):
     sf.Task.create.assert_not_called()
 
 
+_TRACING_FLAGS = ("LANGSMITH_TRACING", "LANGCHAIN_TRACING_V2", "LANGSMITH_TRACING_V2", "LANGCHAIN_TRACING")
+
+
 @pytest.fixture
-def recorded_runs(monkeypatch):
+def recorded_runs(monkeypatch, request):
     """
     LangSmith tracing exported in the shell, with a fake key, but nothing is sent:
     the tracer's two persist hooks are replaced by recorders that keep each run
-    and the client that would have uploaded it.
+    and the client that would have uploaded it. The flag set is LANGSMITH_TRACING,
+    or the one a test passes as the fixture's param; the other three are unset.
     """
     from langchain_core.tracers.langchain import LangChainTracer
     from langsmith import utils as ls_utils
 
-    monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    flag = getattr(request, "param", "LANGSMITH_TRACING")
+    for name in _TRACING_FLAGS:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv(flag, "true")
     monkeypatch.setenv("LANGSMITH_API_KEY", "ls-test-not-real")
     get_settings.cache_clear()
     ls_utils.get_env_var.cache_clear()  # langsmith caches env reads
@@ -187,9 +194,14 @@ def recorded_runs(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "recorded_runs",
+    ["LANGSMITH_TRACING", "LANGSMITH_TRACING_V2", "LANGCHAIN_TRACING"],
+    indirect=True,
+)
 async def test_send_with_tracing_on_masks_every_run(memory, sf, recorded_runs):
     """
-    With LANGSMITH_TRACING exported, every run of the replay goes through the
+    With any one tracing flag exported, every run of the replay goes through the
     server's masked tracer (build_tracer), never LangChain's unmasked env tracer,
     so the stored email and phone never leave the process.
     """
