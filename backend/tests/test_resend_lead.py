@@ -253,6 +253,27 @@ async def test_send_with_tracing_on_flushes_the_masked_tracer_once(
 
 
 @pytest.mark.asyncio
+async def test_send_with_tracing_on_flushes_when_the_replay_raises(
+    memory, sf, recorded_runs, flushed, monkeypatch
+):
+    """A failed write doesn't raise (it routes to error); a replay that raises still flushes."""
+    _seed(memory)
+
+    def _graph_whose_replay_raises(checkpointer):
+        graph = build_graph(checkpointer)
+        graph.ainvoke = AsyncMock(side_effect=RuntimeError("replay failed"))
+        return graph
+
+    monkeypatch.setattr(resend_lead, "build_graph", _graph_whose_replay_raises)
+
+    with pytest.raises(RuntimeError, match="replay failed"):
+        await resend_lead.resend(THREAD, send=True)
+
+    assert len(flushed) == 1
+    assert flushed[0]._anonymizer is not None
+
+
+@pytest.mark.asyncio
 async def test_send_with_tracing_off_flushes_nothing(memory, sf, flushed):
     _seed(memory)
 
