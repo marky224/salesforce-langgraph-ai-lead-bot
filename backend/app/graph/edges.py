@@ -56,6 +56,7 @@ NODE_SALESFORCE = "salesforce"
 NODE_ERROR = "error"
 NODE_TURN_CAP = "turn_cap"
 NODE_SITE_ANSWER = "site_answer"
+NODE_AFTER_SAVE = "after_save"
 
 # LangGraph special targets
 END = "__end__"
@@ -86,7 +87,7 @@ def route_after_extraction(state: GraphState) -> str:
 
     Fast-path rules (no LLM call needed):
     - If there's an error → error node.
-    - If stage is COMPLETE → scoring node.
+    - If stage is COMPLETE → scoring node (retry a failed or partial write).
     - If stage is GREETING → discovery next (first real turn), unless the
       message mentions the site's content (an article, a project, Mark...):
       then the router decides whether it is a site question.
@@ -102,7 +103,8 @@ def route_after_extraction(state: GraphState) -> str:
 
     stage = state.get("stage", ConversationStage.GREETING)
 
-    # Conversation already finished
+    # Conversation finished but the write didn't finish (a failed or partial
+    # write; a saved lead never gets here, see route_entry_point): retry it
     if stage == ConversationStage.COMPLETE:
         logger.info("Edge: extraction → scoring (stage is COMPLETE)")
         return NODE_SCORING
@@ -286,6 +288,8 @@ def route_entry_point(state: GraphState) -> str:
 
     - If this is the very first interaction (no messages yet or only a system
       greeting), start with the greeting node.
+    - If the lead is already saved (stage complete and a transcript Task id),
+      send the fixed after-save reply: no extraction, no LLM call, no write.
     - Otherwise, run extraction on the new human message.
     """
     messages = state.get("messages", [])
@@ -301,6 +305,13 @@ def route_entry_point(state: GraphState) -> str:
     if not has_human:
         logger.info("Edge: entry → greeting (no human messages yet)")
         return NODE_GREETING
+
+    # The Lead and its transcript Task are in Salesforce: answer without
+    # scoring or writing again. Before the cap: this reply is free too, and
+    # it names how the team will follow up.
+    if _lead_saved(state):
+        logger.info("Edge: entry → after_save (lead already saved)")
+        return NODE_AFTER_SAVE
 
     # Abuse guard: cap runaway threads before any extraction / LLM work.
     cap = get_settings().max_thread_messages
@@ -323,6 +334,11 @@ _SITE_CUE = re.compile(
     r"|projects?|site|website|mark'?s?)\b",
     re.IGNORECASE,
 )
+
+
+def _lead_saved(state: GraphState) -> bool:
+    """Are the Lead and its transcript Task saved? The same rule as is_complete."""
+    return state.get("stage") == ConversationStage.COMPLETE and bool(state.get("salesforce_task_id"))
 
 
 def _mentions_site_content(state: GraphState) -> bool:
@@ -399,7 +415,7 @@ def get_all_route_destinations() -> dict[str, list[str]]:
     requires the set of possible target nodes upfront for validation.
     """
     return {
-        "route_entry_point": [NODE_GREETING, NODE_EXTRACTION, NODE_TURN_CAP],
+        "route_entry_point": [NODE_GREETING, NODE_EXTRACTION, NODE_TURN_CAP, NODE_AFTER_SAVE],
         "route_after_extraction": [
             NODE_ERROR,
             NODE_SCORING,

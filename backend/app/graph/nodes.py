@@ -16,6 +16,8 @@ Node categories:
   projects from the site index, with the page's link, then hands back to the
   stage the visitor was in (it never changes ``stage``).
 - **Error node** — produces a graceful fallback reply when something breaks.
+- **After-save node** — a fixed reply to messages that arrive once the lead is
+  saved (no LLM call, no Salesforce call).
 
 All LLM calls go through a shared ``_invoke_llm`` helper so the provider
 (Anthropic / OpenAI / Groq / xAI) is swappable from ``config.py``.
@@ -1122,4 +1124,37 @@ async def turn_cap_node(state: GraphState) -> dict:
         "going to wrap up this chat for now. Our team will follow up with you "
         "soon — and you're always welcome to start a fresh chat anytime."
     )
+    return {"messages": [AIMessage(content=reply)]}
+
+
+# ---------------------------------------------------------------------------
+# After-save node (the lead is already in Salesforce)
+# ---------------------------------------------------------------------------
+
+async def after_save_node(state: GraphState) -> dict:
+    """
+    Answer a message that arrives after the lead is saved.
+
+    Fires from the entry point once the Lead and its transcript Task are in
+    Salesforce. Appends one fixed reply and makes no LLM call and no
+    Salesforce call, so a later message neither pays for another transcript
+    summary nor adds another Task. Leaves ``stage`` and the Salesforce ids as
+    they are, so it fires again on each further message.
+    """
+    logger.info("Node: after_save (lead already saved)")
+
+    lead_data = _gs(state, "lead_data")
+    channel = "email" if lead_data.get("email") else "phone" if lead_data.get("phone") else None
+    if channel:
+        reply = (
+            "Your details are already with the team, and someone will follow up "
+            f"with you by {channel}. This chat is wrapped up, so I can't add or "
+            "change anything here; just mention it when they reach out."
+        )
+    else:
+        reply = (
+            "Your notes are already with the team, but I don't have a way for "
+            "them to reach you, and this chat is wrapped up. Please reach out "
+            "directly using the LinkedIn link on this page."
+        )
     return {"messages": [AIMessage(content=reply)]}
