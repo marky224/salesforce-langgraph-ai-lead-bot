@@ -38,6 +38,7 @@ def force_tracing_off() -> None:
     for name in _TRACING_FLAGS:
         os.environ[name] = "false"
 
+
 def _scrub_response(response: dict) -> dict:
     """Drop server ``set-cookie`` headers so no session token lands in the YAML."""
     headers = response.get("headers")

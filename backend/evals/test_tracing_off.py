@@ -1,8 +1,8 @@
 """
 Offline check that the eval suite's tracing switch (``_config.force_tracing_off``)
 beats every env name LangSmith traces on from, so no eval run is uploaded, and
-that LangChain still builds its callbacks (its legacy LANGCHAIN_TRACING flag alone
-makes every run raise).
+that LangChain still builds its callbacks (its legacy LANGCHAIN_TRACING flag raises
+on every run when another tracing name is "false").
 
 No network, no LLM: it sets env vars, asks LangSmith whether it would trace and
 builds LangChain's callback handlers.
@@ -34,7 +34,7 @@ def test_force_tracing_off_beats_every_flag(monkeypatch, flag):
     try:
         assert ls_utils.tracing_is_enabled() is False
         # Raises "Tracing using LangChainTracerV1 is no longer supported" while
-        # LANGCHAIN_TRACING is on and no TRACING_V2 name is.
+        # LANGCHAIN_TRACING is on but LangSmith reads tracing as off.
         CallbackManager.configure()
     finally:
         ls_utils.get_env_var.cache_clear()  # don't leave this test's env cached for later tests
