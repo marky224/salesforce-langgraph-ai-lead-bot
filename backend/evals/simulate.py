@@ -141,7 +141,7 @@ async def simulate(
             )
             turns.append(("Visitor", user_msg))
             ai = _latest_ai(state)
-            if ai and ai != prev_ai:  # the confirmation-accepted turn appends no new reply
+            if ai and ai != prev_ai:  # a turn that appends no new reply adds no TARS line
                 turns.append(("TARS", ai))
                 prev_ai = ai
             stage = _stage_of(state)

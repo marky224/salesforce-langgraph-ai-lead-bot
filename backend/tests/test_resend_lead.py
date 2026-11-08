@@ -104,7 +104,11 @@ async def test_send_writes_the_lead_and_task_and_records_their_ids(memory, sf):
     sf.Lead.create.assert_called_once()
     assert sf.Lead.create.call_args[0][0]["Email"] == "ada@example.com"
     sf.Task.create.assert_called_once()
-    assert len(values["messages"]) == messages_before  # no new message in the thread
+    # The one new message is salesforce_node's closing reply (no LLM call).
+    assert [m.content for m in values["messages"][messages_before:]] == [
+        "You're all set: your details are saved, and someone from the team will "
+        "follow up with you by email."
+    ]
 
 
 @pytest.mark.asyncio

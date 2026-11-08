@@ -639,6 +639,8 @@ CONFIRMED_LEAD = {
     "email": "ada@example.com",
     "company": "Acme",
 }
+# The confirmation node's reply: the last bot message before the visitor's "yes".
+CONFIRMATION = "Thanks, Ada: you'd like a demo for Acme. Does that all look correct?"
 
 
 def _failing_sf() -> MagicMock:
@@ -650,9 +652,9 @@ def _failing_sf() -> MagicMock:
 
 def _confirm_lead(client, ip: str, sf: MagicMock, endpoint: str = "/chat/stream"):
     """
-    Start a thread at confirmation with ``CONFIRMED_LEAD`` and send the visitor's
-    "yes" to ``endpoint``: extraction → scoring → salesforce (→ error when the
-    write fails). Returns the response.
+    Start a thread at confirmation with ``CONFIRMED_LEAD`` and the ``CONFIRMATION``
+    reply, and send the visitor's "yes" to ``endpoint``: extraction → scoring →
+    salesforce (→ error when the write fails). Returns the response.
     """
     from app import server
     from app.graph.nodes import set_llm
@@ -667,7 +669,11 @@ def _confirm_lead(client, ip: str, sf: MagicMock, endpoint: str = "/chat/stream"
     thread_id = client.post("/chat/init", headers=headers).json()["thread_id"]
     server._graph.update_state(
         {"configurable": {"thread_id": thread_id}},
-        {"stage": ConversationStage.CONFIRMATION, "lead_data": CONFIRMED_LEAD},
+        {
+            "stage": ConversationStage.CONFIRMATION,
+            "lead_data": CONFIRMED_LEAD,
+            "messages": [AIMessage(content=CONFIRMATION)],
+        },
         as_node="greeting",
     )
     with patch("app.tools.salesforce._get_sf_client", return_value=sf):
@@ -760,6 +766,66 @@ def test_chat_stream_saved_lead_is_complete(client):
     assert done["stage"] == "complete"
     assert done["is_complete"] is True
     assert done["lead_id"] == "00Q000TEST00001"
+
+
+# ---------------------------------------------------------------------------
+# The save turn: a fixed closing reply once the Lead and its Task are saved
+# ---------------------------------------------------------------------------
+# salesforce_node writes it with no LLM call. CONFIRMED_LEAD has an email.
+
+CLOSING_REPLY = (
+    "You're all set: your details are saved, and someone from the team will "
+    "follow up with you by email."
+)
+
+
+def test_chat_save_turn_replies_with_the_closing_line(client):
+    from app.graph import nodes
+
+    counted = AsyncMock(wraps=nodes._invoke_llm)
+    with patch.object(nodes, "_invoke_llm", counted):
+        resp = _confirm_lead(client, "203.0.113.50", _saving_sf(), endpoint="/chat")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["reply"] == CLOSING_REPLY  # not the confirmation reply again
+    assert body["stage"] == "complete"
+    assert body["is_complete"] is True
+    # The /chat/init greeting, then the save turn's extraction and transcript summary:
+    # the closing reply adds no LLM call.
+    assert [c.kwargs["node"] for c in counted.await_args_list] == ["greeting", "extraction", "scoring"]
+
+
+def test_chat_save_turn_reusing_an_existing_lead_gets_the_same_closing_line(client):
+    """A dedup hit (a Lead with this email exists): no new Lead, the Task attaches to it."""
+    sf = _saving_sf()
+    sf.query.return_value = {"totalSize": 1, "records": [{"Id": "00Q000EXISTING1"}]}
+
+    resp = _confirm_lead(client, "203.0.113.51", sf, endpoint="/chat")
+
+    sf.Lead.create.assert_not_called()
+    sf.Task.create.assert_called_once()
+    assert sf.Task.create.call_args[0][0]["WhoId"] == "00Q000EXISTING1"
+    body = resp.json()
+    assert body["reply"] == CLOSING_REPLY
+    assert body["is_complete"] is True
+    assert body["lead_id"] == "00Q000EXISTING1"
+
+
+def test_chat_stream_save_turn_sends_the_closing_line_once(client):
+    from app import server
+
+    resp = _confirm_lead(client, "203.0.113.52", _saving_sf())
+
+    events = _parse_sse(resp.text)
+    assert events[:-1] == [{"token": CLOSING_REPLY}]  # one token event, no error event
+    done = events[-1]
+    assert done["done"] is True
+    assert done["stage"] == "complete"
+    assert done["is_complete"] is True
+    assert done["lead_id"] == "00Q000TEST00001"
+    state = server._graph.get_state({"configurable": {"thread_id": done["thread_id"]}})
+    assert state.values["messages"][-1].content == CLOSING_REPLY
 
 
 # ---------------------------------------------------------------------------

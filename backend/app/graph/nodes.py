@@ -11,7 +11,8 @@ Node categories:
 - **Extraction node** — parses the latest visitor message for structured data
   (lead info, qualification signals, objections) and patches state dicts.
 - **Scoring node** — computes a 0-100 lead score from qualification data.
-- **Salesforce node** — creates Lead + Task records via the Salesforce API.
+- **Salesforce node** — creates Lead + Task records via the Salesforce API,
+  then adds a fixed closing reply (no LLM call).
 - **Site answer node** — answers a question about Mark's own articles and
   projects from the site index, with the page's link, then hands back to the
   stage the visitor was in (it never changes ``stage``).
@@ -948,7 +949,9 @@ async def salesforce_node(state: GraphState) -> dict:
     Imports the Salesforce tool functions at call time to avoid circular
     imports and to keep this module testable with mocks.
 
-    On success, populates ``salesforce_lead_id`` and ``salesforce_task_id``.
+    On success, populates ``salesforce_lead_id`` and ``salesforce_task_id`` and
+    appends a fixed closing reply (no LLM call) naming the follow-up channel:
+    email, else phone, else the LinkedIn link on the page.
     On failure, sets ``error`` so the error node can respond; if the Lead was
     already written (the Task step failed), ``salesforce_lead_id`` is kept so
     a retry or a re-send adds only the Task.
@@ -999,10 +1002,25 @@ async def salesforce_node(state: GraphState) -> dict:
         )
         logger.info("Salesforce Task created: %s", task_id)
 
+        # The save turn's reply: fixed text, no LLM call. No timeline here; the
+        # widget's banner says "soon".
+        channel = "email" if lead_data.get("email") else "phone" if lead_data.get("phone") else None
+        if channel:
+            reply = (
+                "You're all set: your details are saved, and someone from the team "
+                f"will follow up with you by {channel}."
+            )
+        else:
+            reply = (
+                "Your notes are saved, but I don't have a way for the team to reach "
+                "you, so please reach out directly using the LinkedIn link on this page."
+            )
+
         return {
             "salesforce_lead_id": lead_id,
             "salesforce_task_id": task_id,
             "stage": ConversationStage.COMPLETE,
+            "messages": [AIMessage(content=reply)],
         }
 
     except Exception as exc:
