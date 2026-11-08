@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 import sys
 import time
+import weakref
 
 import pytest
 
@@ -74,6 +75,12 @@ def langsmith_offline(monkeypatch):
     monkeypatch.setattr(Client, "__init__", _init)
 
 
+# Every langsmith Client a test built that is still alive. Kept across tests: a Client
+# held in module state (the server's tracer after a lifespan test) can queue a run in
+# a later test, so each teardown flushes all of them, not only its own test's.
+_langsmith_clients: weakref.WeakSet = weakref.WeakSet()
+
+
 @pytest.fixture(autouse=True)
 def no_langsmith_requests(monkeypatch):
     """
@@ -83,19 +90,18 @@ def no_langsmith_requests(monkeypatch):
     GET /info and the run uploads go through ``Client.request_with_retries``, so
     that records the call and raises instead. Each Client's background thread
     reads its server info on start and uploads queued runs later, so teardown
-    waits for that read, then flushes each Client's queue while the patch holds.
-    It also flushes LangChain's cached client (``langsmith.run_trees._CLIENT``, the
-    one LangChain's env tracer uses), which an earlier test may have built.
+    waits for that read, then flushes, while the patch holds, every live Client
+    any test built (``_langsmith_clients``) plus LangChain's cached client
+    (``langsmith.run_trees._CLIENT``, the one LangChain's env tracer uses), each once.
     """
     from langsmith import Client, run_trees
 
-    clients: list = []
     calls: list[str] = []
     init = Client.__init__
 
     def _init(self, *args, **kwargs):
         init(self, *args, **kwargs)
-        clients.append(self)
+        _langsmith_clients.add(self)
 
     def _request(self, method, pathname, **_kwargs):
         calls.append(f"{method} {pathname}")
@@ -104,6 +110,7 @@ def no_langsmith_requests(monkeypatch):
     monkeypatch.setattr(Client, "__init__", _init)
     monkeypatch.setattr(Client, "request_with_retries", _request)
     yield
+    clients = list(_langsmith_clients)
     deadline = time.monotonic() + 5
     while any(client._info is None for client in clients) and time.monotonic() < deadline:
         time.sleep(0.01)

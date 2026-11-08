@@ -131,12 +131,18 @@ def test_configure_logging_quiets_httpx2_loggers():
 
 
 def test_tracing_flag_parsed_from_env(monkeypatch):
+    from langsmith import utils as ls_utils
+
     monkeypatch.setenv("LANGCHAIN_TRACING_V2", "true")
+    ls_utils.get_env_var.cache_clear()  # langsmith caches env reads
 
     from app.config import get_settings
 
     get_settings.cache_clear()
-    assert get_settings().langchain_tracing_v2 is True
+    try:
+        assert get_settings().langchain_tracing_v2 is True
+    finally:
+        ls_utils.get_env_var.cache_clear()  # don't leave "tracing on" cached for later tests
 
 
 # ---------------------------------------------------------------------------

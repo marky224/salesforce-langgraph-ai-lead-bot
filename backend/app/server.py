@@ -228,7 +228,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # --- Shutdown ---
     if _tracer is not None:
         # Trace uploads run on a background thread; flush so a deploy/restart
-        # (SIGTERM) doesn't drop in-flight runs.
+        # (SIGTERM) doesn't drop in-flight runs. The masked tracer has its own
+        # client, which wait_for_all_tracers() leaves alone (it flushes only
+        # LangChain's cached client), so flush ours first, then that one.
+        _tracer.wait_for_futures()
         wait_for_all_tracers()
     logger.info("Shutting down AI Sales Lead Bot")
 
