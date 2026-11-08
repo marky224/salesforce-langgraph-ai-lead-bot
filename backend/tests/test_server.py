@@ -800,6 +800,22 @@ def test_chat_save_turn_reusing_an_existing_lead_gets_the_same_closing_line(clie
     assert body["lead_id"] == "00Q000EXISTING1"
 
 
+def test_chat_stream_save_turn_sends_the_closing_line_once(client):
+    from app import server
+
+    resp = _confirm_lead(client, "203.0.113.52", _saving_sf())
+
+    events = _parse_sse(resp.text)
+    assert events[:-1] == [{"token": CLOSING_REPLY}]  # one token event, no error event
+    done = events[-1]
+    assert done["done"] is True
+    assert done["stage"] == "complete"
+    assert done["is_complete"] is True
+    assert done["lead_id"] == "00Q000TEST00001"
+    state = server._graph.get_state({"configurable": {"thread_id": done["thread_id"]}})
+    assert state.values["messages"][-1].content == CLOSING_REPLY
+
+
 # ---------------------------------------------------------------------------
 # A message after the lead is saved: the fixed after-save reply, no new write
 # ---------------------------------------------------------------------------
