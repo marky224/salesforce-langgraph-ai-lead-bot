@@ -493,6 +493,49 @@ class TestSalesforceNode:
         assert result["salesforce_task_id"] == "00TNEW"
 
 
+class TestSalesforceNodeClosingReply:
+    """A saved lead gets a fixed closing reply naming the follow-up channel, with no LLM call."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("lead_data", "expected"),
+        [
+            (
+                {"email": "ada@example.com", "phone": "210-555-0123"},
+                "You're all set: your details are saved, and someone from the team will "
+                "follow up with you by email.",
+            ),
+            (
+                {"phone": "210-555-0123"},
+                "You're all set: your details are saved, and someone from the team will "
+                "follow up with you by phone.",
+            ),
+            (
+                {"company": "Acme"},
+                "Your notes are saved, but I don't have a way for the team to reach you, "
+                "so please reach out directly using the LinkedIn link on this page.",
+            ),
+        ],
+        ids=["email", "phone_only", "no_contact"],
+    )
+    async def test_saved_lead_gets_the_closing_reply_and_no_llm_call(
+        self, base_state, mock_llm, lead_data, expected
+    ):
+        base_state["lead_data"] = lead_data
+
+        with (
+            patch("app.tools.salesforce.find_lead_by_email", AsyncMock(return_value=None)),
+            patch("app.tools.salesforce.create_lead", AsyncMock(return_value="00QNEW")),
+            patch("app.tools.salesforce.create_transcript_task", AsyncMock(return_value="00TNEW")),
+        ):
+            result = await salesforce_node(base_state)
+
+        assert [m.content for m in result.get("messages", [])] == [expected]
+        assert isinstance(result["messages"][0], AIMessage)
+        assert result["salesforce_task_id"] == "00TNEW"
+        mock_llm.ainvoke.assert_not_awaited()
+
+
 # ---------------------------------------------------------------------------
 # Error node tests
 # ---------------------------------------------------------------------------

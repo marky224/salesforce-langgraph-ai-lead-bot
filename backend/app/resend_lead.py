@@ -9,9 +9,10 @@ the thread id, and the failed-write alert in Azure Monitor emails it.
 
 This command reads that state from the durable checkpointer and shows it.
 With ``--send`` it replays only the ``salesforce`` node on the thread: the
-same Lead reuse, dedup and writes as the live turn, with no LLM call and no
-new message.  If the write fails again the command exits 1 with "The write
-failed again": that is the signal.  The failure line is logged to this
+same Lead reuse, dedup and writes as the live turn, with no LLM call.  A write
+that succeeds appends the node's closing reply to the thread, which the
+visitor doesn't see.  If the write fails again the command exits 1 with "The
+write failed again": that is the signal.  The failure line is logged to this
 terminal only, not to the Container Apps logs, so no alert fires.  The error
 node also appends its reply to the thread, which the visitor doesn't see.
 
