@@ -19,6 +19,8 @@ import pytest
 # (mirrors backend/tests/conftest.py).
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from evals._config import force_tracing_off  # noqa: E402
+
 # Pin the eval pipeline to what prod runs: xAI provider, JSON-parse extraction.
 # LLM_STRUCTURED_OUTPUT and tracing are *forced* off (not setdefault) so a stray
 # .env value can't change the request wire format (with_structured_output adds
@@ -26,8 +28,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 os.environ.setdefault("LLM_PROVIDER", "xai")
 os.environ.setdefault("LOG_LEVEL", "WARNING")
 os.environ["LLM_STRUCTURED_OUTPUT"] = "false"
-os.environ["LANGSMITH_TRACING"] = "false"
-os.environ["LANGCHAIN_TRACING_V2"] = "false"
+force_tracing_off()
 # No site-index fetch from evals: tests that need the index set it directly.
 os.environ["SITE_INDEX_URL"] = ""
 

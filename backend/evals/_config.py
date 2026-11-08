@@ -6,6 +6,7 @@ Shared configuration for the eval suite — imported by both the pytest gate
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 # The model the committed gate cassettes were recorded against. The reasoning ->
@@ -20,6 +21,23 @@ RECORD_TEMPERATURE = 0.7
 _HERE = Path(__file__).resolve().parent
 DATASET_DIR = _HERE / "datasets"
 CASSETTE_DIR = _HERE / "cassettes"
+
+# Every env name LangSmith or LangChain turns tracing on from (the same four as the
+# app's Settings.tracing_enabled). LangSmith reads LANGSMITH_TRACING_V2 ahead of
+# LANGCHAIN_TRACING_V2, so forcing only the latter off leaves the former on.
+_TRACING_FLAGS = ("LANGSMITH_TRACING", "LANGCHAIN_TRACING_V2", "LANGSMITH_TRACING_V2", "LANGCHAIN_TRACING")
+
+
+def force_tracing_off() -> None:
+    """Set all four tracing env names to "false", so no eval run is uploaded to LangSmith.
+
+    Forced, not setdefault: a shell or .env value can't turn tracing back on (the
+    process environment beats .env in Settings). Called by the pytest gate's conftest,
+    ``run.py`` and ``calibration.py`` before any graph or judge runs.
+    """
+    for name in _TRACING_FLAGS:
+        os.environ[name] = "false"
+
 
 def _scrub_response(response: dict) -> dict:
     """Drop server ``set-cookie`` headers so no session token lands in the YAML."""

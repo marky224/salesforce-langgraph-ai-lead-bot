@@ -34,6 +34,7 @@ from typing import Any
 # Make ``app`` / ``evals`` importable however this is invoked (mirrors run.py).
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from evals._config import force_tracing_off  # noqa: E402
 from evals.judges import persona_adherence_judge, summary_faithfulness_judge  # noqa: E402
 from evals.loader import load_dataset  # noqa: E402
 
@@ -195,8 +196,7 @@ def main() -> int:
     # LangSmith — force tracing off regardless of .env (the labels carry no real PII,
     # but calibration is local-by-design).
     os.environ.setdefault("LLM_PROVIDER", "xai")
-    os.environ["LANGSMITH_TRACING"] = "false"
-    os.environ["LANGCHAIN_TRACING_V2"] = "false"
+    force_tracing_off()
     results = asyncio.run(run_calibration())
     print(_format_report(results))  # noqa: T201
     return 0

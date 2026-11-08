@@ -261,16 +261,21 @@ def test_lifespan_flushes_tracer_on_shutdown(monkeypatch):
     """In-flight traces are flushed on shutdown when tracing is enabled.
 
     Background uploads can be dropped if the process exits mid-flight, so the
-    lifespan calls ``wait_for_all_tracers()`` — but only when a tracer is active.
+    lifespan flushes the masked tracer's own client (``wait_for_futures()``), then
+    LangChain's cached client (``wait_for_all_tracers()``), which is the only one
+    that call flushes — but only when a tracer is active.
     """
     monkeypatch.setenv("LLM_PROVIDER", "openai")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
     monkeypatch.setenv("LANGSMITH_TRACING", "true")
     monkeypatch.setenv("LANGSMITH_API_KEY", "ls-test-not-real")
 
+    from langsmith import utils as ls_utils
+
     from app.config import get_settings
 
     get_settings.cache_clear()
+    ls_utils.get_env_var.cache_clear()  # langsmith caches env reads
 
     from app import server
 
@@ -280,14 +285,21 @@ def test_lifespan_flushes_tracer_on_shutdown(monkeypatch):
 
     monkeypatch.setattr(server, "open_checkpointer", _memory_checkpointer)
 
-    flushed: list[int] = []
-    monkeypatch.setattr(server, "wait_for_all_tracers", lambda: flushed.append(1))
+    from langchain_core.tracers.langchain import LangChainTracer
 
-    # Startup builds a real (offline) tracer; the context exit runs the shutdown path.
-    with TestClient(server.app):
-        pass
+    flushed: list = []
+    monkeypatch.setattr(LangChainTracer, "wait_for_futures", lambda self: flushed.append(self))
+    monkeypatch.setattr(server, "wait_for_all_tracers", lambda: flushed.append("cached"))
 
-    assert flushed == [1]  # flushed exactly once, because a tracer was active
+    try:
+        # Startup builds a real (offline) tracer; the context exit runs the shutdown path.
+        with TestClient(server.app):
+            pass
+
+        # Our tracer once, then LangChain's cached client once, because a tracer was active.
+        assert flushed == [server._tracer, "cached"]
+    finally:
+        ls_utils.get_env_var.cache_clear()  # don't leave "tracing on" cached for later tests
 
 
 # ---------------------------------------------------------------------------
