@@ -1684,6 +1684,14 @@ class TestStudioEntrypoint:
         assert result["stage"] == ConversationStage.GREETING
         assert result["messages"][-1].content == "Mock response"
 
+    def test_import_refuses_while_tracing_is_on(self, monkeypatch):
+        from app.graph.nodes import is_llm_ready
+
+        with pytest.raises(RuntimeError, match="LANGSMITH_TRACING=false"):
+            self._import_studio(monkeypatch, tracing="true")
+
+        assert not is_llm_ready()
+
     @pytest.mark.parametrize(
         "human",
         [
