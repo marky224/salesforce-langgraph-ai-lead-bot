@@ -4,5 +4,12 @@
   "graphs": {
     "tars": "./backend/app/graph/studio.py:graph"
   },
-  "env": "./.env"
+  "env": "./.env",
+  "http": {
+    "cors": {
+      "allow_origins": ["https://smith.langchain.com"],
+      "allow_methods": ["*"],
+      "allow_headers": ["*"]
+    }
+  }
 }
