@@ -200,6 +200,7 @@ salesforce-langgraph-ai-lead-bot/
 ├── .env.example
 ├── .gitignore
 ├── LICENSE
+├── langgraph.json                   # `langgraph dev` config (dev only)
 │
 ├── images/                          # Screenshots for README
 │   ├── tars-demo-screenshot.jpg
@@ -218,6 +219,7 @@ salesforce-langgraph-ai-lead-bot/
 │   │   │   ├── nodes.py             # All graph node functions
 │   │   │   ├── edges.py             # Conditional routing logic
 │   │   │   ├── graph.py             # Graph builder + compilation
+│   │   │   ├── studio.py            # LangGraph Studio entrypoint (dev only)
 │   │   │   └── prompts.py           # System prompts (TARS persona)
 │   │   ├── tools/
 │   │   │   ├── salesforce.py        # Salesforce API wrappers
@@ -309,6 +311,39 @@ curl -X POST https://salesforce-langgraph-ai-lead-bot.purplesky-0949fcd0.central
 | `LOG_LEVEL` | No | `INFO` | Python logging level |
 
 \* Only the key for the configured `LLM_PROVIDER` is required.
+
+---
+
+## Debug in LangGraph Studio
+
+Dev only: step through the TARS graph node by node in LangGraph Studio. None of this goes into the production image.
+
+```bash
+# from the repo root, in your dev virtualenv
+pip install -r backend/requirements-dev.txt   # includes langgraph-cli[inmem]
+langgraph dev --no-browser
+```
+
+`langgraph dev` reads `langgraph.json`, loads the graph `tars` from `backend/app/graph/studio.py` with the variables in your local `.env`, and serves it on `http://127.0.0.1:2024`. It brings its own persistence, stored in `.langgraph_api/` (gitignored).
+
+Then open Studio in your browser (it needs a free LangSmith account to log in):
+
+```
+https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
+```
+
+If `langgraph dev` runs on a remote Linux machine, forward the port from your laptop first, then open the same URL there:
+
+```bash
+ssh -L 2024:127.0.0.1:2024 <user>@<linux-host>
+```
+
+How a Studio run differs from the API server:
+
+- It uses the real LLM provider and Salesforce credentials in `.env`, so a conversation that reaches an accepted confirmation creates a real Lead and Task.
+- The masked LangSmith tracer isn't attached: if `.env` turns tracing on, Studio runs are traced unmasked.
+- The site index isn't loaded, so site questions get the "can't reach the site's article index" reply.
+- Start a thread with input `{"messages": []}` to get the greeting, then send one human message per turn.
 
 ---
 

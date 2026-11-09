@@ -1,0 +1,8 @@
+{
+  "python_version": "3.12",
+  "dependencies": ["./backend"],
+  "graphs": {
+    "tars": "./backend/app/graph/studio.py:graph"
+  },
+  "env": "./.env"
+}

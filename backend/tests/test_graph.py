@@ -11,9 +11,11 @@ network access.  Each test verifies that the node:
 
 from __future__ import annotations
 
+import importlib
 import json
 import logging
 import re
+import sys
 import time
 import unicodedata
 from pathlib import Path
@@ -1637,3 +1639,33 @@ class TestBuildGraphCheckpointer:
     def test_no_default_compiles_without_checkpointer(self):
         assert build_graph(default_checkpointer=False).checkpointer is None
 
+
+class TestStudioEntrypoint:
+    """app.graph.studio injects the LLM and exposes a graph with no checkpointer."""
+
+    @staticmethod
+    def _import_studio(monkeypatch):
+        import app.graph.nodes as nodes
+
+        # A fresh import, and the LLM it injects is undone after the test.
+        monkeypatch.delitem(sys.modules, "app.graph.studio", raising=False)
+        monkeypatch.setattr(nodes, "_llm", None)
+        return importlib.import_module("app.graph.studio")
+
+    def test_import_injects_llm_and_compiles_without_checkpointer(self, monkeypatch):
+        from app.graph.nodes import is_llm_ready
+
+        studio = self._import_studio(monkeypatch)
+
+        assert is_llm_ready()
+        assert studio.graph.checkpointer is None
+
+    @pytest.mark.asyncio
+    async def test_greeting_turn_runs_without_checkpointer(self, monkeypatch, mock_llm):
+        studio = self._import_studio(monkeypatch)
+        set_llm(mock_llm)
+
+        result = await studio.graph.ainvoke({"messages": []})
+
+        assert result["stage"] == ConversationStage.GREETING
+        assert result["messages"][-1].content == "Mock response"

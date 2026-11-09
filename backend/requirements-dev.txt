@@ -10,3 +10,8 @@ pytest-asyncio==1.4.0
 # Lint + type-check (versions mirrored in .github/workflows/ci.yml)
 ruff==0.15.16
 mypy==2.1.0
+
+# Local graph debugging in LangGraph Studio (`langgraph dev`; see README). Dev
+# only: it moves starlette (and adds langgraph-api's deps) in this env, never in
+# the image.
+langgraph-cli[inmem]==0.4.42
