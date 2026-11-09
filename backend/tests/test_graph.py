@@ -23,6 +23,7 @@ import httpx
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
+from langgraph.checkpoint.memory import MemorySaver
 
 from app.graph.edges import NODE_EXTRACTION, NODE_TURN_CAP, route_entry_point
 from app.graph.graph import build_graph
@@ -1615,3 +1616,24 @@ class TestSiteAnswerCleanupTime:
         assert time.perf_counter() - start < 0.5
         assert reply is not None
         assert reply.endswith(f"Read more: [{M365_TITLE}]({M365_URL})")
+
+
+# ---------------------------------------------------------------------------
+# Compiling without a checkpointer (the LangGraph Studio entrypoint)
+# ---------------------------------------------------------------------------
+# langgraph dev refuses a graph compiled with its own checkpointer, so the
+# Studio entrypoint compiles with none; the server's default must not change.
+
+class TestBuildGraphCheckpointer:
+    """build_graph keeps its MemorySaver default; default_checkpointer=False drops it."""
+
+    def test_default_attaches_memory_saver(self):
+        assert isinstance(build_graph().checkpointer, MemorySaver)
+
+    def test_given_checkpointer_is_used(self):
+        saver = MemorySaver()
+        assert build_graph(saver, default_checkpointer=False).checkpointer is saver
+
+    def test_no_default_compiles_without_checkpointer(self):
+        assert build_graph(default_checkpointer=False).checkpointer is None
+
