@@ -1644,13 +1644,27 @@ class TestStudioEntrypoint:
     """app.graph.studio injects the LLM and exposes a graph with no checkpointer."""
 
     @staticmethod
-    def _import_studio(monkeypatch):
+    def _import_studio(monkeypatch, tracing="false"):
+        from langsmith.utils import get_env_var
+
         import app.graph.nodes as nodes
 
+        # Every tracing name set, so a shell export can't change the outcome.
+        for name in (
+            "LANGSMITH_TRACING",
+            "LANGSMITH_TRACING_V2",
+            "LANGCHAIN_TRACING_V2",
+            "LANGCHAIN_TRACING",
+        ):
+            monkeypatch.setenv(name, tracing)
         # A fresh import, and the LLM it injects is undone after the test.
         monkeypatch.delitem(sys.modules, "app.graph.studio", raising=False)
         monkeypatch.setattr(nodes, "_llm", None)
-        return importlib.import_module("app.graph.studio")
+        get_env_var.cache_clear()
+        try:
+            return importlib.import_module("app.graph.studio")
+        finally:
+            get_env_var.cache_clear()
 
     def test_import_injects_llm_and_compiles_without_checkpointer(self, monkeypatch):
         from app.graph.nodes import is_llm_ready
@@ -1669,3 +1683,51 @@ class TestStudioEntrypoint:
 
         assert result["stage"] == ConversationStage.GREETING
         assert result["messages"][-1].content == "Mock response"
+
+    @pytest.mark.parametrize(
+        "human",
+        [
+            {"type": "human", "content": "We need help with our CRM."},
+            {"role": "user", "content": "We need help with our CRM."},
+        ],
+        ids=["type-human", "role-user"],
+    )
+    @pytest.mark.asyncio
+    async def test_dict_human_turn_reaches_extraction(self, monkeypatch, mock_llm, caplog, human):
+        # How langgraph dev hands a Studio turn to the graph: JSON dicts.
+        studio = self._import_studio(monkeypatch)
+        set_llm(mock_llm)
+        greeting = {"type": "ai", "content": "Hi, I'm TARS."}
+
+        with caplog.at_level(logging.INFO, logger="app.graph.edges"):
+            result = await studio.graph.ainvoke({"messages": [greeting, human]})
+
+        entries = [r.getMessage() for r in caplog.records if r.getMessage().startswith("Edge: entry")]
+        assert entries == ["Edge: entry → extraction (processing new human message)"]
+        assert isinstance(result["messages"][1], HumanMessage)
+        assert result["messages"][1].content == human["content"]
+
+
+class TestAppendMessages:
+    """The messages reducer converts dicts and passes message objects through untouched."""
+
+    def test_message_objects_pass_through_as_the_same_objects(self):
+        from app.graph.state import append_messages
+
+        old = [AIMessage(content="Hi")]
+        new = [HumanMessage(content="hello"), AIMessage(content="Hey")]
+
+        merged = append_messages(old, new)
+
+        assert merged == old + new
+        assert all(a is b for a, b in zip(merged, old + new, strict=True))
+
+    def test_dicts_become_messages(self):
+        from app.graph.state import append_messages
+
+        merged = append_messages(
+            [], [{"type": "human", "content": "a"}, {"role": "user", "content": "b"}]
+        )
+
+        assert [type(m) for m in merged] == [HumanMessage, HumanMessage]
+        assert [m.content for m in merged] == ["a", "b"]

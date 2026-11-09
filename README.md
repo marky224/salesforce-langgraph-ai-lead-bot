@@ -343,7 +343,7 @@ How a Studio run differs from the API server:
 - It uses the real LLM provider and Salesforce credentials in `.env`, so a conversation that reaches an accepted confirmation creates a real Lead and Task.
 - The masked LangSmith tracer isn't attached: if `.env` turns tracing on, Studio runs are traced unmasked.
 - The site index isn't loaded, so site questions get the "can't reach the site's article index" reply.
-- Start a thread with input `{"messages": []}` to get the greeting, then send one human message per turn.
+- Start a thread with input `{"messages": []}` to get the greeting, then send one human message per turn (`{"messages": [{"type": "human", "content": "..."}]}`; the `messages` reducer turns message dicts into message objects).
 
 ---
 
