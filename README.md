@@ -316,7 +316,7 @@ curl -X POST https://salesforce-langgraph-ai-lead-bot.purplesky-0949fcd0.central
 
 ## Debug in LangGraph Studio
 
-Dev only: step through the TARS graph node by node in LangGraph Studio. None of this goes into the production image.
+Dev only: step through the TARS graph node by node in LangGraph Studio. None of this is installed or run in the production image (the image copies `app/`, so `studio.py` is in it, but nothing imports it).
 
 ```bash
 # from the repo root, in your dev virtualenv
