@@ -1,0 +1,14 @@
+# LangGraph Studio (`langgraph dev`) — local graph debugging only; see the README's
+# "Debug in LangGraph Studio". NOT installed by CI or the production image (the
+# Dockerfile installs requirements.txt; CI installs requirements-dev.txt). Install with:
+#     pip install -r backend/requirements-studio.txt
+# A fresh venv resolves with no version moved. Installing into an existing dev venv
+# moves starlette, anyio, cryptography, pyjwt and uuid-utils to langgraph-api's floors
+# or above (runtime pins in requirements.txt are unchanged).
+-r requirements-dev.txt
+
+# The CLI pins neither server package, so both are pinned here: the checkpointer
+# check, the CORS defaults and the tracing auto-on all live in langgraph-api.
+langgraph-cli[inmem]==0.4.42
+langgraph-api==0.17.1
+langgraph-runtime-inmem==0.37.1

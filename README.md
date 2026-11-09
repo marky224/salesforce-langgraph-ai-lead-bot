@@ -320,7 +320,7 @@ Dev only: step through the TARS graph node by node in LangGraph Studio. None of 
 
 ```bash
 # from the repo root, in your dev virtualenv
-pip install -r backend/requirements-dev.txt   # includes langgraph-cli[inmem]
+pip install -r backend/requirements-studio.txt   # dev deps + langgraph-cli[inmem], langgraph-api
 langgraph dev --no-browser
 ```
 
