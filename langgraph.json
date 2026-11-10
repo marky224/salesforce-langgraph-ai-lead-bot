@@ -10,7 +10,8 @@
     "cors": {
       "allow_origins": ["https://smith.langchain.com"],
       "allow_methods": ["*"],
-      "allow_headers": ["*"]
+      "allow_headers": ["*"],
+      "expose_headers": ["x-pagination-total", "x-pagination-next", "content-location"]
     }
   }
 }
