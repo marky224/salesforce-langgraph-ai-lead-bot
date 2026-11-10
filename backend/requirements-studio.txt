@@ -2,9 +2,13 @@
 # "Debug in LangGraph Studio". NOT installed by CI or the production image (the
 # Dockerfile installs requirements.txt; CI installs requirements-dev.txt). Install with:
 #     pip install -r backend/requirements-studio.txt
-# A fresh venv resolves with no version moved. Installing into an existing dev venv
-# moves starlette, anyio, cryptography, pyjwt and uuid-utils to langgraph-api's floors
-# or above (runtime pins in requirements.txt are unchanged).
+# Dry run (2026-11-10) against a venv fresh from requirements-dev.txt: no installed
+# package moves and 27 are added (the three below plus their deps: OpenTelemetry
+# exporters/SDK, grpcio, protobuf, structlog and others). An older dev venv must also
+# move whatever sits below langgraph-api 0.17.1's floors: starlette>=1.3.1,
+# anyio>=4.14.2, cryptography>=50.0.0, pyjwt>=2.15.0 and uuid-utils>=0.16.2 (pip moved
+# opentelemetry-api and typing-extensions too in one such venv). No runtime pin in
+# requirements.txt moves.
 -r requirements-dev.txt
 
 # The CLI pins neither server package, so both are pinned here: the checkpointer
