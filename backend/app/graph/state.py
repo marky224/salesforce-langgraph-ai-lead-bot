@@ -29,9 +29,9 @@ from app.models.schemas import ConversationStage
 # ---------------------------------------------------------------------------
 # Reducer helpers
 # ---------------------------------------------------------------------------
-# `operator.add` tells LangGraph to *append* new items returned by a node
-# rather than overwriting the existing list.  This is critical for messages
-# and objections which accumulate over the conversation.
+# A reducer tells LangGraph to *append* new items returned by a node rather
+# than overwriting the existing list.  Messages use `append_messages` (below)
+# and objections use `operator.add`; both accumulate over the conversation.
 
 
 def append_messages(left: list[BaseMessage], right: Any) -> list[BaseMessage]:
