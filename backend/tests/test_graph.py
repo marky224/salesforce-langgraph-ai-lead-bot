@@ -1739,3 +1739,19 @@ class TestAppendMessages:
 
         assert [type(m) for m in merged] == [HumanMessage, HumanMessage]
         assert [m.content for m in merged] == ["a", "b"]
+
+    @pytest.mark.parametrize(
+        "update",
+        ["hi there", {"type": "human", "content": "hi there"}, HumanMessage(content="hi there")],
+        ids=["string", "dict", "message"],
+    )
+    def test_non_list_update_is_one_message(self, update):
+        from app.graph.state import append_messages
+
+        merged = append_messages([], update)
+
+        assert len(merged) == 1
+        assert isinstance(merged[0], HumanMessage)
+        assert merged[0].content == "hi there"
+        if isinstance(update, HumanMessage):
+            assert merged[0] is update

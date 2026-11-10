@@ -34,7 +34,7 @@ from app.models.schemas import ConversationStage
 # and objections which accumulate over the conversation.
 
 
-def append_messages(left: list[BaseMessage], right: list[Any]) -> list[BaseMessage]:
+def append_messages(left: list[BaseMessage], right: Any) -> list[BaseMessage]:
     """Append ``right`` to the history, converting any message dicts first.
 
     ``langgraph dev`` (LangGraph Studio) passes each human turn in as a JSON
@@ -43,8 +43,12 @@ def append_messages(left: list[BaseMessage], right: list[Any]) -> list[BaseMessa
     back to greeting.  ``convert_to_messages`` returns message objects as the
     same objects, so the server, the nodes and stored checkpoints see exactly
     what ``operator.add`` gave them.  Unlike ``add_messages`` it never merges
-    or replaces by message id.
+    or replaces by message id.  An update that isn't a list (a string, one dict
+    or one message, e.g. Studio input ``{"messages": "hi"}``) is one message, as
+    in ``add_messages``; ``convert_to_messages`` alone would iterate it.
     """
+    if not isinstance(right, list):
+        right = [right]
     return left + convert_to_messages(right)
 
 
