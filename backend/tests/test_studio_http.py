@@ -1,7 +1,8 @@
 """
 Tests for the ``langgraph dev`` request guard (``app/graph/studio_http.py``).
 
-A tiny Starlette app stands in for langgraph-api's routes, wrapped in
+A tiny Starlette app stands in for langgraph-api's routes (an HTTP route and a
+WebSocket like ``/threads/{thread_id}/stream/events``), wrapped in
 ``StudioGuardMiddleware`` as langgraph-api wraps its own; no dev server needed.
 """
 
@@ -12,13 +13,16 @@ from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from starlette.routing import Route
+from starlette.routing import Route, WebSocketRoute
 from starlette.testclient import TestClient
+from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from app.graph.studio_http import StudioGuardMiddleware
 from app.graph.studio_http import app as studio_app
 
 LOCAL = "http://127.0.0.1:2024"
+STUDIO = "https://smith.langchain.com"
+CROSS_SITE = "https://unrelated-site.example"
 
 
 @pytest.fixture
@@ -32,8 +36,17 @@ def client(calls):
         calls.append((request.method, await request.body()))
         return JSONResponse({"ok": True})
 
+    async def events(websocket: WebSocket) -> None:
+        await websocket.accept()
+        calls.append(("WS", await websocket.receive_text()))
+        await websocket.send_text("ok")
+        await websocket.close()
+
     app = Starlette(
-        routes=[Route("/threads", threads, methods=["GET", "POST", "OPTIONS"])],
+        routes=[
+            Route("/threads", threads, methods=["GET", "POST", "OPTIONS"]),
+            WebSocketRoute("/threads/t1/stream/events", events),
+        ],
         middleware=[Middleware(StudioGuardMiddleware)],
     )
     return TestClient(app, base_url=LOCAL)
@@ -107,3 +120,66 @@ class TestPostContentType:
 
         assert response.status_code == 200
         assert calls == [("OPTIONS", b"")]
+
+
+class TestOrigin:
+    @pytest.mark.parametrize("origin", [CROSS_SITE, "null", "http://localhost.attacker.example", "https://127.0.0.1:2024"])
+    def test_cross_site_json_post_gets_403(self, client, calls, origin):
+        response = client.post(
+            "/threads", content=b"{}", headers={"content-type": "application/json", "origin": origin}
+        )
+
+        assert response.status_code == 403
+        assert calls == []
+
+    @pytest.mark.parametrize("origin", [STUDIO, "http://127.0.0.1:2024", "http://localhost:3000", "http://[::1]:2024"])
+    def test_allowed_origin_json_post_passes(self, client, calls, origin):
+        response = client.post(
+            "/threads", content=b"{}", headers={"content-type": "application/json", "origin": origin}
+        )
+
+        assert response.status_code == 200
+        assert calls == [("POST", b"{}")]
+
+    @pytest.mark.parametrize("method", ["GET", "OPTIONS"])
+    def test_cross_site_safe_method_passes(self, client, calls, method):
+        # CORS keeps the reply from the page; the request changes nothing.
+        response = client.request(method, "/threads", headers={"origin": CROSS_SITE})
+
+        assert response.status_code == 200
+        assert calls == [(method, b"")]
+
+
+class TestWebSocket:
+    @staticmethod
+    def _connect(client, **headers):
+        # A full URL: websocket_connect ignores base_url (it would send Host: testserver).
+        with client.websocket_connect("ws://127.0.0.1:2024/threads/t1/stream/events", headers=headers) as ws:
+            ws.send_text('{"id": 1, "method": "run.start"}')
+            return ws.receive_text()
+
+    @pytest.mark.parametrize(
+        "headers",
+        [
+            {"origin": CROSS_SITE},
+            {"origin": "null"},
+            {"host": "rebind.attacker.example:2024"},
+            {"host": "rebind.attacker.example:2024", "origin": STUDIO},
+        ],
+        ids=["cross-site-origin", "null-origin", "rebind-host", "rebind-host-studio-origin"],
+    )
+    def test_refused_before_accept(self, client, calls, headers):
+        with pytest.raises(WebSocketDisconnect) as err:
+            self._connect(client, **headers)
+
+        assert err.value.code == 1008
+        assert calls == []
+
+    @pytest.mark.parametrize(
+        "headers",
+        [{"origin": STUDIO}, {"origin": "http://127.0.0.1:2024"}, {"origin": "http://localhost:2024"}, {}],
+        ids=["studio", "loopback-ip", "loopback-name", "no-origin"],
+    )
+    def test_allowed_connects(self, client, calls, headers):
+        assert self._connect(client, **headers) == "ok"
+        assert calls == [("WS", '{"id": 1, "method": "run.start"}')]
