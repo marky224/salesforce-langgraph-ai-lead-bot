@@ -19,18 +19,20 @@ langgraph-api parses any body as JSON.  So the guard refuses:
   ``localhost`` or ``[::1]`` (any port), which stops DNS rebinding (a hostile
   name re-pointed at 127.0.0.1 is still that name in ``Host``);
 - any WebSocket, and any request whose method isn't GET, HEAD or OPTIONS, that
-  carries an ``Origin`` other than ``https://smith.langchain.com`` or an
-  ``http://`` loopback origin (any port).  Current browsers send ``Origin`` on
-  those, so a cross-site page can't open the event socket or change state; a
-  client that sends no ``Origin`` (curl, the SDK) passes;
+  carries an ``Origin`` other than ``https://smith.langchain.com`` or the dev
+  server's own origin (``http://`` plus the request's ``Host``, so the server's
+  own ``/docs`` page passes).  Current browsers send ``Origin`` on those, so a
+  page from another origin, another local port included (``http://localhost:5173``
+  against a server on ``127.0.0.1:2024``), can't open the event socket or change
+  state; a client that sends no ``Origin`` (curl, the SDK) passes;
 - any POST with a body whose ``Content-Type`` is not ``application/json``
   (parameters such as ``charset`` allowed), so a body must be one CORS would
   have preflighted.
 
 An HTTP request is refused with 403 (415 for the content type); a WebSocket is
 closed before it is accepted, which the server sends as a 403 handshake reply.
-Everything else (OPTIONS preflights, cross-site GETs, whose replies CORS keeps
-from the page) passes through unchanged.  This is not auth: anything that can
+Everything else (OPTIONS preflights, GETs from another origin, whose replies
+CORS keeps from the page) passes through unchanged.  This is not auth: anything that can
 reach the port without a browser still can, so stop the server when done.
 """
 
@@ -68,17 +70,19 @@ def _is_json(content_type: str) -> bool:
     return content_type.split(";", 1)[0].strip().lower() == "application/json"
 
 
-def _origin_allowed(origin: str) -> bool:
-    """True for Studio's origin or an ``http://`` loopback origin (any port)."""
+def _origin_allowed(origin: str, host: str) -> bool:
+    """True for Studio's origin or the server's own (``http://`` + ``Host``).
+
+    Only called once ``Host`` is known to be loopback, so the server's own
+    origin is a loopback one; another port on the same host is a different
+    origin and is refused.
+    """
     origin = origin.strip().lower()
-    if origin == _STUDIO_ORIGIN:
-        return True
-    scheme, sep, host = origin.partition("://")
-    return scheme == "http" and sep == "://" and _host_name(host) in _LOOPBACK_HOSTS
+    return origin in (_STUDIO_ORIGIN, "http://" + host.strip().lower())
 
 
 class StudioGuardMiddleware:
-    """Refuse a non-loopback ``Host`` or a cross-site ``Origin`` (403), and non-JSON POST bodies (415)."""
+    """Refuse a non-loopback ``Host`` or a foreign ``Origin`` (403), and non-JSON POST bodies (415)."""
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -87,17 +91,18 @@ class StudioGuardMiddleware:
         if scope["type"] in ("http", "websocket"):
             headers = Headers(scope=scope)
             websocket = scope["type"] == "websocket"
-            if _host_name(headers.get("host", "")) not in _LOOPBACK_HOSTS:
+            host = headers.get("host", "")
+            if _host_name(host) not in _LOOPBACK_HOSTS:
                 await _refuse(scope, receive, send, "Host must be 127.0.0.1, localhost or [::1].")
                 return
             origin = headers.get("origin")
             if (
                 origin is not None
                 and (websocket or scope["method"] not in _SAFE_METHODS)
-                and not _origin_allowed(origin)
+                and not _origin_allowed(origin, host)
             ):
                 await _refuse(
-                    scope, receive, send, f"Origin must be {_STUDIO_ORIGIN} or a loopback origin."
+                    scope, receive, send, f"Origin must be {_STUDIO_ORIGIN} or this server's own."
                 )
                 return
             if (

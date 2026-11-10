@@ -23,6 +23,8 @@ from app.graph.studio_http import app as studio_app
 LOCAL = "http://127.0.0.1:2024"
 STUDIO = "https://smith.langchain.com"
 CROSS_SITE = "https://unrelated-site.example"
+# A page from another local server: same machine, another origin.
+OTHER_PORT = "http://localhost:5173"
 
 
 @pytest.fixture
@@ -123,8 +125,21 @@ class TestPostContentType:
 
 
 class TestOrigin:
-    @pytest.mark.parametrize("origin", [CROSS_SITE, "null", "http://localhost.attacker.example", "https://127.0.0.1:2024"])
-    def test_cross_site_json_post_gets_403(self, client, calls, origin):
+    @pytest.mark.parametrize(
+        "origin",
+        [
+            CROSS_SITE,
+            "null",
+            "http://localhost.attacker.example",
+            "https://127.0.0.1:2024",
+            OTHER_PORT,
+            "http://127.0.0.1:5173",
+            # Same port, another loopback name: a different origin from Host 127.0.0.1:2024.
+            "http://localhost:2024",
+            "http://[::1]:2024",
+        ],
+    )
+    def test_foreign_origin_json_post_gets_403(self, client, calls, origin):
         response = client.post(
             "/threads", content=b"{}", headers={"content-type": "application/json", "origin": origin}
         )
@@ -132,24 +147,37 @@ class TestOrigin:
         assert response.status_code == 403
         assert calls == []
 
-    def test_cross_site_bodyless_post_gets_403(self, client, calls):
+    @pytest.mark.parametrize("origin", [CROSS_SITE, OTHER_PORT])
+    def test_foreign_origin_bodyless_post_gets_403(self, client, calls, origin):
         # What fetch(url, {method: "POST", mode: "no-cors"}) sends, e.g. to /internal/truncate.
-        response = client.post("/threads", headers={"origin": CROSS_SITE, "content-length": "0"})
+        response = client.post("/threads", headers={"origin": origin, "content-length": "0"})
 
         assert response.status_code == 403
         assert calls == []
 
-    @pytest.mark.parametrize("origin", [STUDIO, "http://127.0.0.1:2024", "http://localhost:3000", "http://[::1]:2024"])
-    def test_allowed_origin_json_post_passes(self, client, calls, origin):
+    @pytest.mark.parametrize(
+        ("origin", "host"),
+        [
+            (STUDIO, "127.0.0.1:2024"),
+            # The server's own origin (its /docs page): http:// plus Host, any case.
+            ("http://127.0.0.1:2024", "127.0.0.1:2024"),
+            ("http://localhost:2024", "localhost:2024"),
+            ("HTTP://LOCALHOST:2024", "localhost:2024"),
+            ("http://[::1]:2024", "[::1]:2024"),
+        ],
+    )
+    def test_allowed_origin_json_post_passes(self, client, calls, origin, host):
         response = client.post(
-            "/threads", content=b"{}", headers={"content-type": "application/json", "origin": origin}
+            "/threads",
+            content=b"{}",
+            headers={"content-type": "application/json", "origin": origin, "host": host},
         )
 
         assert response.status_code == 200
         assert calls == [("POST", b"{}")]
 
     @pytest.mark.parametrize("method", ["GET", "OPTIONS"])
-    def test_cross_site_safe_method_passes(self, client, calls, method):
+    def test_foreign_origin_safe_method_passes(self, client, calls, method):
         # CORS keeps the reply from the page; the request changes nothing.
         response = client.request(method, "/threads", headers={"origin": CROSS_SITE})
 
@@ -170,10 +198,19 @@ class TestWebSocket:
         [
             {"origin": CROSS_SITE},
             {"origin": "null"},
+            {"origin": OTHER_PORT},
+            {"origin": "http://localhost:2024"},
             {"host": "rebind.attacker.example:2024"},
             {"host": "rebind.attacker.example:2024", "origin": STUDIO},
         ],
-        ids=["cross-site-origin", "null-origin", "rebind-host", "rebind-host-studio-origin"],
+        ids=[
+            "cross-site-origin",
+            "null-origin",
+            "other-port-origin",
+            "other-loopback-name-origin",
+            "rebind-host",
+            "rebind-host-studio-origin",
+        ],
     )
     def test_refused_before_accept(self, client, calls, headers):
         with pytest.raises(WebSocketDisconnect) as err:
@@ -184,8 +221,13 @@ class TestWebSocket:
 
     @pytest.mark.parametrize(
         "headers",
-        [{"origin": STUDIO}, {"origin": "http://127.0.0.1:2024"}, {"origin": "http://localhost:2024"}, {}],
-        ids=["studio", "loopback-ip", "loopback-name", "no-origin"],
+        [
+            {"origin": STUDIO},
+            {"origin": "http://127.0.0.1:2024"},
+            {"origin": "http://localhost:2024", "host": "localhost:2024"},
+            {},
+        ],
+        ids=["studio", "own-origin-ip", "own-origin-name", "no-origin"],
     )
     def test_allowed_connects(self, client, calls, headers):
         assert self._connect(client, **headers) == "ok"
