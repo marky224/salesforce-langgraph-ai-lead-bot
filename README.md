@@ -220,6 +220,7 @@ salesforce-langgraph-ai-lead-bot/
 │   │   │   ├── edges.py             # Conditional routing logic
 │   │   │   ├── graph.py             # Graph builder + compilation
 │   │   │   ├── studio.py            # LangGraph Studio entrypoint (dev only)
+│   │   │   ├── studio_http.py       # langgraph dev request guard (dev only)
 │   │   │   └── prompts.py           # System prompts (TARS persona)
 │   │   ├── tools/
 │   │   │   ├── salesforce.py        # Salesforce API wrappers
@@ -342,7 +343,9 @@ How a Studio run differs from the API server:
 
 - It uses the real LLM provider and Salesforce credentials in `.env`, so a conversation that reaches an accepted confirmation creates a real Lead and Task.
 - The masked LangSmith tracer isn't attached, so the graph refuses to load while LangSmith tracing is on. `langgraph dev` turns tracing on by itself whenever a LangSmith API key is set and no tracing flag is, so a `.env` with `LANGSMITH_API_KEY` also needs `LANGSMITH_TRACING=false`.
-- The dev server has no auth: anything that can reach port 2024 can read threads (visitor details included), spend LLM tokens and run any node, Salesforce writes included. So keep it on `127.0.0.1`, and `langgraph.json` allows cross-origin requests only from `https://smith.langchain.com`, so other pages open in your browser can't call it.
+- The dev server has no auth: anything that can reach port 2024 can read threads (visitor details included), spend LLM tokens and run any node, Salesforce writes included. Keep it on `127.0.0.1` and stop it when you're done. Two limits help against other pages open in your browser, but neither is auth:
+  - CORS in `langgraph.json` allows only `https://smith.langchain.com`, so other origins can't read replies or send requests that need a preflight (JSON POSTs). It doesn't stop a "simple" request, such as a `text/plain` or form POST.
+  - `backend/app/graph/studio_http.py`, mounted as the dev server's `http.app`, answers 415 to a POST body that isn't `application/json`, so such a simple request can't create threads or start runs. It also answers 403 to a `Host` other than `127.0.0.1`, `localhost` or `[::1]`, which stops DNS rebinding. Because of that `Host` check, `langgraph dev --tunnel` or a non-loopback `--host` won't work.
 - The site index isn't loaded, so site questions get the "can't reach the site's article index" reply.
 - Start a thread with input `{"messages": []}` to get the greeting, then send one human message per turn (`{"messages": [{"type": "human", "content": "..."}]}`; the `messages` reducer turns message dicts into message objects).
 

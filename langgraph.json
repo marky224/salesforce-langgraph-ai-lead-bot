@@ -6,6 +6,7 @@
   },
   "env": "./.env",
   "http": {
+    "app": "./backend/app/graph/studio_http.py:app",
     "cors": {
       "allow_origins": ["https://smith.langchain.com"],
       "allow_methods": ["*"],
