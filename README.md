@@ -197,7 +197,7 @@ See [architecture.md](architecture.md) for detailed Mermaid diagrams of the Lang
 salesforce-langgraph-ai-lead-bot/
 ├── README.md
 ├── architecture.md
-├── .env.example
+├── env.example
 ├── .gitignore
 ├── LICENSE
 ├── langgraph.json                   # `langgraph dev` config (dev only)
