@@ -1644,19 +1644,24 @@ class TestStudioEntrypoint:
     """app.graph.studio injects the LLM and exposes a graph with no checkpointer."""
 
     @staticmethod
-    def _import_studio(monkeypatch, tracing="false"):
+    def _import_studio(monkeypatch, tracing="false", **flags):
         from langsmith.utils import get_env_var
 
         import app.graph.nodes as nodes
 
-        # Every tracing name set, so a shell export can't change the outcome.
+        # Every tracing name set (or, given None in flags, removed), so a shell
+        # export can't change the outcome.
         for name in (
             "LANGSMITH_TRACING",
             "LANGSMITH_TRACING_V2",
             "LANGCHAIN_TRACING_V2",
             "LANGCHAIN_TRACING",
         ):
-            monkeypatch.setenv(name, tracing)
+            value = flags.get(name, tracing)
+            if value is None:
+                monkeypatch.delenv(name, raising=False)
+            else:
+                monkeypatch.setenv(name, value)
         # A fresh import, and the LLM it injects is undone after the test.
         monkeypatch.delitem(sys.modules, "app.graph.studio", raising=False)
         monkeypatch.setattr(nodes, "_llm", None)
@@ -1691,6 +1696,25 @@ class TestStudioEntrypoint:
             self._import_studio(monkeypatch, tracing="true")
 
         assert not is_llm_ready()
+
+    def test_import_refuses_on_a_v2_flag_and_names_every_flag(self, monkeypatch):
+        # langsmith reads *_TRACING_V2 first, so LANGSMITH_TRACING=false doesn't help.
+        with pytest.raises(RuntimeError) as err:
+            self._import_studio(
+                monkeypatch,
+                LANGSMITH_TRACING="false",
+                LANGSMITH_TRACING_V2=None,
+                LANGCHAIN_TRACING_V2="true",
+                LANGCHAIN_TRACING=None,
+            )
+
+        for name in (
+            "LANGSMITH_TRACING,",
+            "LANGSMITH_TRACING_V2",
+            "LANGCHAIN_TRACING_V2",
+            "LANGCHAIN_TRACING must",
+        ):
+            assert name in str(err.value)
 
     @pytest.mark.parametrize(
         "human",

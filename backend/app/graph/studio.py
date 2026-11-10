@@ -17,9 +17,12 @@ On import it does what the server's lifespan does for the graph, minus the parts
   otherwise attach a ``MemorySaver``).
 - No masked tracer is attached (unlike ``server._run_config``), so the module
   refuses to load while LangSmith tracing is on: a run would upload visitor
-  emails and phones unmasked.  ``langgraph dev`` turns tracing on by itself
-  when a LangSmith API key is set and no tracing flag is, so a ``.env`` with a
-  key needs ``LANGSMITH_TRACING=false``.  The check is langsmith's own
+  emails and phones unmasked.  Each of ``LANGSMITH_TRACING``,
+  ``LANGSMITH_TRACING_V2``, ``LANGCHAIN_TRACING_V2`` and ``LANGCHAIN_TRACING``
+  must be unset or false (langsmith reads the ``_V2`` names first), and
+  ``langgraph dev`` turns tracing on by itself when a LangSmith API key is set
+  and none of them is, so a ``.env`` with a key needs
+  ``LANGSMITH_TRACING=false``.  The check is langsmith's own
   ``langsmith.utils.tracing_is_enabled``.
 - The site index is not loaded, so a site question gets the fixed
   ``SITE_UNAVAILABLE_REPLY``.
@@ -41,9 +44,11 @@ get_env_var.cache_clear()
 if tracing_is_enabled():
     raise RuntimeError(
         "LangSmith tracing is on, and Studio runs have no masked tracer, so they "
-        "would upload visitor emails and phones unmasked. langgraph dev turns "
-        "tracing on by itself when a LangSmith API key is set and no tracing flag "
-        "is. Set LANGSMITH_TRACING=false in .env to load the TARS graph in Studio."
+        "would upload visitor emails and phones unmasked. To load the TARS graph "
+        "in Studio, each of LANGSMITH_TRACING, LANGSMITH_TRACING_V2, "
+        "LANGCHAIN_TRACING_V2 and LANGCHAIN_TRACING must be unset or false. "
+        "langgraph dev turns tracing on by itself when a LangSmith API key is set "
+        "and none of them is, so with a key set LANGSMITH_TRACING=false in .env."
     )
 
 set_llm(get_llm())
