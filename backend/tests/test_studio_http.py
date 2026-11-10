@@ -132,6 +132,13 @@ class TestOrigin:
         assert response.status_code == 403
         assert calls == []
 
+    def test_cross_site_bodyless_post_gets_403(self, client, calls):
+        # What fetch(url, {method: "POST", mode: "no-cors"}) sends, e.g. to /internal/truncate.
+        response = client.post("/threads", headers={"origin": CROSS_SITE, "content-length": "0"})
+
+        assert response.status_code == 403
+        assert calls == []
+
     @pytest.mark.parametrize("origin", [STUDIO, "http://127.0.0.1:2024", "http://localhost:3000", "http://[::1]:2024"])
     def test_allowed_origin_json_post_passes(self, client, calls, origin):
         response = client.post(
