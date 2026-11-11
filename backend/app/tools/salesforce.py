@@ -230,7 +230,7 @@ async def find_lead_by_email(email: str | None) -> str | None:
     records = result.get("records", [])
     if records:
         lead_id = records[0]["Id"]
-        logger.info("Found existing Lead %s for email %s", lead_id, email)
+        logger.info("Found existing Lead %s by email", lead_id)
         return lead_id
     return None
 
