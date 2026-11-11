@@ -205,6 +205,15 @@ async def _sf_call_with_retry(operation: Any) -> Any:
         return await _run_sync(lambda: operation(_get_sf_client()))
 
 
+def _error_codes(content: Any) -> list[dict[str, Any]]:
+    """Each Salesforce error's errorCode and field names, without its ``message``."""
+    return [
+        {"errorCode": item.get("errorCode"), "fields": item.get("fields")}
+        for item in (content if isinstance(content, list) else [content])
+        if isinstance(item, dict)
+    ]
+
+
 def salesforce_error_summary(exc: BaseException) -> str | None:
     """
     A Salesforce API error as its class, HTTP status, errorCode(s) and field
@@ -227,14 +236,9 @@ def salesforce_error_summary(exc: BaseException) -> str | None:
         chain = [exc]
         for current in chain:  # grows as each one's cause and context are added
             if isinstance(current, SalesforceError):
-                # Annotated bytes, but it is the reply as simple_salesforce parsed it:
-                # a list of error dicts, or the body's text when it wasn't JSON.
-                content: Any = current.content
-                errors = [
-                    {"errorCode": item.get("errorCode"), "fields": item.get("fields")}
-                    for item in (content if isinstance(content, list) else [content])
-                    if isinstance(item, dict)
-                ]
+                # ``content`` is annotated bytes, but it is the reply as simple_salesforce
+                # parsed it: a list of error dicts, or the body's text when it wasn't JSON.
+                errors = _error_codes(current.content)
                 summary = f"{type(current).__name__} status={current.status} errors={errors}"
                 return summary if current is exc else f"{type(exc).__name__} after {summary}"
             for linked in (current.__cause__, current.__context__):
@@ -371,7 +375,8 @@ async def create_lead(
     result = await _sf_call_with_retry(lambda sf: sf.Lead.create(payload))
 
     if not result.get("success"):
-        errors = result.get("errors", [])
+        # errorCode and field names only: an error's message can repeat a lead value.
+        errors = _error_codes(result.get("errors"))
         raise RuntimeError(f"Salesforce Lead creation failed: {errors}")
 
     lead_id = result["id"]
@@ -430,7 +435,8 @@ async def create_transcript_task(
     result = await _sf_call_with_retry(lambda sf: sf.Task.create(payload))
 
     if not result.get("success"):
-        errors = result.get("errors", [])
+        # errorCode and field names only: an error's message can repeat the transcript.
+        errors = _error_codes(result.get("errors"))
         raise RuntimeError(f"Salesforce Task creation failed: {errors}")
 
     task_id = result["id"]

@@ -380,6 +380,59 @@ class TestSalesforceTools:
                     transcript="test",
                 )
 
+    # A result Salesforce reports as failed: its errors' messages can repeat a lead
+    # value, so the raised text keeps each error's errorCode and field names only.
+
+    @pytest.mark.asyncio
+    async def test_a_failed_lead_result_raises_without_salesforces_message(self):
+        mock_sf = MagicMock()
+        mock_sf.Lead.create.return_value = {
+            "success": False,
+            "errors": [
+                {
+                    "message": "Company: data value too large: Analytical Engines",
+                    "errorCode": "STRING_TOO_LONG",
+                    "fields": ["Company"],
+                }
+            ],
+        }
+
+        with patch("app.tools.salesforce._get_sf_client", return_value=mock_sf):
+            from app.tools.salesforce import create_lead
+
+            with pytest.raises(RuntimeError) as failure:
+                await create_lead(lead_data={"company": "Analytical Engines"}, qualification_data={})
+
+        assert str(failure.value) == (
+            "Salesforce Lead creation failed: "
+            "[{'errorCode': 'STRING_TOO_LONG', 'fields': ['Company']}]"
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_failed_task_result_raises_without_salesforces_message(self):
+        mock_sf = MagicMock()
+        mock_sf.Task.create.return_value = {
+            "success": False,
+            "errors": [
+                {
+                    "message": "Description: data value too large: Visitor: I'm Augusta Lovelace",
+                    "errorCode": "STRING_TOO_LONG",
+                    "fields": ["Description"],
+                }
+            ],
+        }
+
+        with patch("app.tools.salesforce._get_sf_client", return_value=mock_sf):
+            from app.tools.salesforce import create_transcript_task
+
+            with pytest.raises(RuntimeError) as failure:
+                await create_transcript_task(lead_id="00Q000000000001", transcript="test")
+
+        assert str(failure.value) == (
+            "Salesforce Task creation failed: "
+            "[{'errorCode': 'STRING_TOO_LONG', 'fields': ['Description']}]"
+        )
+
     # The write's log lines, down to DEBUG, name fields and lengths, never values.
 
     @pytest.mark.asyncio
