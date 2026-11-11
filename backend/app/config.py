@@ -551,7 +551,15 @@ def configure_logging() -> None:
 
     # Quieten noisy third-party loggers
     # (httpx2/httpcore2 are the anthropic SDK's HTTP client.)
-    for noisy in ("httpx", "httpcore", "httpx2", "httpcore2", "urllib3", "asyncio"):
+    # openai, anthropic and groq are the provider SDKs: at DEBUG each one's
+    # ``_base_client`` logger writes the whole request, so the prompt and the
+    # visitor's messages. An SDK's own switch (OPENAI_LOG, ANTHROPIC_LOG or
+    # GROQ_LOG set to debug or info) is read when the SDK is imported, which is
+    # after this call, and overrides it: leave those unset.
+    for noisy in (
+        "httpx", "httpcore", "httpx2", "httpcore2", "urllib3", "asyncio",
+        "openai", "anthropic", "groq",
+    ):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
     logger.info("Logging configured at %s level", log_level)

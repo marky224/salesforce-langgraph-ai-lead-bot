@@ -144,6 +144,110 @@ def test_configure_logging_quiets_httpx2_loggers():
     assert logging.getLogger("httpcore2").level == logging.WARNING
 
 
+# LOG_LEVEL=DEBUG must not make a provider SDK log its requests: each SDK's
+# ``<sdk>._base_client`` logger writes "Request options: ..." at DEBUG, the whole
+# request body, so the prompt, the transcript and the visitor's message.
+
+
+@pytest.fixture
+def restore_logging():
+    """configure_logging() replaces the root logger's handlers and level: put them back."""
+    import logging
+
+    root = logging.getLogger()
+    handlers, level = root.handlers[:], root.level
+    yield
+    root.handlers[:] = handlers
+    root.setLevel(level)
+
+
+@pytest.mark.parametrize("sdk", ["openai", "anthropic", "groq"])
+def test_configure_logging_keeps_the_provider_sdk_loggers_above_debug(
+    sdk, monkeypatch, restore_logging
+):
+    import logging
+
+    from app.config import configure_logging, get_settings
+
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+    get_settings.cache_clear()
+    logging.getLogger(sdk).setLevel(logging.NOTSET)  # don't rely on an earlier test
+
+    configure_logging()
+
+    assert logging.getLogger().level == logging.DEBUG
+    assert not logging.getLogger(f"{sdk}._base_client").isEnabledFor(logging.DEBUG)
+
+
+@pytest.mark.asyncio
+async def test_debug_logging_never_holds_the_llm_request(monkeypatch, restore_logging):
+    """
+    LOG_LEVEL=DEBUG, then a real ChatOpenAI (the xai provider's client) over a
+    mocked transport, no network: no log record holds the visitor's message.
+    """
+    import logging
+
+    import httpx
+    from langchain_core.messages import HumanMessage
+    from langchain_openai import ChatOpenAI
+
+    from app.config import configure_logging, get_settings
+
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+    get_settings.cache_clear()
+    for name in ("openai", "httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.NOTSET)  # don't rely on an earlier test
+    configure_logging()
+    assert logging.getLogger().level == logging.DEBUG
+
+    records: list[logging.LogRecord] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl-test",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "grok-4.3",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "ok"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            },
+        )
+
+    capture = _Capture(level=logging.DEBUG)
+    logging.getLogger().addHandler(capture)
+    try:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            llm = ChatOpenAI(
+                model="grok-4.3",
+                api_key="test-key",
+                base_url="https://api.x.ai/v1",
+                max_retries=0,
+                http_async_client=client,
+            )
+            reply = await llm.ainvoke(
+                [HumanMessage(content="I'm Augusta Lovelace of Analytical Engines")]
+            )
+    finally:
+        logging.getLogger().removeHandler(capture)
+
+    assert reply.content == "ok"  # the request did go through the SDK
+    logged = "\n".join(record.getMessage() for record in records)
+    assert "Augusta Lovelace" not in logged
+    assert "Analytical Engines" not in logged
+
+
 def test_tracing_flag_parsed_from_env(monkeypatch):
     from langsmith import utils as ls_utils
 
