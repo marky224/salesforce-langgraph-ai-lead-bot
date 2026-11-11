@@ -11,9 +11,11 @@ network access.  Each test verifies that the node:
 
 from __future__ import annotations
 
+import importlib
 import json
 import logging
 import re
+import sys
 import time
 import unicodedata
 from pathlib import Path
@@ -23,6 +25,7 @@ import httpx
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
+from langgraph.checkpoint.memory import MemorySaver
 
 from app.graph.edges import NODE_EXTRACTION, NODE_TURN_CAP, route_entry_point
 from app.graph.graph import build_graph
@@ -1615,3 +1618,164 @@ class TestSiteAnswerCleanupTime:
         assert time.perf_counter() - start < 0.5
         assert reply is not None
         assert reply.endswith(f"Read more: [{M365_TITLE}]({M365_URL})")
+
+
+# ---------------------------------------------------------------------------
+# Compiling without a checkpointer (the LangGraph Studio entrypoint)
+# ---------------------------------------------------------------------------
+# langgraph dev refuses a graph compiled with its own checkpointer, so the
+# Studio entrypoint compiles with none; the server's default must not change.
+
+class TestBuildGraphCheckpointer:
+    """build_graph keeps its MemorySaver default; default_checkpointer=False drops it."""
+
+    def test_default_attaches_memory_saver(self):
+        assert isinstance(build_graph().checkpointer, MemorySaver)
+
+    def test_given_checkpointer_is_used(self):
+        saver = MemorySaver()
+        assert build_graph(saver, default_checkpointer=False).checkpointer is saver
+
+    def test_no_default_compiles_without_checkpointer(self):
+        assert build_graph(default_checkpointer=False).checkpointer is None
+
+
+class TestStudioEntrypoint:
+    """app.graph.studio injects the LLM and exposes a graph with no checkpointer."""
+
+    @staticmethod
+    def _import_studio(monkeypatch, tracing="false", **flags):
+        from langsmith.utils import get_env_var
+
+        import app.graph.nodes as nodes
+
+        # Every tracing name set (or, given None in flags, removed), so a shell
+        # export can't change the outcome.
+        for name in (
+            "LANGSMITH_TRACING",
+            "LANGSMITH_TRACING_V2",
+            "LANGCHAIN_TRACING_V2",
+            "LANGCHAIN_TRACING",
+        ):
+            value = flags.get(name, tracing)
+            if value is None:
+                monkeypatch.delenv(name, raising=False)
+            else:
+                monkeypatch.setenv(name, value)
+        # A fresh import, and the LLM it injects is undone after the test.
+        monkeypatch.delitem(sys.modules, "app.graph.studio", raising=False)
+        monkeypatch.setattr(nodes, "_llm", None)
+        get_env_var.cache_clear()
+        try:
+            return importlib.import_module("app.graph.studio")
+        finally:
+            get_env_var.cache_clear()
+
+    def test_import_injects_llm_and_compiles_without_checkpointer(self, monkeypatch):
+        from app.graph.nodes import is_llm_ready
+
+        studio = self._import_studio(monkeypatch)
+
+        assert is_llm_ready()
+        assert studio.graph.checkpointer is None
+
+    @pytest.mark.asyncio
+    async def test_greeting_turn_runs_without_checkpointer(self, monkeypatch, mock_llm):
+        studio = self._import_studio(monkeypatch)
+        set_llm(mock_llm)
+
+        result = await studio.graph.ainvoke({"messages": []})
+
+        assert result["stage"] == ConversationStage.GREETING
+        assert result["messages"][-1].content == "Mock response"
+
+    def test_import_refuses_while_tracing_is_on(self, monkeypatch):
+        from app.graph.nodes import is_llm_ready
+
+        with pytest.raises(RuntimeError, match="LANGSMITH_TRACING=false"):
+            self._import_studio(monkeypatch, tracing="true")
+
+        assert not is_llm_ready()
+
+    def test_import_refuses_on_a_v2_flag_and_names_every_flag(self, monkeypatch):
+        # langsmith reads *_TRACING_V2 first, so LANGSMITH_TRACING=false doesn't help.
+        with pytest.raises(RuntimeError) as err:
+            self._import_studio(
+                monkeypatch,
+                LANGSMITH_TRACING="false",
+                LANGSMITH_TRACING_V2=None,
+                LANGCHAIN_TRACING_V2="true",
+                LANGCHAIN_TRACING=None,
+            )
+
+        for name in (
+            "LANGSMITH_TRACING,",
+            "LANGSMITH_TRACING_V2",
+            "LANGCHAIN_TRACING_V2",
+            "LANGCHAIN_TRACING must",
+        ):
+            assert name in str(err.value)
+
+    @pytest.mark.parametrize(
+        "human",
+        [
+            {"type": "human", "content": "We need help with our CRM."},
+            {"role": "user", "content": "We need help with our CRM."},
+        ],
+        ids=["type-human", "role-user"],
+    )
+    @pytest.mark.asyncio
+    async def test_dict_human_turn_reaches_extraction(self, monkeypatch, mock_llm, caplog, human):
+        # How langgraph dev hands a Studio turn to the graph: JSON dicts.
+        studio = self._import_studio(monkeypatch)
+        set_llm(mock_llm)
+        greeting = {"type": "ai", "content": "Hi, I'm TARS."}
+
+        with caplog.at_level(logging.INFO, logger="app.graph.edges"):
+            result = await studio.graph.ainvoke({"messages": [greeting, human]})
+
+        entries = [r.getMessage() for r in caplog.records if r.getMessage().startswith("Edge: entry")]
+        assert entries == ["Edge: entry → extraction (processing new human message)"]
+        assert isinstance(result["messages"][1], HumanMessage)
+        assert result["messages"][1].content == human["content"]
+
+
+class TestAppendMessages:
+    """The messages reducer converts dicts and passes message objects through untouched."""
+
+    def test_message_objects_pass_through_as_the_same_objects(self):
+        from app.graph.state import append_messages
+
+        old = [AIMessage(content="Hi")]
+        new = [HumanMessage(content="hello"), AIMessage(content="Hey")]
+
+        merged = append_messages(old, new)
+
+        assert merged == old + new
+        assert all(a is b for a, b in zip(merged, old + new, strict=True))
+
+    def test_dicts_become_messages(self):
+        from app.graph.state import append_messages
+
+        merged = append_messages(
+            [], [{"type": "human", "content": "a"}, {"role": "user", "content": "b"}]
+        )
+
+        assert [type(m) for m in merged] == [HumanMessage, HumanMessage]
+        assert [m.content for m in merged] == ["a", "b"]
+
+    @pytest.mark.parametrize(
+        "update",
+        ["hi there", {"type": "human", "content": "hi there"}, HumanMessage(content="hi there")],
+        ids=["string", "dict", "message"],
+    )
+    def test_non_list_update_is_one_message(self, update):
+        from app.graph.state import append_messages
+
+        merged = append_messages([], update)
+
+        assert len(merged) == 1
+        assert isinstance(merged[0], HumanMessage)
+        assert merged[0].content == "hi there"
+        if isinstance(update, HumanMessage):
+            assert merged[0] is update

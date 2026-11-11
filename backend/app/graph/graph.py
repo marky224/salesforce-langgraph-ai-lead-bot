@@ -79,7 +79,11 @@ logger = logging.getLogger(__name__)
 # Graph builder
 # ---------------------------------------------------------------------------
 
-def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> StateGraph:
+def build_graph(
+    checkpointer: BaseCheckpointSaver | None = None,
+    *,
+    default_checkpointer: bool = True,
+) -> StateGraph:
     """
     Construct and compile the full conversation graph.
 
@@ -91,6 +95,11 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> StateGraph:
         deployments and local development.  For production with multiple
         replicas, pass a database-backed checkpointer (e.g.
         ``AsyncSqliteSaver`` or ``PostgresSaver``).
+    default_checkpointer : bool
+        Only read when ``checkpointer`` is ``None``.  ``False`` compiles with
+        no checkpointer at all, for hosts that supply their own (``langgraph
+        dev`` / LangGraph Studio rejects a graph that brings one; see
+        ``app/graph/studio.py``).
 
     Returns
     -------
@@ -100,7 +109,7 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> StateGraph:
         ``{"configurable": {"thread_id": "<unique-id>"}}`` so the
         checkpointer can persist and restore per-conversation state.
     """
-    if checkpointer is None:
+    if checkpointer is None and default_checkpointer:
         checkpointer = MemorySaver()
         logger.info("Using default in-memory MemorySaver checkpointer")
 

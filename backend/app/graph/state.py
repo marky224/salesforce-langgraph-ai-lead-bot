@@ -6,8 +6,10 @@ LangGraph persists and patches this state between node executions, so every
 field the graph needs to read or write must be declared here.
 
 Key design decisions:
-- Uses `Annotated[list, operator.add]` for messages so that each node can
-  *append* messages rather than replacing the entire history.
+- Uses `Annotated[list, append_messages]` for messages so that each node can
+  *append* messages rather than replacing the entire history.  The reducer
+  also turns message dicts (how `langgraph dev` / Studio sends a human turn)
+  into message objects; objects pass through unchanged.
 - Domain objects (LeadData, QualificationData, LeadScore) are stored as
   serialisable dicts and reconstituted via Pydantic when nodes need
   validation — this keeps the state checkpoint-friendly.
@@ -20,16 +22,34 @@ from __future__ import annotations
 import operator
 from typing import Annotated, Any, TypedDict
 
-from langchain_core.messages import AnyMessage
+from langchain_core.messages import AnyMessage, BaseMessage, convert_to_messages
 
 from app.models.schemas import ConversationStage
 
 # ---------------------------------------------------------------------------
 # Reducer helpers
 # ---------------------------------------------------------------------------
-# `operator.add` tells LangGraph to *append* new items returned by a node
-# rather than overwriting the existing list.  This is critical for messages
-# and objections which accumulate over the conversation.
+# A reducer tells LangGraph to *append* new items returned by a node rather
+# than overwriting the existing list.  Messages use `append_messages` (below)
+# and objections use `operator.add`; both accumulate over the conversation.
+
+
+def append_messages(left: list[BaseMessage], right: Any) -> list[BaseMessage]:
+    """Append ``right`` to the history, converting any message dicts first.
+
+    ``langgraph dev`` (LangGraph Studio) passes each human turn in as a JSON
+    dict such as ``{"type": "human", "content": ...}``; ``route_entry_point``
+    only counts ``HumanMessage`` objects, so a raw dict would send every turn
+    back to greeting.  ``convert_to_messages`` returns message objects as the
+    same objects, so the server, the nodes and stored checkpoints see exactly
+    what ``operator.add`` gave them.  Unlike ``add_messages`` it never merges
+    or replaces by message id.  An update that isn't a list (a string, one dict
+    or one message, e.g. Studio input ``{"messages": "hi"}``) is one message, as
+    in ``add_messages``; ``convert_to_messages`` alone would iterate it.
+    """
+    if not isinstance(right, list):
+        right = [right]
+    return left + convert_to_messages(right)
 
 
 # ---------------------------------------------------------------------------
@@ -44,7 +64,7 @@ class GraphState(TypedDict, total=False):
     ----------
     messages : list[AnyMessage]
         Full conversation history (HumanMessage / AIMessage).  Uses the
-        ``operator.add`` reducer so nodes only need to return *new* messages.
+        ``append_messages`` reducer so nodes only need to return *new* messages.
 
     stage : ConversationStage
         Current phase of the sales conversation.  Updated by the router
@@ -99,7 +119,7 @@ class GraphState(TypedDict, total=False):
     """
 
     # --- Conversation history (append-only via reducer) --------------------
-    messages: Annotated[list[AnyMessage], operator.add]
+    messages: Annotated[list[AnyMessage], append_messages]
 
     # --- Conversation flow -------------------------------------------------
     stage: ConversationStage

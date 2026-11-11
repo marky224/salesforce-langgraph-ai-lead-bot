@@ -1,0 +1,17 @@
+{
+  "python_version": "3.12",
+  "dependencies": ["./backend"],
+  "graphs": {
+    "tars": "./backend/app/graph/studio.py:graph"
+  },
+  "env": "./.env",
+  "http": {
+    "app": "./backend/app/graph/studio_http.py:app",
+    "cors": {
+      "allow_origins": ["https://smith.langchain.com"],
+      "allow_methods": ["*"],
+      "allow_headers": ["*"],
+      "expose_headers": ["x-pagination-total", "x-pagination-next", "content-location"]
+    }
+  }
+}

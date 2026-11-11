@@ -83,6 +83,9 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 
+# LangGraph dev server (`langgraph dev`) — local thread/checkpoint store
+.langgraph_api/
+
 # ==========================================
 # Docker
 # ==========================================

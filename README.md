@@ -197,9 +197,10 @@ See [architecture.md](architecture.md) for detailed Mermaid diagrams of the Lang
 salesforce-langgraph-ai-lead-bot/
 ├── README.md
 ├── architecture.md
-├── .env.example
+├── env.example
 ├── .gitignore
 ├── LICENSE
+├── langgraph.json                   # `langgraph dev` config (dev only)
 │
 ├── images/                          # Screenshots for README
 │   ├── tars-demo-screenshot.jpg
@@ -218,6 +219,8 @@ salesforce-langgraph-ai-lead-bot/
 │   │   │   ├── nodes.py             # All graph node functions
 │   │   │   ├── edges.py             # Conditional routing logic
 │   │   │   ├── graph.py             # Graph builder + compilation
+│   │   │   ├── studio.py            # LangGraph Studio entrypoint (dev only)
+│   │   │   ├── studio_http.py       # langgraph dev request guard (dev only)
 │   │   │   └── prompts.py           # System prompts (TARS persona)
 │   │   ├── tools/
 │   │   │   ├── salesforce.py        # Salesforce API wrappers
@@ -309,6 +312,42 @@ curl -X POST https://salesforce-langgraph-ai-lead-bot.purplesky-0949fcd0.central
 | `LOG_LEVEL` | No | `INFO` | Python logging level |
 
 \* Only the key for the configured `LLM_PROVIDER` is required.
+
+---
+
+## Debug in LangGraph Studio
+
+Dev only: step through the TARS graph node by node in LangGraph Studio. None of this is installed or run in the production image (the image copies `app/`, so `studio.py` and `studio_http.py` are in it, but nothing imports them).
+
+```bash
+# from the repo root, in your dev virtualenv
+pip install -r backend/requirements-studio.txt   # dev deps + langgraph-cli[inmem], langgraph-api
+langgraph dev --no-browser
+```
+
+`langgraph dev` reads `langgraph.json`, loads the graph `tars` from `backend/app/graph/studio.py` with the variables in your local `.env`, and serves it on `http://127.0.0.1:2024`. It brings its own persistence, stored in `.langgraph_api/` (gitignored).
+
+Then open Studio in your browser (it needs a free LangSmith account to log in):
+
+```
+https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
+```
+
+If `langgraph dev` runs on a remote Linux machine, forward the port from your laptop first, then open the same URL there:
+
+```bash
+ssh -L 2024:127.0.0.1:2024 <user>@<linux-host>
+```
+
+How a Studio run differs from the API server:
+
+- It uses the real LLM provider and Salesforce credentials in `.env`, so a conversation that reaches an accepted confirmation creates a real Lead and Task.
+- The masked LangSmith tracer isn't attached, so the graph refuses to load while LangSmith tracing is on: each of `LANGSMITH_TRACING`, `LANGSMITH_TRACING_V2`, `LANGCHAIN_TRACING_V2` and `LANGCHAIN_TRACING` must be unset or false. `langgraph dev` turns tracing on by itself whenever a LangSmith API key is set and none of them is, so a `.env` with `LANGSMITH_API_KEY` also needs `LANGSMITH_TRACING=false`.
+- The dev server has no auth: anything that can reach port 2024 can read threads (visitor details included), spend LLM tokens and run any node, Salesforce writes included. It can also call `POST /deploy`, which runs `langgraph deploy` and, if `.env` holds a LangSmith API key, starts a LangSmith Cloud deployment of this project carrying every `.env` value except a few reserved names (the LLM and Salesforce credentials included) as deployment secrets; the guard's `Origin` rule below keeps other browser pages off it, but a client with no `Origin` (or a page on Studio's origin) can still call it, because the guard is not auth. Keep it on `127.0.0.1` and stop it when you're done. Two limits help against other pages open in your browser, but neither is auth:
+  - CORS in `langgraph.json` allows only `https://smith.langchain.com`, so other origins can't read HTTP replies or send requests that need a preflight (JSON POSTs). It doesn't cover WebSockets or "simple" requests, such as a `text/plain`, form or bodyless POST.
+  - `backend/app/graph/studio_http.py`, mounted as the dev server's `http.app`, checks every HTTP request and WebSocket handshake first. It refuses a `Host` other than `127.0.0.1`, `localhost` or `[::1]` (403), which stops DNS rebinding. It also refuses any WebSocket (the run event stream included), and any request other than GET, HEAD or OPTIONS, that comes from an `Origin` other than `https://smith.langchain.com` or the dev server's own origin (`http://` plus the `Host` you opened it on, so its own `/docs` page works) (403). And it answers 415 to a POST body that isn't `application/json`. So a page from another origin open in your browser, including one served by another local server such as `http://localhost:5173`, can't open the event socket, create threads, start runs or wipe threads (checked with curl and a WebSocket client, not yet in a real browser). Requests with no `Origin` (curl, the SDK) pass. Because of the `Host` check, `langgraph dev --tunnel` or a non-loopback `--host` won't work.
+- The site index isn't loaded, so site questions get the "can't reach the site's article index" reply.
+- Start a thread with input `{"messages": []}` to get the greeting, then send one human message per turn (`{"messages": [{"type": "human", "content": "..."}]}`; the `messages` reducer turns message dicts into message objects).
 
 ---
 
