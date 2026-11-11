@@ -323,13 +323,9 @@ async def create_lead(
         payload["Description"] = description[:32000]
 
     # --- Create the record ---
-    logger.info(
-        "Creating Salesforce Lead: %s %s at %s",
-        payload.get("FirstName", ""),
-        payload.get("LastName", ""),
-        payload.get("Company", ""),
-    )
-    logger.debug("Lead payload: %s", payload)
+    # Field names only: the values are the visitor's contact details.
+    logger.info("Creating Salesforce Lead (%d fields)", len(payload))
+    logger.debug("Lead payload fields: %s", sorted(payload))
 
     result = await _sf_call_with_retry(lambda sf: sf.Lead.create(payload))
 
@@ -387,7 +383,8 @@ async def create_transcript_task(
     }
 
     logger.info("Creating Salesforce Task for Lead %s: %s", lead_id, subject)
-    logger.debug("Task payload: %s", payload)
+    # The transcript's length only: the payload holds the whole chat.
+    logger.debug("Task payload: transcript_len=%d", len(payload["Description"]))
 
     result = await _sf_call_with_retry(lambda sf: sf.Task.create(payload))
 

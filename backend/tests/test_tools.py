@@ -7,6 +7,7 @@ Salesforce tests mock the simple_salesforce client.
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -378,6 +379,56 @@ class TestSalesforceTools:
                     lead_id="00Q000000000001",
                     transcript="test",
                 )
+
+    # The write's log lines, down to DEBUG, name fields and lengths, never values.
+
+    @pytest.mark.asyncio
+    async def test_create_lead_logs_no_lead_values(self, caplog):
+        mock_sf = MagicMock()
+        mock_sf.Lead.create.return_value = {"success": True, "id": "00Q000000000001"}
+        lead_data = {
+            "first_name": "Augusta",
+            "last_name": "Lovelace",
+            "email": "ada@acme-corp.example",
+            "company": "Analytical Engines",
+            "phone": "(210) 555-0123",
+        }
+
+        with (
+            caplog.at_level(logging.DEBUG, logger="app.tools.salesforce"),
+            patch("app.tools.salesforce._get_sf_client", return_value=mock_sf),
+        ):
+            from app.tools.salesforce import create_lead
+
+            await create_lead(
+                lead_data=lead_data,
+                qualification_data={"pain_points": ["slow reporting"]},
+                description="Wants a demo next week.",
+            )
+
+        assert "Creating Salesforce Lead" in caplog.text
+        for value in (*lead_data.values(), "slow reporting", "Wants a demo next week."):
+            assert value not in caplog.text
+        assert "Lead payload fields: ['Company', 'Description', 'Email'" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_create_transcript_task_logs_no_transcript(self, caplog):
+        mock_sf = MagicMock()
+        mock_sf.Task.create.return_value = {"success": True, "id": "00T000000000001"}
+        transcript = "Visitor: reach me at ada@acme-corp.example or (210) 555-0123"
+
+        with (
+            caplog.at_level(logging.DEBUG, logger="app.tools.salesforce"),
+            patch("app.tools.salesforce._get_sf_client", return_value=mock_sf),
+        ):
+            from app.tools.salesforce import create_transcript_task
+
+            await create_transcript_task(lead_id="00Q000000000001", transcript=transcript)
+
+        assert "Creating Salesforce Task" in caplog.text
+        assert "ada@acme-corp.example" not in caplog.text
+        assert "555-0123" not in caplog.text
+        assert f"Task payload: transcript_len={len(transcript)}" in caplog.text
 
 
 # ---------------------------------------------------------------------------

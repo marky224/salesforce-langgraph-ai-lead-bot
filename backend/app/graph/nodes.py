@@ -334,7 +334,7 @@ def _safe_parse_json(text: str) -> dict:
     if brace_pos > 0:
         preamble = cleaned[:brace_pos].strip()
         if preamble:
-            logger.debug("Stripping JSON preamble: '%.80s'", preamble)
+            logger.debug("Stripping JSON preamble (%d chars)", len(preamble))
         cleaned = cleaned[brace_pos:]
 
     # Strip any trailing text after the last '}'
@@ -347,10 +347,11 @@ def _safe_parse_json(text: str) -> dict:
     except (json.JSONDecodeError, ValueError):
         global _parse_failure_count  # noqa: PLW0603
         _parse_failure_count += 1
+        # The length only: the model's output repeats what the visitor typed.
         logger.warning(
-            "Failed to parse LLM JSON output (count=%d): %.200s",
+            "Failed to parse LLM JSON output (count=%d, len=%d)",
             _parse_failure_count,
-            text,
+            len(text),
         )
         return {}
 
@@ -1082,21 +1083,23 @@ async def router_node(state: GraphState) -> dict:
     )
     parsed = await _invoke_structured(prompt, [], _RouterDecision, node="router")
 
+    # The log names a known decision only: the model's ``reasoning``, and a
+    # ``next_stage`` it made up, are free text that can repeat the visitor.
     next_stage_str = parsed.get("next_stage", "discovery")
-    reasoning = parsed.get("reasoning", "")
-    logger.info("Router decision: %s — %s", next_stage_str, reasoning)
 
     # A site question is a detour, not a stage: flag it for site_answer and
     # leave ``stage`` (and the early-exit count) as they are.
     if next_stage_str == SITE_QUESTION:
+        logger.info("Router decision: %s", SITE_QUESTION)
         return {"site_question": True}
 
     # Map string to enum (fallback to discovery if unrecognised)
     try:
         next_stage = ConversationStage(next_stage_str)
     except ValueError:
-        logger.warning("Unrecognised stage '%s', defaulting to discovery", next_stage_str)
+        logger.warning("Unrecognised stage from the router, defaulting to discovery")
         next_stage = ConversationStage.DISCOVERY
+    logger.info("Router decision: %s", next_stage.value)
 
     # Every other decision clears the flag, so a stale one can't misroute.
     result: dict[str, Any] = {"stage": next_stage, "site_question": False}
@@ -1128,9 +1131,13 @@ async def error_node(state: GraphState) -> dict:
     "Salesforce integration failed" log line, so the reply promises a
     follow-up only when there is an email or phone to follow up with.
     """
-    logger.warning("Node: error — %s", state.get("error", "Unknown error"))
-
     error_msg = state.get("error") or ""
+    # The kind only: the error text quotes Salesforce's reply and the lookup URL,
+    # which can hold lead fields. Its traceback is on the "Salesforce integration
+    # failed" line.
+    logger.warning(
+        "Node: error — %s", "Salesforce write failed" if "Salesforce" in error_msg else "other"
+    )
 
     if "Salesforce" in error_msg:
         lead_data = _gs(state, "lead_data")

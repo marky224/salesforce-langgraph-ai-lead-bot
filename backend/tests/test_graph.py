@@ -120,6 +120,26 @@ class TestSafeParseJson:
         result = _safe_parse_json('{"lead_data": {"email": "a@b.com"}}')
         assert result["lead_data"]["email"] == "a@b.com"
 
+    # The model's output repeats what the visitor typed, so the log gets a length.
+
+    def test_a_parse_failure_logs_the_length_not_the_text(self, caplog):
+        raw = '{"lead_data": {"email": "ada@acme-corp.example", "phone": "(210) 555-0123"'
+
+        with caplog.at_level(logging.WARNING, logger="app.graph.nodes"):
+            assert _safe_parse_json(raw) == {}
+
+        assert "Failed to parse LLM JSON output" in caplog.text
+        assert "ada@acme-corp.example" not in caplog.text
+        assert "555-0123" not in caplog.text
+        assert f"len={len(raw)}" in caplog.text
+
+    def test_a_stripped_preamble_is_not_logged(self, caplog):
+        with caplog.at_level(logging.DEBUG, logger="app.graph.nodes"):
+            assert _safe_parse_json('For ada@acme-corp.example: {"a": 1}') == {"a": 1}
+
+        assert "Stripping JSON preamble" in caplog.text
+        assert "ada@acme-corp.example" not in caplog.text
+
 
 class TestMergeDict:
     """Tests for _merge_dict."""
@@ -449,6 +469,43 @@ class TestRouterNode:
         result = await router_node(conversation_state)
         assert result.get("retry_count") == 1
 
+    # The router's reasoning, and a stage name it made up, are model text that
+    # can repeat the visitor, so the log names a known decision only.
+
+    @pytest.mark.asyncio
+    async def test_the_decision_is_logged_without_the_reasoning(
+        self, conversation_state, mock_llm, caplog
+    ):
+        mock_llm.ainvoke.return_value = MagicMock(
+            content=json.dumps({
+                "next_stage": "qualification",
+                "reasoning": "Ada (ada@acme-corp.example, 210-555-0123) asked about pricing.",
+            })
+        )
+
+        with caplog.at_level(logging.INFO, logger="app.graph.nodes"):
+            await router_node(conversation_state)
+
+        assert "Router decision: qualification" in caplog.text
+        assert "ada@acme-corp.example" not in caplog.text
+        assert "210-555-0123" not in caplog.text
+        assert "asked about pricing" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_an_unrecognised_stage_is_logged_without_its_text(
+        self, conversation_state, mock_llm, caplog
+    ):
+        mock_llm.ainvoke.return_value = MagicMock(
+            content=json.dumps({"next_stage": "email ada@acme-corp.example"})
+        )
+
+        with caplog.at_level(logging.INFO, logger="app.graph.nodes"):
+            result = await router_node(conversation_state)
+
+        assert result["stage"] == ConversationStage.DISCOVERY
+        assert "Unrecognised stage" in caplog.text
+        assert "ada@acme-corp.example" not in caplog.text
+
 
 # ---------------------------------------------------------------------------
 # Salesforce node tests (the Salesforce tools are mocked)
@@ -494,6 +551,46 @@ class TestSalesforceNode:
         assert create_task.await_args.kwargs["lead_id"] == "00QKEPT"
         assert result["salesforce_lead_id"] == "00QKEPT"
         assert result["salesforce_task_id"] == "00TNEW"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("log_format", ["text", "json"])
+    async def test_a_failed_lookup_logs_its_traceback_without_the_email_or_phone(
+        self, base_state, caplog, log_format
+    ):
+        """
+        simple_salesforce's error text quotes the request URL, and the lookup's URL
+        carries the email, percent-encoded as requests sends it; Salesforce's reply
+        can quote field values. The traceback stays in the log, masked.
+        """
+        from simple_salesforce.exceptions import SalesforceMalformedRequest
+
+        from app.config import _build_formatter
+        from app.logging_ctx import RequestContextFilter
+
+        sf = MagicMock()
+        sf.query.side_effect = SalesforceMalformedRequest(
+            "https://example.my.salesforce.com/services/data/v59.0/query/?q=SELECT+Id+FROM+Lead"
+            "+WHERE+Email+%3D+%27ada%40acme-corp.example%27+ORDER+BY+CreatedDate+DESC+LIMIT+1",
+            400,
+            "query",
+            [{"message": "near 'ada@acme-corp.example', phone (210) 555-0123"}],
+        )
+        base_state["lead_data"] = {"email": "ada@acme-corp.example", "company": "Acme"}
+
+        with (
+            caplog.at_level(logging.ERROR, logger="app.graph.nodes"),
+            patch("app.tools.salesforce._get_sf_client", return_value=sf),
+        ):
+            await salesforce_node(base_state)
+
+        [record] = [r for r in caplog.records if r.getMessage() == "Salesforce integration failed"]
+        RequestContextFilter().filter(record)  # the text format needs request_id / thread_id
+        line = _build_formatter(log_format).format(record)
+
+        assert "SalesforceMalformedRequest" in line  # the traceback is still there
+        assert "acme-corp.example" not in line
+        assert "555-0123" not in line
+        assert "[EMAIL]" in line and "[PHONE]" in line
 
 
 class TestSalesforceNodeClosingReply:
@@ -614,6 +711,25 @@ class TestErrorNode:
 
         result = await error_node(base_state)
         assert result["error"] is None
+
+    @pytest.mark.asyncio
+    async def test_the_error_text_is_not_logged(self, base_state, caplog):
+        # What salesforce_node stores after a failed lookup: the exception's text,
+        # with the query URL (the email, percent-encoded) and Salesforce's reply.
+        base_state["error"] = (
+            "Salesforce error: Malformed request https://example.my.salesforce.com"
+            "/services/data/v59.0/query/?q=SELECT+Id+FROM+Lead+WHERE+Email+%3D+"
+            "%27ada%40acme-corp.example%27. Response content: [{'message': "
+            "'Phone: data value too large: (210) 555-0123'}]"
+        )
+
+        with caplog.at_level(logging.WARNING, logger="app.graph.nodes"):
+            await error_node(base_state)
+
+        assert "Node: error" in caplog.text
+        assert "acme-corp.example" not in caplog.text
+        assert "555-0123" not in caplog.text
+        assert "Node: error — Salesforce write failed" in caplog.text
 
 
 # ---------------------------------------------------------------------------
