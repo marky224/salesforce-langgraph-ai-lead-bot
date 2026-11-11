@@ -30,7 +30,7 @@ from urllib.parse import urlsplit
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.logging_ctx import JsonLogFormatter, RequestContextFilter
+from app.logging_ctx import JsonLogFormatter, PiiMaskingFormatter, RequestContextFilter
 
 logger = logging.getLogger(__name__)
 
@@ -517,10 +517,14 @@ def _build_xai(model: str, temperature: float, s: Settings) -> Any:
 # ---------------------------------------------------------------------------
 
 def _build_formatter(log_format: str) -> logging.Formatter:
-    """Return the JSON formatter when ``log_format == 'json'``, else the text one."""
+    """
+    Return the JSON formatter when ``log_format == 'json'``, else the text one.
+
+    Both mask emails and phone numbers in a record's traceback.
+    """
     if log_format.lower() == "json":
         return JsonLogFormatter()
-    return logging.Formatter(
+    return PiiMaskingFormatter(
         fmt="%(asctime)s | %(levelname)-8s | %(name)s | "
         "req=%(request_id)s thread=%(thread_id)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",

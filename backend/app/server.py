@@ -354,9 +354,9 @@ async def chat(request: Request, payload: ChatRequest) -> ChatResponse:
     thread_id_var.set(thread_id)
 
     logger.info(
-        "Chat request: thread=%s, message=%.80s",
+        "Chat request: thread=%s, message_len=%d",
         thread_id,
-        payload.message,
+        len(payload.message),
     )
 
     config = _run_config(thread_id)
@@ -428,9 +428,9 @@ async def chat_stream(request: Request, payload: ChatRequest) -> StreamingRespon
     thread_id_var.set(thread_id)
 
     logger.info(
-        "Stream request: thread=%s, message=%.80s",
+        "Stream request: thread=%s, message_len=%d",
         thread_id,
-        payload.message,
+        len(payload.message),
     )
 
     config = _run_config(thread_id)

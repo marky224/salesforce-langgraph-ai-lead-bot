@@ -915,3 +915,43 @@ def test_chat_stream_after_a_saved_lead_replies_once_and_writes_nothing(client):
     assert done["stage"] == "complete"
     assert done["is_complete"] is True
     assert done["lead_id"] == "00Q000TEST00001"
+
+
+# ---------------------------------------------------------------------------
+# No visitor email, phone or message text in the log
+# ---------------------------------------------------------------------------
+# The log goes to stdout and from there to Log Analytics, so a turn's lines, from
+# every logger and down to DEBUG, carry ids and lengths only. The fake model
+# repeats the visitor's details as a real extraction reply does (cut-off JSON
+# here, so the parse-failure line is written too).
+
+VISITOR_EMAIL = "ada@acme-corp.example"
+VISITOR_PHONE = "(210) 555-0123"
+VISITOR_MESSAGE = f"Could someone call me? I'm at {VISITOR_EMAIL} or {VISITOR_PHONE}."
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "request_line", "ip"),
+    [
+        ("/chat", "Chat request", "203.0.113.60"),
+        ("/chat/stream", "Stream request", "203.0.113.61"),
+    ],
+    ids=["chat", "chat-stream"],
+)
+def test_a_turn_logs_neither_the_email_nor_the_phone(client, caplog, endpoint, request_line, ip):
+    from app.graph.nodes import set_llm
+
+    model_reply = f'{{"lead_data": {{"email": "{VISITOR_EMAIL}", "phone": "{VISITOR_PHONE}"'
+    set_llm(GenericFakeChatModel(messages=itertools.cycle([AIMessage(content=model_reply)])))
+    caplog.set_level(logging.DEBUG)  # the root logger: every logger, every level
+
+    resp = client.post(
+        endpoint, json={"message": VISITOR_MESSAGE}, headers={"X-Forwarded-For": ip}
+    )
+
+    assert resp.status_code == 200
+    assert f"{request_line}: thread=" in caplog.text
+    assert VISITOR_EMAIL not in caplog.text
+    assert "555-0123" not in caplog.text
+    assert "Could someone call me" not in caplog.text
+    assert f"message_len={len(VISITOR_MESSAGE)}" in caplog.text
