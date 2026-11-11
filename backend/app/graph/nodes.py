@@ -377,9 +377,12 @@ async def _invoke_structured(
                 return result.model_dump(exclude_none=True)
             if isinstance(result, dict):
                 return result
-        except Exception:
+        except Exception as exc:
+            # The class only: langchain's parse error quotes the whole completion,
+            # which repeats what the visitor typed.
             logger.warning(
-                "Structured output failed; falling back to JSON parse", exc_info=True
+                "Structured output failed; falling back to JSON parse (%s)",
+                type(exc).__name__,
             )
 
     raw = await _invoke_llm(system_prompt, messages, node=node)

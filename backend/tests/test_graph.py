@@ -1153,6 +1153,36 @@ class TestStructuredOutput:
         llm.ainvoke.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_a_structured_failure_logs_the_error_class_not_the_completion(
+        self, monkeypatch, conversation_state, caplog
+    ):
+        """langchain's parse error quotes the whole completion, which repeats the visitor."""
+        from langchain_core.exceptions import OutputParserException
+        from langchain_core.output_parsers import PydanticOutputParser
+
+        completion = '{"lead_data": "Augusta Lovelace of Analytical Engines"}'
+        with pytest.raises(OutputParserException) as parse_error:
+            PydanticOutputParser(pydantic_object=_ExtractionResult).parse(completion)
+        assert completion in str(parse_error.value)  # langchain's own text has it
+
+        _enable_structured(monkeypatch)
+        llm = MagicMock()
+        structured = MagicMock()
+        structured.ainvoke = AsyncMock(side_effect=parse_error.value)
+        llm.with_structured_output = MagicMock(return_value=structured)
+        llm.ainvoke = AsyncMock(return_value=MagicMock(content="{}"))
+        set_llm(llm)
+
+        with caplog.at_level(logging.WARNING, logger="app.graph.nodes"):
+            await extraction_node(conversation_state)
+
+        assert "Structured output failed; falling back to JSON parse" in caplog.text
+        for value in ("Augusta", "Lovelace", "Analytical Engines"):
+            assert value not in caplog.text
+        assert "OutputParserException" in caplog.text
+        llm.ainvoke.assert_called_once()  # it still falls back
+
+    @pytest.mark.asyncio
     async def test_disabled_by_default_uses_json_path(self, conversation_state, mock_llm):
         # No flag set → structured output off → plain ainvoke + JSON parse.
         mock_llm.ainvoke.return_value = MagicMock(
