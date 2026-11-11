@@ -1025,9 +1025,18 @@ async def salesforce_node(state: GraphState) -> dict:
         }
 
     except Exception as exc:
+        from app.tools.salesforce import salesforce_error_summary
+
         # The failed-write alert in Azure Monitor matches this exact text and
-        # the thread id on the line.
-        logger.exception("Salesforce integration failed")
+        # the thread id on the line. A Salesforce API error, also one in the
+        # raised exception's chain, gets no traceback (its text quotes the
+        # lookup URL and Salesforce's reply): the next line gives its class,
+        # status, errorCode(s) and field names. The summary never raises, so
+        # this line is always written.
+        summary = salesforce_error_summary(exc)
+        logger.error("Salesforce integration failed", exc_info=summary is None)
+        if summary:
+            logger.error("Salesforce error detail: %s", summary)
         result: dict[str, Any] = {
             "error": f"Salesforce error: {exc}",
             "stage": ConversationStage.COMPLETE,
@@ -1133,8 +1142,8 @@ async def error_node(state: GraphState) -> dict:
     """
     error_msg = state.get("error") or ""
     # The kind only: the error text quotes Salesforce's reply and the lookup URL,
-    # which can hold lead fields. Its traceback is on the "Salesforce integration
-    # failed" line.
+    # which can hold lead fields. The failure's detail is logged with the
+    # "Salesforce integration failed" line.
     logger.warning(
         "Node: error — %s", "Salesforce write failed" if "Salesforce" in error_msg else "other"
     )

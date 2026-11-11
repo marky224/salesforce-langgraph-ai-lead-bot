@@ -115,6 +115,20 @@ def test_json_formatter_emits_structured_fields():
     assert out["thread_id"] == "thread-9"
 
 
+def test_mask_pii_masks_emails_also_percent_encoded_and_phones():
+    """What both formatters apply to a traceback (the LangSmith tracer's patterns)."""
+    from app.logging_ctx import mask_pii
+
+    masked = mask_pii(
+        "to=ada%40acme-corp.example for ada@acme-corp.example, phone (210) 555-0123"
+    )
+
+    assert "acme-corp.example" not in masked
+    assert "555-0123" not in masked
+    assert masked.count("[EMAIL]") == 2
+    assert "[PHONE]" in masked
+
+
 def test_configure_logging_quiets_httpx2_loggers():
     """The anthropic SDK logs through httpx2/httpcore2; quiet them like httpx/httpcore."""
     import logging

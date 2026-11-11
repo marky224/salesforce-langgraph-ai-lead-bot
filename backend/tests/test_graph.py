@@ -554,13 +554,15 @@ class TestSalesforceNode:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("log_format", ["text", "json"])
-    async def test_a_failed_lookup_logs_its_traceback_without_the_email_or_phone(
+    async def test_a_salesforce_error_logs_its_status_code_and_fields_not_its_text(
         self, base_state, caplog, log_format
     ):
         """
-        simple_salesforce's error text quotes the request URL, and the lookup's URL
-        carries the email, percent-encoded as requests sends it; Salesforce's reply
-        can quote field values. The traceback stays in the log, masked.
+        simple_salesforce's error text quotes the request URL and Salesforce's
+        reply, and the reply's message repeats the value it rejected: here a name,
+        a company and an email with no top-level domain, which the traceback
+        masking doesn't match. The log gets the error's class, status, errorCodes
+        and field names, and no traceback.
         """
         from simple_salesforce.exceptions import SalesforceMalformedRequest
 
@@ -568,12 +570,71 @@ class TestSalesforceNode:
         from app.logging_ctx import RequestContextFilter
 
         sf = MagicMock()
-        sf.query.side_effect = SalesforceMalformedRequest(
-            "https://example.my.salesforce.com/services/data/v59.0/query/?q=SELECT+Id+FROM+Lead"
-            "+WHERE+Email+%3D+%27ada%40acme-corp.example%27+ORDER+BY+CreatedDate+DESC+LIMIT+1",
+        sf.query.return_value = {"records": []}  # dedup miss → create is reached
+        sf.Lead.create.side_effect = SalesforceMalformedRequest(
+            "https://example.my.salesforce.com/services/data/v59.0/sobjects/Lead/",
             400,
-            "query",
-            [{"message": "near 'ada@acme-corp.example', phone (210) 555-0123"}],
+            "Lead",
+            [
+                {
+                    "message": "Email: invalid email address: augusta@analytical-engines",
+                    "errorCode": "INVALID_EMAIL_ADDRESS",
+                    "fields": ["Email"],
+                },
+                {
+                    "message": "Company: data value too large: Analytical Engines of Augusta Lovelace",
+                    "errorCode": "STRING_TOO_LONG",
+                    "fields": ["Company"],
+                },
+            ],
+        )
+        base_state["lead_data"] = {
+            "first_name": "Augusta",
+            "last_name": "Lovelace",
+            "email": "augusta@analytical-engines",
+            "company": "Analytical Engines of Augusta Lovelace",
+        }
+
+        with (
+            caplog.at_level(logging.ERROR, logger="app.graph.nodes"),
+            patch("app.tools.salesforce._get_sf_client", return_value=sf),
+        ):
+            await salesforce_node(base_state)
+
+        formatter = _build_formatter(log_format)
+        lines = []
+        for record in caplog.records:
+            RequestContextFilter().filter(record)  # the text format needs request_id / thread_id
+            lines.append(formatter.format(record))
+        log = "\n".join(lines)
+
+        for value in ("Augusta", "Lovelace", "analytical-engines", "Analytical Engines"):
+            assert value not in log
+        assert "Traceback" not in log
+        assert "SalesforceMalformedRequest status=400" in log
+        assert "{'errorCode': 'INVALID_EMAIL_ADDRESS', 'fields': ['Email']}" in log
+        assert "{'errorCode': 'STRING_TOO_LONG', 'fields': ['Company']}" in log
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("log_format", ["text", "json"])
+    async def test_any_other_failure_keeps_its_traceback_with_the_email_masked(
+        self, base_state, caplog, log_format
+    ):
+        """
+        A failure that isn't a Salesforce API error keeps its traceback. requests'
+        error text quotes the URL, and the lookup's URL carries the email,
+        percent-encoded: the formatters mask it.
+        """
+        import requests
+
+        from app.config import _build_formatter
+        from app.logging_ctx import RequestContextFilter
+
+        sf = MagicMock()
+        sf.query.side_effect = requests.exceptions.ConnectionError(
+            "HTTPSConnectionPool(host='example.my.salesforce.com', port=443): Max retries "
+            "exceeded with url: /services/data/v59.0/query/?q=SELECT+Id+FROM+Lead+WHERE+Email"
+            "+%3D+%27ada%40acme-corp.example%27+ORDER+BY+CreatedDate+DESC+LIMIT+1"
         )
         base_state["lead_data"] = {"email": "ada@acme-corp.example", "company": "Acme"}
 
@@ -583,14 +644,98 @@ class TestSalesforceNode:
         ):
             await salesforce_node(base_state)
 
-        [record] = [r for r in caplog.records if r.getMessage() == "Salesforce integration failed"]
+        [record] = caplog.records  # no detail line: this isn't a Salesforce API error
+        assert record.getMessage() == "Salesforce integration failed"
         RequestContextFilter().filter(record)  # the text format needs request_id / thread_id
         line = _build_formatter(log_format).format(record)
 
-        assert "SalesforceMalformedRequest" in line  # the traceback is still there
+        assert "ConnectionError" in line  # the traceback is still there
         assert "acme-corp.example" not in line
-        assert "555-0123" not in line
-        assert "[EMAIL]" in line and "[PHONE]" in line
+        assert "[EMAIL]" in line
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("log_format", ["text", "json"])
+    async def test_a_salesforce_error_under_another_failure_logs_no_traceback(
+        self, base_state, caplog, log_format
+    ):
+        """
+        The lookup's session has expired and the re-auth then fails: the
+        ConnectionError carries the SalesforceExpiredSession as its context, and
+        a traceback would print the lookup URL with an email the masking doesn't
+        match (no top-level domain). The log gets no traceback; the detail line
+        names the raised class and the Salesforce error's summary.
+        """
+        import requests
+        from simple_salesforce.exceptions import SalesforceExpiredSession
+
+        from app.config import _build_formatter
+        from app.logging_ctx import RequestContextFilter
+
+        sf = MagicMock()
+        sf.query.side_effect = SalesforceExpiredSession(
+            "https://example.my.salesforce.com/services/data/v59.0/query/?q=SELECT+Id+FROM+Lead"
+            "+WHERE+Email+%3D+%27augusta%40analytical-engines%27+ORDER+BY+CreatedDate+DESC+LIMIT+1",
+            401,
+            "query",
+            [{"message": "Session expired or invalid", "errorCode": "INVALID_SESSION_ID"}],
+        )
+        reauth = requests.exceptions.ConnectionError(
+            "HTTPSConnectionPool(host='example.my.salesforce.com', port=443): Max retries "
+            "exceeded with url: /services/oauth2/token"
+        )
+        base_state["lead_data"] = {
+            "email": "augusta@analytical-engines",
+            "company": "Analytical Engines",
+        }
+
+        with (
+            caplog.at_level(logging.ERROR, logger="app.graph.nodes"),
+            # The lookup's client, then the re-auth after reset_sf_client().
+            patch("app.tools.salesforce._get_sf_client", side_effect=[sf, reauth]),
+        ):
+            await salesforce_node(base_state)
+
+        formatter = _build_formatter(log_format)
+        lines = []
+        for record in caplog.records:
+            RequestContextFilter().filter(record)  # the text format needs request_id / thread_id
+            lines.append(formatter.format(record))
+        log = "\n".join(lines)
+
+        for value in ("analytical-engines", "Analytical Engines", "Expired session", "SELECT"):
+            assert value not in log
+        assert "Traceback" not in log
+        assert [r.getMessage() for r in caplog.records].count("Salesforce integration failed") == 1
+        assert (
+            "Salesforce error detail: ConnectionError after SalesforceExpiredSession status=401 "
+            "errors=[{'errorCode': 'INVALID_SESSION_ID', 'fields': None}]"
+        ) in log
+
+    @pytest.mark.asyncio
+    async def test_the_alert_line_is_written_when_no_summary_can_be_built(
+        self, base_state, caplog, monkeypatch
+    ):
+        """
+        simple_salesforce's exceptions module can't be imported: that is the
+        failure, and the summary needs that module too. The alert line is still
+        written, with its traceback, and the node still returns the error state.
+        """
+        import simple_salesforce  # noqa: F401  (loaded first: only its exceptions module is missing)
+
+        monkeypatch.setitem(sys.modules, "simple_salesforce.exceptions", None)
+        base_state["lead_data"] = {"email": "ada@acme-corp.example", "company": "Acme"}
+
+        with (
+            caplog.at_level(logging.ERROR, logger="app.graph.nodes"),
+            patch("app.tools.salesforce._get_sf_client", return_value=MagicMock()),
+        ):
+            result = await salesforce_node(base_state)
+
+        [record] = caplog.records
+        assert record.getMessage() == "Salesforce integration failed"
+        assert record.exc_info is not None  # the traceback, as for any other failure
+        assert "Salesforce" in result["error"]
+        assert result["stage"] == ConversationStage.COMPLETE
 
 
 class TestSalesforceNodeClosingReply:

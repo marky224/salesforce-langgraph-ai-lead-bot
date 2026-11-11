@@ -205,6 +205,47 @@ async def _sf_call_with_retry(operation: Any) -> Any:
         return await _run_sync(lambda: operation(_get_sf_client()))
 
 
+def salesforce_error_summary(exc: BaseException) -> str | None:
+    """
+    A Salesforce API error as its class, HTTP status, errorCode(s) and field
+    names, or ``None`` when no ``SalesforceError`` is in *exc*'s chain.
+
+    Log this, never the error's own text or traceback: the text quotes the
+    request URL (the lead lookup's carries the email) and Salesforce's reply,
+    whose ``message`` can repeat a name, a company or an email it rejected.
+    The chain (``__cause__`` and ``__context__``) is searched too, since a
+    traceback prints it: a re-auth that fails after an expired session raises
+    with the ``SalesforceExpiredSession`` as its context. The raised class then
+    comes first: ``ConnectionError after SalesforceExpiredSession status=401 ...``.
+
+    Never raises: when the summary can't be built it returns ``None``, so the
+    caller still writes its line, with the traceback as for any other failure.
+    """
+    try:
+        from simple_salesforce.exceptions import SalesforceError
+
+        chain = [exc]
+        for current in chain:  # grows as each one's cause and context are added
+            if isinstance(current, SalesforceError):
+                # Annotated bytes, but it is the reply as simple_salesforce parsed it:
+                # a list of error dicts, or the body's text when it wasn't JSON.
+                content: Any = current.content
+                errors = [
+                    {"errorCode": item.get("errorCode"), "fields": item.get("fields")}
+                    for item in (content if isinstance(content, list) else [content])
+                    if isinstance(item, dict)
+                ]
+                summary = f"{type(current).__name__} status={current.status} errors={errors}"
+                return summary if current is exc else f"{type(exc).__name__} after {summary}"
+            for linked in (current.__cause__, current.__context__):
+                # Compared by identity, so a cycle in the chain ends the walk.
+                if linked is not None and not any(linked is seen for seen in chain):
+                    chain.append(linked)
+        return None
+    except Exception:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Lead lookup (dedup)
 # ---------------------------------------------------------------------------
@@ -403,13 +444,16 @@ async def create_transcript_task(
             )
         )
         logger.info("Lead %s updated with Chat_Transcript_ID__c: %s", lead_id, task_id)
-    except Exception:
+    except Exception as exc:
         # Non-fatal — the Task is already linked via WhoId
+        summary = salesforce_error_summary(exc)
         logger.warning(
             "Failed to update Chat_Transcript_ID__c on Lead %s (non-fatal)",
             lead_id,
-            exc_info=True,
+            exc_info=summary is None,
         )
+        if summary:
+            logger.warning("Salesforce error detail: %s", summary)
 
     return task_id
 
@@ -472,6 +516,9 @@ async def delete_record(sobject: str, record_id: str) -> bool:
         )
         logger.info("Deleted %s record: %s", sobject, record_id)
         return True
-    except Exception:
-        logger.warning("Failed to delete %s %s", sobject, record_id, exc_info=True)
+    except Exception as exc:
+        summary = salesforce_error_summary(exc)
+        logger.warning("Failed to delete %s %s", sobject, record_id, exc_info=summary is None)
+        if summary:
+            logger.warning("Salesforce error detail: %s", summary)
         return False
