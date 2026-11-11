@@ -520,7 +520,8 @@ def _build_formatter(log_format: str) -> logging.Formatter:
     """
     Return the JSON formatter when ``log_format == 'json'``, else the text one.
 
-    Both mask emails and phone numbers in a record's traceback.
+    Both mask emails, phone numbers and a SOQL query string in a record's
+    traceback.
     """
     if log_format.lower() == "json":
         return JsonLogFormatter()

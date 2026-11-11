@@ -129,6 +129,25 @@ def test_mask_pii_masks_emails_also_percent_encoded_and_phones():
     assert "[PHONE]" in masked
 
 
+def test_mask_pii_drops_the_lead_lookups_query():
+    """
+    The lookup's URL carries the email in its SOQL, and an email the pattern doesn't
+    match (here one with no top-level domain) would stay, so the whole query goes.
+    """
+    from app.logging_ctx import mask_pii
+
+    masked = mask_pii(
+        "Max retries exceeded with url: /services/data/v59.0/query/?q=SELECT+Id+FROM+Lead+WHERE"
+        "+Email+%3D+%27augusta%40analytical-engines%27+ORDER+BY+CreatedDate+DESC+LIMIT+1 "
+        "(Caused by NameResolutionError)"
+    )
+
+    assert masked == (
+        "Max retries exceeded with url: /services/data/v59.0/query/?q=[QUERY] "
+        "(Caused by NameResolutionError)"
+    )
+
+
 def test_configure_logging_quiets_httpx2_loggers():
     """The anthropic SDK logs through httpx2/httpcore2; quiet them like httpx/httpcore."""
     import logging

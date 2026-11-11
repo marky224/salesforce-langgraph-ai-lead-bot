@@ -647,7 +647,7 @@ class TestSalesforceNode:
         """
         A failure that isn't a Salesforce API error keeps its traceback. requests'
         error text quotes the URL, and the lookup's URL carries the email,
-        percent-encoded: the formatters mask it.
+        percent-encoded: the formatters mask it, and drop the lookup's query.
         """
         import requests
 
@@ -675,7 +675,8 @@ class TestSalesforceNode:
 
         assert "ConnectionError" in line  # the traceback is still there
         assert "acme-corp.example" not in line
-        assert "[EMAIL]" in line
+        assert "/services/data/v59.0/query/?q=[QUERY]" in line
+        assert "SELECT" not in line
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("log_format", ["text", "json"])

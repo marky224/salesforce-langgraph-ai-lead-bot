@@ -7,20 +7,25 @@ request (and per conversation turn) and injected into every log record by
 end-to-end in the logs.  Contextvars are async-safe: each request the event
 loop handles sees its own values with no cross-talk.
 
-The formatters mask emails and phone numbers in a record's traceback (see
-``PiiMaskingFormatter``).
+The formatters mask emails, phone numbers and a SOQL query string in a
+record's traceback (see ``PiiMaskingFormatter``).
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import re
 from contextvars import ContextVar
 from typing import Any
 
 # "-" is the at-rest sentinel so columns stay aligned before a request sets a value.
 request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
 thread_id_var: ContextVar[str] = ContextVar("thread_id", default="-")
+
+# A Salesforce SOQL query in a URL, as simple_salesforce sends it (.../query/?q=...).
+# The lead lookup's query holds the visitor's email.
+_SOQL_QUERY_RE = re.compile(r"(/query(?:All)?/\?q=)[^\s'\"]+")
 
 
 class RequestContextFilter(logging.Filter):
@@ -34,22 +39,26 @@ class RequestContextFilter(logging.Filter):
 
 def mask_pii(text: str) -> str:
     """
-    Mask emails and phone numbers in *text* with the LangSmith tracer's patterns.
+    Mask emails and phone numbers in *text* with the LangSmith tracer's patterns,
+    and drop a SOQL query string.
 
-    ``%40`` is read as ``@`` first: the Salesforce lead lookup carries the email
-    in its query URL, percent-encoded, and a failed request's error quotes that
-    URL. Best-effort, like the tracer: names, companies and chat text don't match.
+    The Salesforce lead lookup carries the email in its query URL, and a failed
+    request's error quotes that URL, so a SOQL query string is dropped whole
+    (an email the pattern doesn't match would otherwise stay). ``%40`` is then
+    read as ``@``, for an email percent-encoded anywhere else. Best-effort,
+    like the tracer: names, companies and chat text don't match.
     """
     # Imported here: app.tracing imports app.config, which imports this module.
     from app.tracing import _EMAIL_RE, _PHONE_RE
 
+    text = _SOQL_QUERY_RE.sub(r"\1[QUERY]", text)
     text = _EMAIL_RE.sub("[EMAIL]", text.replace("%40", "@"))
     return _PHONE_RE.sub("[PHONE]", text)
 
 
 class PiiMaskingFormatter(logging.Formatter):
     """
-    ``logging.Formatter`` with emails and phone numbers masked in the traceback.
+    ``logging.Formatter`` with the traceback masked by ``mask_pii``.
 
     An exception's text comes from Salesforce, the LLM provider or a parser and
     can quote lead fields, and the traceback is what a failure is debugged from,
