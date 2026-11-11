@@ -469,6 +469,22 @@ class TestFindLeadByEmail:
 
         mock_sf.query.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_a_found_lead_is_logged_by_id_without_the_email(self, caplog):
+        mock_sf = MagicMock()
+        mock_sf.query.return_value = {"records": [{"Id": "00Qexisting00001"}]}
+
+        with (
+            caplog.at_level(logging.DEBUG, logger="app.tools.salesforce"),
+            patch("app.tools.salesforce._get_sf_client", return_value=mock_sf),
+        ):
+            from app.tools.salesforce import find_lead_by_email
+
+            assert await find_lead_by_email("dup@acme.com") == "00Qexisting00001"
+
+        assert "Found existing Lead 00Qexisting00001" in caplog.text
+        assert "dup@acme.com" not in caplog.text
+
 
 class TestSalesforceNodeDedup:
     """salesforce_node reuses an existing Lead instead of creating a duplicate."""
