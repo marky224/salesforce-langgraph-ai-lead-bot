@@ -419,6 +419,50 @@ class TestSalesforceFailure:
             assert result.get("error") is None or "Salesforce" in str(result.get("error", ""))
 
     @pytest.mark.asyncio
+    async def test_no_checkpoint_keeps_the_error_text(self):
+        """
+        Every step's checkpoint is kept, so the one written between the salesforce
+        and error nodes still holds ``error`` after the error node clears it. It
+        names the exception's class, never its text: here the lookup URL with the
+        email and Salesforce's reply.
+        """
+        from simple_salesforce.exceptions import SalesforceMalformedRequest
+
+        set_llm(ContentBasedMockLLM())
+
+        with patch("app.tools.salesforce._get_sf_client") as mock_client:
+            sf = MagicMock()
+            sf.query.side_effect = SalesforceMalformedRequest(
+                "https://example.my.salesforce.com/services/data/v59.0/query/?q=SELECT+Id+FROM"
+                "+Lead+WHERE+Email+%3D+%27ada%40acme-corp.example%27",
+                400,
+                "query",
+                [{"message": "unexpected token: 'Lovelace'", "errorCode": "MALFORMED_QUERY"}],
+            )
+            mock_client.return_value = sf
+
+            graph = build_graph()
+            config = {"configurable": {"thread_id": "e2e-sffail-002"}}
+
+            await graph.ainvoke({"messages": []}, config=config)
+            await graph.aupdate_state(
+                config,
+                {
+                    "stage": ConversationStage.CONFIRMATION,
+                    "lead_data": {"email": "ada@acme-corp.example", "company": "TestCo"},
+                },
+                as_node="greeting",
+            )
+            result = await graph.ainvoke(
+                {"messages": [HumanMessage(content="Yes, that's correct")]}, config=config
+            )
+
+        sf.query.assert_called_once()  # the write was tried
+        assert result.get("error") is None  # the error node cleared it
+        stored = {s.values.get("error") async for s in graph.aget_state_history(config)}
+        assert stored == {None, "Salesforce error: SalesforceMalformedRequest"}
+
+    @pytest.mark.asyncio
     async def test_retry_after_a_partial_write_creates_no_second_lead(self):
         """
         The Lead is saved but its Task fails; the visitor's next message retries

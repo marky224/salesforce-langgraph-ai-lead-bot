@@ -109,8 +109,9 @@ class GraphState(TypedDict, total=False):
         to exit early.  Capped at 1 to avoid being pushy.
 
     error : str | None
-        Human-readable error message if something goes wrong in an
-        external call (LLM, Salesforce).  Checked by the error node.
+        ``"Salesforce error: <exception class>"`` when the Salesforce write
+        fails: the class name only, never the exception's text.  Checked and
+        cleared by the error node.
 
     site_question : bool
         True when the latest visitor message asks about Mark's own articles

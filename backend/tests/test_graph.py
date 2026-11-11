@@ -553,6 +553,30 @@ class TestSalesforceNode:
         assert result["salesforce_task_id"] == "00TNEW"
 
     @pytest.mark.asyncio
+    async def test_a_failure_stores_the_error_class_not_its_text(self, base_state):
+        """
+        ``error`` is saved in the turn's checkpoint and uploaded with the LangSmith
+        trace. The exception's text quotes the lookup URL (the email, as ``%40``,
+        which the trace masking doesn't match) and Salesforce's reply.
+        """
+        from simple_salesforce.exceptions import SalesforceMalformedRequest
+
+        sf = MagicMock()
+        sf.query.side_effect = SalesforceMalformedRequest(
+            "https://example.my.salesforce.com/services/data/v59.0/query/?q=SELECT+Id+FROM+Lead"
+            "+WHERE+Email+%3D+%27ada%40acme-corp.example%27+ORDER+BY+CreatedDate+DESC+LIMIT+1",
+            400,
+            "query",
+            [{"message": "unexpected token: 'Lovelace'", "errorCode": "MALFORMED_QUERY"}],
+        )
+        base_state["lead_data"] = {"email": "ada@acme-corp.example", "company": "Acme"}
+
+        with patch("app.tools.salesforce._get_sf_client", return_value=sf):
+            result = await salesforce_node(base_state)
+
+        assert result["error"] == "Salesforce error: SalesforceMalformedRequest"
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize("log_format", ["text", "json"])
     async def test_a_salesforce_error_logs_its_status_code_and_fields_not_its_text(
         self, base_state, caplog, log_format
@@ -663,7 +687,8 @@ class TestSalesforceNode:
         ConnectionError carries the SalesforceExpiredSession as its context, and
         a traceback would print the lookup URL with an email the masking doesn't
         match (no top-level domain). The log gets no traceback; the detail line
-        names the raised class and the Salesforce error's summary.
+        names the raised class and the Salesforce error's summary. The stored
+        error names the raised class only.
         """
         import requests
         from simple_salesforce.exceptions import SalesforceExpiredSession
@@ -693,7 +718,7 @@ class TestSalesforceNode:
             # The lookup's client, then the re-auth after reset_sf_client().
             patch("app.tools.salesforce._get_sf_client", side_effect=[sf, reauth]),
         ):
-            await salesforce_node(base_state)
+            result = await salesforce_node(base_state)
 
         formatter = _build_formatter(log_format)
         lines = []
@@ -710,6 +735,7 @@ class TestSalesforceNode:
             "Salesforce error detail: ConnectionError after SalesforceExpiredSession status=401 "
             "errors=[{'errorCode': 'INVALID_SESSION_ID', 'fields': None}]"
         ) in log
+        assert result["error"] == "Salesforce error: ConnectionError"
 
     @pytest.mark.asyncio
     async def test_the_alert_line_is_written_when_no_summary_can_be_built(
@@ -859,8 +885,9 @@ class TestErrorNode:
 
     @pytest.mark.asyncio
     async def test_the_error_text_is_not_logged(self, base_state, caplog):
-        # What salesforce_node stores after a failed lookup: the exception's text,
-        # with the query URL (the email, percent-encoded) and Salesforce's reply.
+        # What an older checkpoint can still hold: salesforce_node used to store the
+        # exception's text, with the query URL (the email, percent-encoded) and
+        # Salesforce's reply. It now stores the exception's class name.
         base_state["error"] = (
             "Salesforce error: Malformed request https://example.my.salesforce.com"
             "/services/data/v59.0/query/?q=SELECT+Id+FROM+Lead+WHERE+Email+%3D+"

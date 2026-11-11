@@ -953,9 +953,10 @@ async def salesforce_node(state: GraphState) -> dict:
     On success, populates ``salesforce_lead_id`` and ``salesforce_task_id`` and
     appends a fixed closing reply (no LLM call) naming the follow-up channel:
     email, else phone, else the LinkedIn link on the page.
-    On failure, sets ``error`` so the error node can respond; if the Lead was
-    already written (the Task step failed), ``salesforce_lead_id`` is kept so
-    a retry or a re-send adds only the Task.
+    On failure, sets ``error`` (the exception's class name, never its text) so
+    the error node can respond; if the Lead was already written (the Task step
+    failed), ``salesforce_lead_id`` is kept so a retry or a re-send adds only
+    the Task.
     """
     logger.info("Node: salesforce")
 
@@ -1038,7 +1039,10 @@ async def salesforce_node(state: GraphState) -> dict:
         if summary:
             logger.error("Salesforce error detail: %s", summary)
         result: dict[str, Any] = {
-            "error": f"Salesforce error: {exc}",
+            # The class name only: this is saved in the checkpoint and uploaded
+            # with the LangSmith trace, and the exception's text can quote the
+            # lookup URL and Salesforce's reply. error_node looks for "Salesforce".
+            "error": f"Salesforce error: {type(exc).__name__}",
             "stage": ConversationStage.COMPLETE,
         }
         if lead_id:
@@ -1141,9 +1145,10 @@ async def error_node(state: GraphState) -> dict:
     follow-up only when there is an email or phone to follow up with.
     """
     error_msg = state.get("error") or ""
-    # The kind only: the error text quotes Salesforce's reply and the lookup URL,
-    # which can hold lead fields. The failure's detail is logged with the
-    # "Salesforce integration failed" line.
+    # The kind only. salesforce_node stores the exception's class name, but a
+    # checkpoint written before it did can hold the old error text, which quoted
+    # Salesforce's reply and the lookup URL. The failure's detail is logged with
+    # the "Salesforce integration failed" line.
     logger.warning(
         "Node: error — %s", "Salesforce write failed" if "Salesforce" in error_msg else "other"
     )
