@@ -165,7 +165,25 @@ def test_configure_logging_quiets_httpx2_loggers():
 
 # LOG_LEVEL=DEBUG must not make a provider SDK log its requests: each SDK's
 # ``<sdk>._base_client`` logger writes "Request options: ..." at DEBUG, the whole
-# request body, so the prompt, the transcript and the visitor's message.
+# request body, so the prompt, the transcript and the visitor's message. Its INFO
+# line, "Retrying request to <path> in N seconds", stays: it is the only record
+# of a model call that was retried.
+
+# A chat completion as the mocked provider returns it.
+_CHAT_COMPLETION = {
+    "id": "chatcmpl-test",
+    "object": "chat.completion",
+    "created": 0,
+    "model": "grok-4.3",
+    "choices": [
+        {
+            "index": 0,
+            "message": {"role": "assistant", "content": "ok"},
+            "finish_reason": "stop",
+        }
+    ],
+    "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+}
 
 
 @pytest.fixture
@@ -181,9 +199,10 @@ def restore_logging():
 
 
 @pytest.mark.parametrize("sdk", ["openai", "anthropic", "groq"])
-def test_configure_logging_keeps_the_provider_sdk_loggers_above_debug(
+def test_configure_logging_keeps_the_provider_sdk_loggers_at_info(
     sdk, monkeypatch, restore_logging
 ):
+    """At LOG_LEVEL=DEBUG: above DEBUG (the request dump), at INFO (the retry line)."""
     import logging
 
     from app.config import configure_logging, get_settings
@@ -195,7 +214,10 @@ def test_configure_logging_keeps_the_provider_sdk_loggers_above_debug(
     configure_logging()
 
     assert logging.getLogger().level == logging.DEBUG
+    assert logging.getLogger(sdk).level == logging.INFO
     assert not logging.getLogger(f"{sdk}._base_client").isEnabledFor(logging.DEBUG)
+    for name in ("httpx", "httpcore", "httpx2", "httpcore2", "urllib3", "asyncio"):
+        assert logging.getLogger(name).level == logging.WARNING, name
 
 
 @pytest.mark.asyncio
@@ -226,23 +248,7 @@ async def test_debug_logging_never_holds_the_llm_request(monkeypatch, restore_lo
             records.append(record)
 
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            json={
-                "id": "chatcmpl-test",
-                "object": "chat.completion",
-                "created": 0,
-                "model": "grok-4.3",
-                "choices": [
-                    {
-                        "index": 0,
-                        "message": {"role": "assistant", "content": "ok"},
-                        "finish_reason": "stop",
-                    }
-                ],
-                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
-            },
-        )
+        return httpx.Response(200, json=_CHAT_COMPLETION)
 
     capture = _Capture(level=logging.DEBUG)
     logging.getLogger().addHandler(capture)
@@ -265,6 +271,84 @@ async def test_debug_logging_never_holds_the_llm_request(monkeypatch, restore_lo
     logged = "\n".join(record.getMessage() for record in records)
     assert "Augusta Lovelace" not in logged
     assert "Analytical Engines" not in logged
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("sdk", "path"), [("openai", "/chat/completions"), ("groq", "/openai/v1/chat/completions")]
+)
+async def test_a_retried_llm_call_logs_the_sdks_retry_line_at_info(
+    sdk, path, monkeypatch, restore_logging
+):
+    """
+    LOG_LEVEL=INFO (the default), then a real chat model over a mocked transport,
+    no network: a 429, then a 200. The SDK's retry line is the only record of the
+    retry (httpx's request line is quiet), and it holds the path and the delay,
+    not the request. ChatAnthropic takes no HTTP client, so the anthropic logger
+    is covered by the level test only.
+    """
+    import logging
+
+    import httpx
+    from langchain_core.messages import HumanMessage
+    from langchain_groq import ChatGroq
+    from langchain_openai import ChatOpenAI
+
+    from app.config import configure_logging, get_settings
+
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    get_settings.cache_clear()
+    logging.getLogger(sdk).setLevel(logging.NOTSET)  # don't rely on an earlier test
+    configure_logging()
+
+    records: list[logging.LogRecord] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    sent: list[httpx.Request] = []
+    replies = [
+        # retry-after-ms sets the SDK's wait before the retry: 1 ms.
+        httpx.Response(429, headers={"retry-after-ms": "1"}, json={"error": {"message": "slow down"}}),
+        httpx.Response(200, json=_CHAT_COMPLETION),
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return replies[len(sent) - 1]
+
+    capture = _Capture(level=logging.DEBUG)
+    logging.getLogger().addHandler(capture)
+    try:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            if sdk == "openai":  # the xai provider's client
+                llm = ChatOpenAI(
+                    model="grok-4.3",
+                    api_key="test-key",
+                    base_url="https://api.x.ai/v1",
+                    max_retries=1,
+                    http_async_client=client,
+                )
+            else:
+                llm = ChatGroq(
+                    model="llama-3.3-70b-versatile",
+                    api_key="test-key",
+                    max_retries=1,
+                    http_async_client=client,
+                )
+            reply = await llm.ainvoke(
+                [HumanMessage(content="I'm Augusta Lovelace of Analytical Engines")]
+            )
+    finally:
+        logging.getLogger().removeHandler(capture)
+
+    assert reply.content == "ok"
+    assert len(sent) == 2  # the 429, then the retry
+    retries = [r.getMessage() for r in records if r.name == f"{sdk}._base_client"]
+    assert retries == [f"Retrying request to {path} in 0.001000 seconds"]
+    logged = "\n".join(record.getMessage() for record in records)
+    assert "Augusta Lovelace" not in logged
 
 
 def test_tracing_flag_parsed_from_env(monkeypatch):
