@@ -166,8 +166,9 @@ def test_configure_logging_quiets_httpx2_loggers():
 # LOG_LEVEL=DEBUG must not make a provider SDK log its requests: each SDK's
 # ``<sdk>._base_client`` logger writes "Request options: ..." at DEBUG, the whole
 # request body, so the prompt, the transcript and the visitor's message. Its INFO
-# line, "Retrying request to <path> in N seconds", stays: it is the only record
-# of a model call that was retried.
+# line, "Retrying request to <path> in N seconds", stays at LOG_LEVEL=INFO: it is
+# the only record of a model call that was retried. Above INFO, LOG_LEVEL quiets
+# it like any other INFO line.
 
 # A chat completion as the mocked provider returns it.
 _CHAT_COMPLETION = {
@@ -198,23 +199,30 @@ def restore_logging():
     root.setLevel(level)
 
 
+@pytest.mark.parametrize(
+    ("log_level", "sdk_level"),
+    [("DEBUG", "INFO"), ("INFO", "INFO"), ("WARNING", "WARNING"), ("ERROR", "ERROR")],
+)
 @pytest.mark.parametrize("sdk", ["openai", "anthropic", "groq"])
-def test_configure_logging_keeps_the_provider_sdk_loggers_at_info(
-    sdk, monkeypatch, restore_logging
+def test_configure_logging_keeps_the_provider_sdk_loggers_at_info_or_above(
+    sdk, log_level, sdk_level, monkeypatch, restore_logging
 ):
-    """At LOG_LEVEL=DEBUG: above DEBUG (the request dump), at INFO (the retry line)."""
+    """
+    Held at INFO when LOG_LEVEL=DEBUG (no request dump; the retry line stays),
+    and following LOG_LEVEL above INFO.
+    """
     import logging
 
     from app.config import configure_logging, get_settings
 
-    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+    monkeypatch.setenv("LOG_LEVEL", log_level)
     get_settings.cache_clear()
     logging.getLogger(sdk).setLevel(logging.NOTSET)  # don't rely on an earlier test
 
     configure_logging()
 
-    assert logging.getLogger().level == logging.DEBUG
-    assert logging.getLogger(sdk).level == logging.INFO
+    assert logging.getLevelName(logging.getLogger().level) == log_level
+    assert logging.getLevelName(logging.getLogger(sdk).level) == sdk_level
     assert not logging.getLogger(f"{sdk}._base_client").isEnabledFor(logging.DEBUG)
     for name in ("httpx", "httpcore", "httpx2", "httpcore2", "urllib3", "asyncio"):
         assert logging.getLogger(name).level == logging.WARNING, name
@@ -273,19 +281,12 @@ async def test_debug_logging_never_holds_the_llm_request(monkeypatch, restore_lo
     assert "Analytical Engines" not in logged
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("sdk", "path"), [("openai", "/chat/completions"), ("groq", "/openai/v1/chat/completions")]
-)
-async def test_a_retried_llm_call_logs_the_sdks_retry_line_at_info(
-    sdk, path, monkeypatch, restore_logging
-):
+async def _retried_chat_call(sdk: str, log_level: str, monkeypatch) -> tuple[list[str], str]:
     """
-    LOG_LEVEL=INFO (the default), then a real chat model over a mocked transport,
-    no network: a 429, then a 200. The SDK's retry line is the only record of the
-    retry (httpx's request line is quiet), and it holds the path and the delay,
-    not the request. ChatAnthropic takes no HTTP client, so the anthropic logger
-    is covered by the level test only.
+    configure_logging() at *log_level*, then a real chat model over a mocked
+    transport, no network: a 429, then a 200. Returns the messages the SDK's
+    ``_base_client`` logged and every message logged. ChatAnthropic takes no
+    HTTP client, so the anthropic logger is covered by the level test only.
     """
     import logging
 
@@ -296,7 +297,7 @@ async def test_a_retried_llm_call_logs_the_sdks_retry_line_at_info(
 
     from app.config import configure_logging, get_settings
 
-    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    monkeypatch.setenv("LOG_LEVEL", log_level)
     get_settings.cache_clear()
     logging.getLogger(sdk).setLevel(logging.NOTSET)  # don't rely on an earlier test
     configure_logging()
@@ -345,10 +346,38 @@ async def test_a_retried_llm_call_logs_the_sdks_retry_line_at_info(
 
     assert reply.content == "ok"
     assert len(sent) == 2  # the 429, then the retry
-    retries = [r.getMessage() for r in records if r.name == f"{sdk}._base_client"]
-    assert retries == [f"Retrying request to {path} in 0.001000 seconds"]
-    logged = "\n".join(record.getMessage() for record in records)
+    sdk_messages = [r.getMessage() for r in records if r.name == f"{sdk}._base_client"]
+    return sdk_messages, "\n".join(record.getMessage() for record in records)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("sdk", "path"), [("openai", "/chat/completions"), ("groq", "/openai/v1/chat/completions")]
+)
+async def test_a_retried_llm_call_logs_the_sdks_retry_line_at_info(
+    sdk, path, monkeypatch, restore_logging
+):
+    """
+    At LOG_LEVEL=INFO (the default) the SDK's retry line is the only record of
+    the retry (httpx's request line is quiet), and it holds the path and the
+    delay, not the request.
+    """
+    sdk_messages, logged = await _retried_chat_call(sdk, "INFO", monkeypatch)
+
+    assert sdk_messages == [f"Retrying request to {path} in 0.001000 seconds"]
     assert "Augusta Lovelace" not in logged
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sdk", ["openai", "groq"])
+async def test_a_retried_llm_call_logs_no_retry_line_at_log_level_warning(
+    sdk, monkeypatch, restore_logging
+):
+    """LOG_LEVEL=WARNING quiets the SDK's INFO retry line, as it does the app's own."""
+    sdk_messages, logged = await _retried_chat_call(sdk, "WARNING", monkeypatch)
+
+    assert sdk_messages == []
+    assert "Retrying request to" not in logged
 
 
 def test_tracing_flag_parsed_from_env(monkeypatch):
