@@ -17,6 +17,11 @@ services:
     env_file:
       - ../.env
     environment:
+      # DEBUG for local dev. The app's DEBUG lines hold field names, counts and
+      # lengths, not lead values, and the provider SDK loggers (openai,
+      # anthropic, groq) stay at INFO, so the LLM request isn't logged. Don't
+      # set OPENAI_LOG, ANTHROPIC_LOG or GROQ_LOG to debug in ../.env: that
+      # turns the SDK's request logging back on.
       - LOG_LEVEL=DEBUG
     restart: unless-stopped
     healthcheck:
