@@ -380,6 +380,59 @@ class TestSalesforceTools:
                     transcript="test",
                 )
 
+    # A result Salesforce reports as failed: its errors' messages can repeat a lead
+    # value, so the raised text keeps each error's errorCode and field names only.
+
+    @pytest.mark.asyncio
+    async def test_a_failed_lead_result_raises_without_salesforces_message(self):
+        mock_sf = MagicMock()
+        mock_sf.Lead.create.return_value = {
+            "success": False,
+            "errors": [
+                {
+                    "message": "Company: data value too large: Analytical Engines",
+                    "errorCode": "STRING_TOO_LONG",
+                    "fields": ["Company"],
+                }
+            ],
+        }
+
+        with patch("app.tools.salesforce._get_sf_client", return_value=mock_sf):
+            from app.tools.salesforce import create_lead
+
+            with pytest.raises(RuntimeError) as failure:
+                await create_lead(lead_data={"company": "Analytical Engines"}, qualification_data={})
+
+        assert str(failure.value) == (
+            "Salesforce Lead creation failed: "
+            "[{'errorCode': 'STRING_TOO_LONG', 'fields': ['Company']}]"
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_failed_task_result_raises_without_salesforces_message(self):
+        mock_sf = MagicMock()
+        mock_sf.Task.create.return_value = {
+            "success": False,
+            "errors": [
+                {
+                    "message": "Description: data value too large: Visitor: I'm Augusta Lovelace",
+                    "errorCode": "STRING_TOO_LONG",
+                    "fields": ["Description"],
+                }
+            ],
+        }
+
+        with patch("app.tools.salesforce._get_sf_client", return_value=mock_sf):
+            from app.tools.salesforce import create_transcript_task
+
+            with pytest.raises(RuntimeError) as failure:
+                await create_transcript_task(lead_id="00Q000000000001", transcript="test")
+
+        assert str(failure.value) == (
+            "Salesforce Task creation failed: "
+            "[{'errorCode': 'STRING_TOO_LONG', 'fields': ['Description']}]"
+        )
+
     # The write's log lines, down to DEBUG, name fields and lengths, never values.
 
     @pytest.mark.asyncio
@@ -429,6 +482,155 @@ class TestSalesforceTools:
         assert "ada@acme-corp.example" not in caplog.text
         assert "555-0123" not in caplog.text
         assert f"Task payload: transcript_len={len(transcript)}" in caplog.text
+
+    # A Salesforce error's own text quotes the request URL and Salesforce's reply,
+    # so these warnings log its class, status, errorCodes and field names only.
+
+    @pytest.mark.asyncio
+    async def test_a_failed_transcript_id_update_logs_no_salesforce_text(self, caplog):
+        from simple_salesforce.exceptions import SalesforceMalformedRequest
+
+        mock_sf = MagicMock()
+        mock_sf.Task.create.return_value = {"success": True, "id": "00T000000000001"}
+        mock_sf.Lead.update.side_effect = SalesforceMalformedRequest(
+            "https://example.my.salesforce.com/services/data/v59.0/sobjects/Lead/00Q000000000001",
+            400,
+            "Lead",
+            [
+                {
+                    "message": "Augusta Lovelace (Analytical Engines) failed a validation rule",
+                    "errorCode": "FIELD_CUSTOM_VALIDATION_EXCEPTION",
+                    "fields": ["Chat_Transcript_ID__c"],
+                }
+            ],
+        )
+
+        with (
+            caplog.at_level(logging.WARNING, logger="app.tools.salesforce"),
+            patch("app.tools.salesforce._get_sf_client", return_value=mock_sf),
+        ):
+            from app.tools.salesforce import create_transcript_task
+
+            task_id = await create_transcript_task(lead_id="00Q000000000001", transcript="hi")
+
+        assert task_id == "00T000000000001"  # still non-fatal
+        assert (
+            "Failed to update Chat_Transcript_ID__c on Lead 00Q000000000001 (non-fatal)"
+            in caplog.text
+        )
+        for value in ("Augusta", "Lovelace", "Analytical Engines"):
+            assert value not in caplog.text
+        assert "SalesforceMalformedRequest status=400" in caplog.text
+        assert (
+            "{'errorCode': 'FIELD_CUSTOM_VALIDATION_EXCEPTION', 'fields': ['Chat_Transcript_ID__c']}"
+            in caplog.text
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_failed_delete_logs_no_salesforce_text(self, caplog):
+        from simple_salesforce.exceptions import SalesforceMalformedRequest
+
+        mock_sf = MagicMock()
+        mock_sf.Lead.delete.side_effect = SalesforceMalformedRequest(
+            "https://example.my.salesforce.com/services/data/v59.0/sobjects/Lead/00Q000000000001",
+            400,
+            "Lead",
+            [
+                {
+                    "message": "Your attempt to delete Augusta Lovelace could not be completed",
+                    "errorCode": "DELETE_FAILED",
+                }
+            ],
+        )
+
+        with (
+            caplog.at_level(logging.WARNING, logger="app.tools.salesforce"),
+            patch("app.tools.salesforce._get_sf_client", return_value=mock_sf),
+        ):
+            from app.tools.salesforce import delete_record
+
+            assert await delete_record("Lead", "00Q000000000001") is False
+
+        assert "Failed to delete Lead 00Q000000000001" in caplog.text
+        assert "Augusta" not in caplog.text and "Lovelace" not in caplog.text
+        assert "SalesforceMalformedRequest status=400" in caplog.text
+        assert "{'errorCode': 'DELETE_FAILED', 'fields': None}" in caplog.text
+
+
+class TestSalesforceErrorSummary:
+    """salesforce_error_summary: a Salesforce error as its class, status, errorCodes and field names."""
+
+    @staticmethod
+    def _error(content):
+        from simple_salesforce.exceptions import SalesforceMalformedRequest
+
+        return SalesforceMalformedRequest(
+            "https://example.my.salesforce.com/services/data/v59.0/query/?q=SELECT+Id+FROM+Lead"
+            "+WHERE+Email+%3D+%27ada%40acme-corp.example%27",
+            400,
+            "query",
+            content,
+        )
+
+    def test_names_the_class_status_error_codes_and_fields(self):
+        from app.tools.salesforce import salesforce_error_summary
+
+        summary = salesforce_error_summary(
+            self._error(
+                [
+                    {
+                        "message": "Company: data value too large: Acme",
+                        "errorCode": "STRING_TOO_LONG",
+                        "fields": ["Company"],
+                    }
+                ]
+            )
+        )
+
+        assert summary == (
+            "SalesforceMalformedRequest status=400 "
+            "errors=[{'errorCode': 'STRING_TOO_LONG', 'fields': ['Company']}]"
+        )
+
+    def test_a_reply_that_is_not_a_list_of_errors_gives_no_error_codes(self):
+        """A proxy's HTML error page: simple_salesforce keeps a body that isn't JSON as text."""
+        from app.tools.salesforce import salesforce_error_summary
+
+        summary = salesforce_error_summary(
+            self._error("<html>Service Unavailable for ada@acme-corp.example</html>")
+        )
+
+        assert summary == "SalesforceMalformedRequest status=400 errors=[]"
+
+    def test_any_other_exception_has_no_summary(self):
+        from app.tools.salesforce import salesforce_error_summary
+
+        assert salesforce_error_summary(ConnectionError("Salesforce unreachable")) is None
+
+    def test_a_salesforce_error_in_the_chain_is_summarised_under_the_raised_class(self):
+        """A traceback would print the chained error's text, so the chain is searched too."""
+        from app.tools.salesforce import salesforce_error_summary
+
+        try:
+            try:
+                raise self._error([{"message": "Session expired", "errorCode": "INVALID_SESSION_ID"}])
+            except Exception as expired:
+                raise ConnectionError("token endpoint unreachable") from expired
+        except ConnectionError as exc:
+            summary = salesforce_error_summary(exc)
+
+        assert summary == (
+            "ConnectionError after SalesforceMalformedRequest status=400 "
+            "errors=[{'errorCode': 'INVALID_SESSION_ID', 'fields': None}]"
+        )
+
+    def test_a_cycle_in_the_chain_ends_the_search(self):
+        from app.tools.salesforce import salesforce_error_summary
+
+        first, second = ValueError("first"), KeyError("second")
+        first.__context__, second.__context__ = second, first
+
+        assert salesforce_error_summary(first) is None
 
 
 # ---------------------------------------------------------------------------

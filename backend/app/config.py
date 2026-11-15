@@ -520,7 +520,8 @@ def _build_formatter(log_format: str) -> logging.Formatter:
     """
     Return the JSON formatter when ``log_format == 'json'``, else the text one.
 
-    Both mask emails and phone numbers in a record's traceback.
+    Both mask emails, phone numbers and a SOQL query string in a record's
+    traceback.
     """
     if log_format.lower() == "json":
         return JsonLogFormatter()
@@ -553,5 +554,16 @@ def configure_logging() -> None:
     # (httpx2/httpcore2 are the anthropic SDK's HTTP client.)
     for noisy in ("httpx", "httpcore", "httpx2", "httpcore2", "urllib3", "asyncio"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
+
+    # openai, anthropic and groq are the provider SDKs. At LOG_LEVEL=DEBUG they
+    # are held at INFO, which drops each one's DEBUG request dump (its
+    # ``_base_client`` logger writes the whole request, so the prompt and the
+    # visitor's messages). At INFO they keep the "Retrying request to <path> in
+    # N seconds" line, which holds only the URL path and the delay. At WARNING
+    # and above they follow LOG_LEVEL. An SDK's own switch (OPENAI_LOG,
+    # ANTHROPIC_LOG or GROQ_LOG set to debug or info) is read when the SDK is
+    # imported, which is after this call, and overrides it: leave those unset.
+    for sdk in ("openai", "anthropic", "groq"):
+        logging.getLogger(sdk).setLevel(max(level, logging.INFO))
 
     logger.info("Logging configured at %s level", log_level)

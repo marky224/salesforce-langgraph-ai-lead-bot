@@ -227,6 +227,37 @@ async def test_send_with_tracing_on_masks_every_run(memory, sf, recorded_runs):
         assert "ada@example.com" not in masked and "210-555-0123" not in masked, run.name
 
 
+@pytest.mark.asyncio
+async def test_a_write_that_fails_again_uploads_the_error_class_not_its_text(memory, sf, recorded_runs):
+    """
+    The stored ``error`` is part of the salesforce run's outputs and the error
+    run's inputs. The exception's text carries the lookup's email as ``%40``, which
+    the tracer's masking doesn't match, so only the exception's class is stored.
+    """
+    from simple_salesforce.exceptions import SalesforceMalformedRequest
+
+    posted, patched = recorded_runs
+    _seed(memory, lead_data={**LEAD, "email": "ada@acme-corp.example"})
+    posted.clear()  # the seeding above isn't the command's run; only the replay counts
+    patched.clear()
+    sf.query.side_effect = SalesforceMalformedRequest(
+        "https://example.my.salesforce.com/services/data/v59.0/query/?q=SELECT+Id+FROM+Lead"
+        "+WHERE+Email+%3D+%27ada%40acme-corp.example%27",
+        400,
+        "query",
+        [{"message": "unexpected token: 'Lovelace'", "errorCode": "MALFORMED_QUERY"}],
+    )
+
+    assert await resend_lead.resend(THREAD, send=True) == 1
+
+    uploaded = [str(client._hide_run_inputs(run.inputs)) for client, run in posted]
+    uploaded += [str(client._hide_run_outputs(run.outputs or {})) for client, run in patched]
+    for text in uploaded:
+        assert "acme-corp.example" not in text  # the email, also in its %40 form
+        assert "unexpected token" not in text  # Salesforce's reply
+    assert any("Salesforce error: SalesforceMalformedRequest" in text for text in uploaded)
+
+
 @pytest.fixture
 def flushed(monkeypatch):
     """Each tracer flush, recorded as the client it would flush (nothing is uploaded)."""

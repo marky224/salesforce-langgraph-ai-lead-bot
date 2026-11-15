@@ -691,11 +691,39 @@ class _Capture(logging.Handler):
         self.records.append(record)
 
 
-def test_salesforce_failure_log_line_matches_the_alert_query(client):
+def _rejecting_sf() -> MagicMock:
+    """Salesforce answers the create with a 400: a Salesforce API error, not a failed request."""
+    from simple_salesforce.exceptions import SalesforceMalformedRequest
+
+    sf = MagicMock()
+    sf.query.return_value = {"records": []}  # dedup miss → create is reached
+    sf.Lead.create.side_effect = SalesforceMalformedRequest(
+        "https://example.my.salesforce.com/services/data/v59.0/sobjects/Lead/",
+        400,
+        "Lead",
+        [
+            {
+                "message": "Required fields are missing: [Company]",
+                "errorCode": "REQUIRED_FIELD_MISSING",
+                "fields": ["Company"],
+            }
+        ],
+    )
+    return sf
+
+
+@pytest.mark.parametrize(
+    ("failing_sf", "ip"),
+    [(_failing_sf, "203.0.113.44"), (_rejecting_sf, "203.0.113.62")],
+    ids=["request-failed", "salesforce-error"],
+)
+def test_salesforce_failure_log_line_matches_the_alert_query(client, failing_sf, ip):
     """
     The failed-write alert in Azure Monitor finds this exact text in ContainerAppConsoleLogs_CL
     and takes the thread id from the same line, in the text or the JSON log
-    format. The regexes are the alert query's two ``extract`` patterns.
+    format. The regexes are the alert query's two ``extract`` patterns. One row
+    per failure matches, whether the request failed (the record has a traceback)
+    or Salesforce answered with an error (no traceback; a detail line follows).
     """
     from app.config import _build_formatter
     from app.logging_ctx import RequestContextFilter
@@ -705,7 +733,7 @@ def test_salesforce_failure_log_line_matches_the_alert_query(client):
     nodes_logger = logging.getLogger("app.graph.nodes")
     nodes_logger.addHandler(capture)
     try:
-        resp = _confirm_lead(client, "203.0.113.44", _failing_sf())
+        resp = _confirm_lead(client, ip, failing_sf())
     finally:
         nodes_logger.removeHandler(capture)
 
@@ -722,6 +750,15 @@ def test_salesforce_failure_log_line_matches_the_alert_query(client):
     assert json.loads(json_line)["message"] == "Salesforce integration failed"
     json_match = re.search(r'"thread_id": ?"([^"]+)"', json_line)
     assert json_match and json_match.group(1) == thread_id
+
+    # The query's ``contains_cs`` filter: one console row per failure, in either format.
+    for log_format in ("text", "json"):
+        rows = [
+            row
+            for r in capture.records
+            for row in _build_formatter(log_format).format(r).splitlines()
+        ]
+        assert len([row for row in rows if "Salesforce integration failed" in row]) == 1
 
 
 # ---------------------------------------------------------------------------
