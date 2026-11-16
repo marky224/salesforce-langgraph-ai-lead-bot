@@ -6,6 +6,13 @@ not in the root ``pyproject.toml``. There is currently no ``[tool.pytest.ini_opt
 anywhere in the repo, so adding one would move pytest's rootdir for the hermetic
 ``pytest tests/`` run — an avoidable perturbation. A conftest is only loaded when
 ``backend/evals`` is actually collected, so it touches nothing else.
+
+Live evals are opt-in: every ``eval_live`` test is skipped unless the run passes
+``--run-live`` (``pytest_collection_modifyitems`` below), so a plain ``pytest`` with
+real keys in the shell or ``.env`` can't call a provider. ``-m eval_live`` alone
+selects them but doesn't opt in. Pytest knows ``--run-live`` only when the run starts
+in ``backend/evals`` or names it (or a file in it), so a bare ``pytest --run-live`` from
+the repo root or ``backend/`` is a usage error and nothing runs.
 """
 
 from __future__ import annotations
@@ -33,13 +40,37 @@ force_tracing_off()
 os.environ["SITE_INDEX_URL"] = ""
 
 
+LIVE_SKIP_REASON = "live eval: pass --run-live (calls the real provider and spends tokens)"
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Add ``--run-live``, the only way to run the ``eval_live`` tests."""
+    parser.addoption(
+        "--run-live",
+        action="store_true",
+        default=False,
+        help="run the eval_live tests (they call the real provider and spend tokens)",
+    )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Skip every ``eval_live`` test unless the run passes ``--run-live``."""
+    if config.getoption("--run-live"):
+        return
+    skip_live = pytest.mark.skip(reason=LIVE_SKIP_REASON)
+    for item in items:
+        if item.get_closest_marker("eval_live"):
+            item.add_marker(skip_live)
+
+
 def pytest_configure(config: pytest.Config) -> None:
     """Register markers and, in replay-only mode, supply a throwaway API key."""
     config.addinivalue_line(
         "markers", "eval_recorded: offline VCR-replay eval — the deterministic CI gate."
     )
     config.addinivalue_line(
-        "markers", "eval_live: hits the real provider — nightly / manual, report-only."
+        "markers",
+        "eval_live: hits the real provider — nightly / manual, report-only; skipped unless --run-live.",
     )
 
     mode = config.getoption("--record-mode", default="none") or "none"
