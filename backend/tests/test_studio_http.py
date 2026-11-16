@@ -84,6 +84,16 @@ class TestHost:
 
 
 class TestPostContentType:
+    def test_text_plain_body_from_studio_passes(self, client, calls):
+        # What real Studio (smith.langchain.com) sends on every POST.
+        response = client.post(
+            "/threads", content=b"{}", headers={"content-type": "text/plain;charset=UTF-8", "origin": STUDIO}
+        )
+
+        assert response.status_code == 200
+        assert calls == [("POST", b"{}")]
+
+    @pytest.mark.parametrize("origin", [CROSS_SITE, OTHER_PORT])
     @pytest.mark.parametrize(
         "content_type",
         [
@@ -92,19 +102,23 @@ class TestPostContentType:
             "multipart/form-data; boundary=x",
         ],
     )
-    def test_simple_request_body_gets_415(self, client, calls, content_type):
+    def test_simple_request_body_from_foreign_origin_gets_403(self, client, calls, content_type, origin):
+        # A browser sends these with no preflight, but with an Origin, so the Origin rule refuses them.
         response = client.post(
-            "/threads", content=b'{"metadata": {"src": "cross-site"}}', headers={"content-type": content_type}
+            "/threads",
+            content=b'{"metadata": {"src": "cross-site"}}',
+            headers={"content-type": content_type, "origin": origin, "host": "127.0.0.1:2024"},
         )
 
-        assert response.status_code == 415
+        assert response.status_code == 403
         assert calls == []
 
-    def test_body_without_content_type_gets_415(self, client, calls):
-        response = client.post("/threads", content=b"{}", headers={"content-type": ""})
+    def test_text_plain_body_without_origin_passes(self, client, calls):
+        # curl or the SDK: no Origin, like a no-Origin JSON POST.
+        response = client.post("/threads", content=b"{}", headers={"content-type": "text/plain;charset=UTF-8"})
 
-        assert response.status_code == 415
-        assert calls == []
+        assert response.status_code == 200
+        assert calls == [("POST", b"{}")]
 
     @pytest.mark.parametrize("content_type", ["application/json", "application/json; charset=utf-8", "Application/JSON"])
     def test_json_body_passes(self, client, calls, content_type):
