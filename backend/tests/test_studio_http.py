@@ -93,7 +93,7 @@ class TestPostContentType:
         assert response.status_code == 200
         assert calls == [("POST", b"{}")]
 
-    @pytest.mark.parametrize("origin", [CROSS_SITE, OTHER_PORT])
+    @pytest.mark.parametrize("origin", [CROSS_SITE, "null", OTHER_PORT])
     @pytest.mark.parametrize(
         "content_type",
         [
