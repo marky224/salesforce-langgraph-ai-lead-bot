@@ -40,7 +40,9 @@ cd backend && python -m evals.run --mode live --model grok-4.3 --report md
 cd backend && python -m evals.run --dimension sim --mode live --report md
 
 # live pytest smoke tests (need real XAI_API_KEY + ANTHROPIC_API_KEY; spend tokens).
-# --run-live is required, and pytest only knows it when backend/evals is on the command line:
+# --run-live is required. Pytest knows it only when the run starts in backend/evals or names it
+# (or a file in it); a bare `pytest --run-live` from the repo root or backend/ is a usage error
+# and nothing runs:
 pytest backend/evals -m eval_live --run-live
 ```
 

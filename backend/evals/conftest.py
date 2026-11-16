@@ -10,9 +10,9 @@ anywhere in the repo, so adding one would move pytest's rootdir for the hermetic
 Live evals are opt-in: every ``eval_live`` test is skipped unless the run passes
 ``--run-live`` (``pytest_collection_modifyitems`` below), so a plain ``pytest`` with
 real keys in the shell or ``.env`` can't call a provider. ``-m eval_live`` alone
-selects them but doesn't opt in. Pytest only knows ``--run-live`` when ``backend/evals``
-(or a file in it) is on the command line; without a path the flag is a usage error
-and nothing runs.
+selects them but doesn't opt in. Pytest knows ``--run-live`` only when the run starts
+in ``backend/evals`` or names it (or a file in it), so a bare ``pytest --run-live`` from
+the repo root or ``backend/`` is a usage error and nothing runs.
 """
 
 from __future__ import annotations
