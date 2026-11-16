@@ -8,7 +8,10 @@ not bit-stable. The pure kappa math + the validation gate are covered offline in
 ``test_calibration_recorded.py``; the *recorded* kappa is produced by
 ``python -m evals.calibration``.
 
-    pytest backend/evals -m eval_live      # needs ANTHROPIC_API_KEY
+Opt-in: skipped unless the run passes ``--run-live`` (``conftest.py``). A plain
+``pytest``, or ``-m eval_live`` alone, skips it.
+
+    pytest backend/evals -m eval_live --run-live      # needs ANTHROPIC_API_KEY; spends tokens
 """
 
 from __future__ import annotations

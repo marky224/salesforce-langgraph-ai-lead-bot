@@ -13,6 +13,10 @@ prod image, and its deps live in `backend/requirements-eval.txt`.
 | **recorded** (the gate) | Replays committed VCR cassettes — no key, no network, deterministic. | Every PR (CI), local. |
 | **live** | Hits the real provider. Drives the **model A/B** and the **simulated-user scorecard**. Costs tokens. | Manual / nightly. |
 
+The live pytest tests (`eval_live`: `test_judges_live.py`, `test_simulation_live.py`) run only with
+`--run-live`. A plain `pytest`, or `-m eval_live` alone, skips them, so real keys in the shell or `.env`
+can't spend tokens by accident (`test_live_opt_in.py` checks this offline).
+
 The gate **fails closed**: extraction/router invoke the LLM with `messages=[]`, so the request body is
 deterministic per case and cassettes are body-matched. A reworded prompt anchor changes the body, misses
 the cassette, and errors — instead of silently replaying a stale response. The site-answer gate passes
@@ -34,6 +38,10 @@ cd backend && python -m evals.run --mode live --model grok-4.3 --report md
 
 # simulated-user scorecard (live, needs a real XAI_API_KEY; spends tokens):
 cd backend && python -m evals.run --dimension sim --mode live --report md
+
+# live pytest smoke tests (need real XAI_API_KEY + ANTHROPIC_API_KEY; spend tokens).
+# --run-live is required, and pytest only knows it when backend/evals is on the command line:
+pytest backend/evals -m eval_live --run-live
 ```
 
 ## Site answers (recorded)
@@ -58,7 +66,7 @@ markdown scorecard.
 Nondeterministic by nature → **report-only, bands not exact, manual/nightly, never the per-commit
 gate.** The pure scorecard *evaluators* (`scorecard.py`) are unit-tested offline under `eval_recorded`
 (`test_scorecard.py`), so the logic is CI-covered without any live call; the live smoke
-(`test_simulation_live.py`) is `eval_live`. CI: a guarded `workflow_dispatch` job in `evals.yml` (needs
+(`test_simulation_live.py`) is `eval_live` and needs `--run-live`. CI: a guarded `workflow_dispatch` job in `evals.yml` (needs
 the `XAI_API_KEY` Actions secret) uploads the scorecard artifact — no auto-spend.
 
 ```bash

@@ -7,7 +7,10 @@ renders) — never the nondeterministic outcome (band / completion), which is wh
 it safe to run nightly/manually but never on the per-commit gate. The deterministic
 scorecard *logic* is covered offline by ``test_scorecard.py``.
 
-    pytest backend/evals -m eval_live      # needs a real XAI_API_KEY; spends tokens
+Opt-in: skipped unless the run passes ``--run-live`` (``conftest.py``). A plain
+``pytest``, or ``-m eval_live`` alone, skips it.
+
+    pytest backend/evals -m eval_live --run-live      # needs a real XAI_API_KEY; spends tokens
 """
 
 from __future__ import annotations
