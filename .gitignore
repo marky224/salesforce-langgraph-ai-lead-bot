@@ -59,12 +59,6 @@ out/
 # IDE — VS Code
 .vscode/
 
-# Claude Code — personal/local settings (per-contributor permissions)
-.claude/settings.local.json
-
-# Claude Code — project guidance, kept local (intentionally NOT published to GitHub)
-/CLAUDE.md
-
 # IDE — general
 *.swp
 *.swo
@@ -104,11 +98,6 @@ yarn.lock
 salesforce/agentscript/force-app/main/default/bots/
 salesforce/agentscript/force-app/main/default/genAiPlannerBundles/
 salesforce/agentscript/temp/
-
-# ==========================================
-# Private — local-only notes & handoffs (never publish)
-# ==========================================
-_private/
 
 # ==========================================
 # Deploy / integration how-to docs — local-only (never publish)
