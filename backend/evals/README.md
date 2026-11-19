@@ -3,8 +3,10 @@
 An **opt-in** eval suite that measures extraction, routing and site answers against the **real prompts** and
 **recorded real-model responses** — the gap the mock-based `backend/tests` suite can't cover. It also
 runs a **simulated-user scorecard** (PR C): whole conversations driven against the real graph by a
-second LLM role-playing personas. It is never collected by `pytest tests/`, never installed into the
-prod image, and its deps live in `backend/requirements-eval.txt`.
+second LLM role-playing personas. And it has an **online eval** (PR D4): a manual command that scores
+recent production turns from LangSmith traces and writes the scores back as LangSmith feedback. It is
+never collected by `pytest tests/`, never installed into the prod image, and its deps live in
+`backend/requirements-eval.txt`.
 
 ## Two tiers
 
@@ -102,6 +104,95 @@ shown but flagged **advisory** and never folded into `overall_pass`. Recorded 20
 κ=0.74 (validated); `summary_faithfulness` κ=0.25 (advisory — the generic groundedness rubric over-flags the
 summary's asked-for sentiment gloss; a task-specific prompt is the follow-up). Deep dive:
 `_private/docs/build/14-evals.md` §8.
+
+## Online eval (live, manual)
+
+`python -m evals.online` scores recent **production turns**. It reads conversational turns from one
+LangSmith project, runs two code checks and the validated persona judge on each, and writes the scores
+onto the turn's trace as LangSmith feedback. You run it by hand: nothing schedules it, no CI job runs it,
+and there is no `eval_live` pytest for it, so `pytest backend/evals -m eval_live --run-live` never writes
+to a project.
+
+```bash
+# dry run (the default): selects and reads turns, calls no judge, writes nothing
+cd backend && python -m evals.online --project <project>
+
+# judge up to 20 unscored turns and write the feedback rows (needs ANTHROPIC_API_KEY; spends tokens)
+cd backend && python -m evals.online --project <project> --write
+```
+
+| Option | Default | What it does |
+|--------|---------|--------------|
+| `--project` | none (required) | The LangSmith project to read turns from and write feedback to. |
+| `--limit` | 20 | Most turns one run scores. Hard maximum 100: a larger value is refused before any LangSmith call. |
+| `--since-hours` | 168 | How far back to look for turns. |
+| `--write` | off | Call the judge and write feedback. Without it the run is a dry run. |
+
+**What one score covers.** One turn is one trace: exactly one of the five conversational nodes
+(`discovery`, `qualification`, `objection_handling`, `lead_capture`, `confirmation`) ran in it and finished
+without error, and it carries the `tars` tag. That is one visitor message and TARS's reply to it, the
+shape the persona judge's κ was measured on (the 12 persona labels are single exchanges). Greetings, site
+answers and the fixed replies are not judged. Turns are taken newest first, and a turn that already has
+every key is skipped, so a second run over the same traces calls no judge and writes nothing; a run that
+died halfway is finished by the next one, which writes only the missing keys.
+
+**What is written.** Up to three feedback rows on the trace's root run:
+
+| Key | Score | Source |
+|-----|-------|--------|
+| `markdown_clean` | 1 = no markdown in the reply, 0 = markdown found (`scorecard.markdown_leak`) | code |
+| `brevity_ok` | 1 = at most 5 sentences, 0 = more (`scorecard.brevity_ok`) | code |
+| `persona_adherence` | 1 = on-voice, 0.5 = slightly off, 0 = off-persona | the `claude-sonnet-4-6` judge |
+
+Each comment is fixed text built in code. The judge's reasoning is never stored or printed, because
+LangSmith does not mask feedback and the reasoning quotes the turn; to see why a turn scored 0, open its
+trace. `persona_adherence` is written only while its recorded κ clears the bar (`calibration.is_validated`).
+`summary_faithfulness` (κ below the bar) is not part of the online eval. The two code checks are written before the
+judge is called, so a key that can't write feedback costs no judge call.
+
+**What the judge provider sees.** The judge prompt and one exchange: `Visitor: <message>` / `TARS: <reply>`.
+Before the call, the values captured in that trace's `lead_data` are replaced: `first_name`, `last_name`
+and the full name with `[NAME]`, `company` with `[COMPANY]`, `title` with `[TITLE]`, and the captured
+`email` and `phone` with `[EMAIL]` and `[PHONE]`. Then the text goes through the tracer's email and phone
+masking again. Nothing else from the trace is sent: no earlier turns, no lead data, no ids. The judge calls
+themselves are never traced.
+
+**Limits.**
+- The masking is best-effort. A name typed in another case or misspelled, another person's name, a phone
+  number in a shape the patterns miss, and everything else the visitor typed in that one message still
+  reach the judge provider. The judge was not calibrated on text that holds the `[NAME]`, `[COMPANY]` and
+  `[TITLE]` placeholders.
+- Visitor text goes into the judge prompt, so a visitor can steer a score (prompt injection). The damage
+  stops at the score: it is always 1, 0.5 or 0, and nothing the judge writes is stored.
+- Two runs at the same time can write a key twice. Run one at a time.
+
+**Keys.** `LANGSMITH_API_KEY` always, and `ANTHROPIC_API_KEY` with `--write`, read from the environment or
+`.env`. An org-scoped LangSmith key also needs `LANGSMITH_WORKSPACE_ID` **exported in the shell**: the
+LangSmith client reads it from the process environment, so a value that is only in `.env` never reaches it.
+
+**Exit status.**
+
+| Status | Meaning |
+|--------|---------|
+| 0 | A dry run, nothing to do, or every selected turn fully written. |
+| 1 | A selected turn couldn't be parsed, a judge call failed twice, or a feedback write failed. |
+| 2 | A missing key, a `--limit` outside 1–100, or a LangSmith list or read call that failed (a refused key or project included) before any write. |
+
+Two cases where the rules meet: a dry run that found an unparsed turn exits 1, not 0; and a refusal (401
+or 403) on a feedback write is a failed write, so it exits 1, not 2. Output goes to standard output only
+(counts, trace ids, scores, judge call and token totals). An error prints its exception class, never its text.
+
+**If the dry run finds no eligible turn** (`eligible=0`), stop and tell the maintainer. Don't start a chat
+with the bot to have something to score: that spends the bot's tokens, adds a synthetic trace to the
+project, and leaves the eval scoring its own traffic. Whether to chat with the bot first is the
+maintainer's decision, and a result that rests on such a chat should say so.
+
+**Cost.** One judge call per turn, plus one retry when a call fails. A default run (20 turns) is an
+estimated $0.15–0.20 at the judge model's list price ($3 / $15 per 1M input / output tokens); the run
+prints its real call and token totals.
+
+**Tests.** `test_online_recorded.py` rides the recorded gate (`eval_recorded`): an in-memory LangSmith fake
+and a stub judge, no key and no network.
 
 ## Add a case
 

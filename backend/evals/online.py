@@ -1,50 +1,70 @@
 """
-Online eval (PR D4) — pick the recent production turns to score, from LangSmith.
+Online eval (PR D4) — score recent production turns and write the scores to LangSmith.
 
 ``python -m evals.online --project <project>`` lists the recent conversational turns of
-one LangSmith project, skips the ones that already carry the online eval's feedback
-keys, reads the trace's root run for up to ``--limit`` of the rest, checks that each one
-parses and prints counts and trace ids. It is a dry run: it calls no judge and writes
-nothing. It is a manual, live command: no pytest gate runs it, and nothing under ``app/``
-imports it.
+one LangSmith project, skips the ones that already carry this command's feedback keys,
+and for up to ``--limit`` of the rest reads the trace's root run, runs two code checks
+and the validated persona judge on that one exchange, and writes each score onto the
+trace as LangSmith feedback. It is a manual, live command: no pytest gate runs it, and
+nothing under ``app/`` imports it.
 
-What one turn is
+Dry run by default
+    Without ``--write`` it selects the turns, reads them, checks that each one parses and
+    prints counts and trace ids. It calls no judge and writes nothing.
+
+What one score covers
     One turn is one trace: exactly one of the five conversational nodes (discovery,
     qualification, objection_handling, lead_capture, confirmation) ran in it and finished
     without error, it carries the ``tars`` tag, and the node run started inside
     ``--since-hours``. That is the shape the persona judge's kappa was measured on (one
     visitor message and one reply). Greetings, site answers and the fixed replies are
-    not turns to judge. Newest first; a turn that already has every key is skipped.
+    not judged. Newest first; a turn that already has every key is skipped, so a second
+    run over the same traces calls no judge and writes nothing.
 
-What a judge would receive
-    ``_judge_inputs`` builds the two strings for one turn: ``Visitor: <message>\\nTARS:
-    <reply>`` and the reply alone. The values captured in that trace's ``lead_data`` are
-    replaced first: ``first_name``, ``last_name`` and the two joined with ``[NAME]``,
-    ``company`` with ``[COMPANY]``, ``title`` with ``[TITLE]``, and the captured ``email``
-    and ``phone`` with ``[EMAIL]`` and ``[PHONE]``. Then the text goes through the
-    tracer's email and phone masking again. Nothing else from the trace is used: no
-    earlier turns, no lead data, no ids. Best-effort: a name typed in another case or
-    misspelled, someone else's name and a phone shape the patterns miss stay in the text.
+What the judge provider receives
+    The judge prompt and two strings: ``Visitor: <message>\\nTARS: <reply>`` and the reply
+    alone. Before the call the values captured in that trace's ``lead_data`` are replaced:
+    ``first_name``, ``last_name`` and the two joined with ``[NAME]``, ``company`` with
+    ``[COMPANY]``, ``title`` with ``[TITLE]``, and the captured ``email`` and ``phone``
+    with ``[EMAIL]`` and ``[PHONE]``. Then the text goes through the tracer's email and
+    phone masking again. Nothing else from the trace is sent: no earlier turns, no lead
+    data, no ids. Best-effort: a name typed in another case or misspelled, someone else's
+    name and a phone shape the patterns miss still reach the judge, as does everything
+    else the visitor typed in that message. Visitor text sits in the judge prompt, so it
+    can steer a score; the damage stops at the score (1, 0.5 or 0), because the judge's
+    reasoning is never stored or printed.
+
+What is written
+    Up to three feedback rows on the trace's root run: ``markdown_clean`` (1 or 0),
+    ``brevity_ok`` (1 or 0) and ``persona_adherence`` (1, 0.5 or 0). Each comment is fixed
+    text built here. ``persona_adherence`` is written only while its recorded kappa clears
+    the bar (``calibration.is_validated``); under the bar the judge isn't called. Writes
+    are synchronous: the client has no upload queue, so a failed write raises and stops
+    the run. The two code checks are written before the judge is called, so a key that
+    can't write costs no judge call.
 
 Keys
-    ``LANGSMITH_API_KEY`` through the app's Settings (the environment or ``.env``). An
-    org-scoped LangSmith key also needs ``LANGSMITH_WORKSPACE_ID`` exported in the shell:
-    the client reads it from the process environment, and a value that is only in
-    ``.env`` never reaches it.
+    ``LANGSMITH_API_KEY`` always and ``ANTHROPIC_API_KEY`` with ``--write``, both through
+    the app's Settings (the environment or ``.env``). An org-scoped LangSmith key also
+    needs ``LANGSMITH_WORKSPACE_ID`` exported in the shell: the client reads it from the
+    process environment, and a value that is only in ``.env`` never reaches it.
 
 Exit status
-    0  the turns were selected and every selected one parsed, or there was nothing to do.
-    1  a selected turn couldn't be parsed.
+    0  a dry run, nothing to do, or every selected turn fully written.
+    1  a selected turn couldn't be parsed, a judge call failed twice, or a feedback write
+       failed.
     2  a missing key, a ``--limit`` outside 1-100, or a LangSmith list or read call that
-       failed (a refused key or project included).
+       failed (a refused key or project included) before any write.
+    Precedence: a dry run that met an unparsed turn exits 1, not 0. A refusal (401 or
+    403) on a feedback write is a failed write: exit 1, not 2.
 
 Output
-    Standard output only: counts and trace ids. An error prints its exception class,
-    never its text, and the ``langsmith`` logger is set above ERROR so the client's own
-    error logs (a traceback with the response body, part of the key on a connection
-    error) stay off stderr. Nothing the command does is traced.
+    Standard output only: counts, trace ids, scores, judge call and token totals. An
+    error prints its exception class, never its text, and the ``langsmith`` logger is set
+    above ERROR so the client's own error logs (a traceback with the response body, part
+    of the key on a connection error) stay off stderr. No eval call is traced.
 
-Run from ``backend/``:  ``python -m evals.online --project <project>``
+Run from ``backend/``:  ``python -m evals.online --project <project> [--write]``
 """
 
 from __future__ import annotations
@@ -55,11 +75,12 @@ import logging
 import os
 import re
 import sys
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from langchain_core.callbacks import get_usage_metadata_callback
 from langsmith import Client
 
 # Make ``app`` / ``evals`` importable however this is invoked (mirrors run.py).
@@ -74,8 +95,11 @@ from app.graph.edges import (  # noqa: E402
     NODE_QUALIFICATION,
 )
 from app.tracing import build_email_anonymizer  # noqa: E402
-from evals import calibration  # noqa: E402
+from evals import calibration, judges  # noqa: E402
 from evals._config import force_tracing_off  # noqa: E402
+from evals.scorecard import brevity_ok, markdown_leak  # noqa: E402
+
+EVALUATOR = "evals.online"
 
 PERSONA_KEY = "persona_adherence"
 MARKDOWN_KEY = "markdown_clean"
@@ -108,6 +132,20 @@ _RUN_FILTER = (
 # schema requires it; ``tags`` and ``extra`` feed the local checks in ``_eligible_trace_ids``.
 _RUN_SELECT = ["id", "name", "run_type", "trace_id", "start_time", "end_time", "error", "extra", "tags"]
 
+# key -> (the check: True scores 1, the scorecard function it reports, the fixed comment)
+_CHECKS: dict[str, tuple[Callable[[str], bool], str, str]] = {
+    MARKDOWN_KEY: (
+        lambda reply: not markdown_leak(reply),
+        "markdown_leak",
+        "evals.online: scorecard.markdown_leak on TARS's reply. 1 = no markdown, 0 = markdown found.",
+    ),
+    BREVITY_KEY: (
+        brevity_ok,
+        "brevity_ok",
+        "evals.online: scorecard.brevity_ok on TARS's reply. 1 = at most 5 sentences, 0 = more.",
+    ),
+}
+
 # lead_data value -> the placeholder the judge sees in its place.
 _LEAD_PLACEHOLDERS = (
     ("company", "[COMPANY]"),
@@ -127,6 +165,20 @@ class Turn:
     lead_data: dict[str, Any]
 
 
+@dataclass
+class _Tally:
+    """What a write run did, for its closing lines."""
+
+    rows: int = 0
+    traces: set[str] = field(default_factory=set)
+    judge_calls: int = 0
+    judge_errors: int = 0
+
+
+class _WriteFailed(Exception):
+    """A feedback write raised. Carries the original exception's class name only."""
+
+
 def _out(line: str) -> None:
     print(line)  # noqa: T201
 
@@ -136,7 +188,7 @@ def _out(line: str) -> None:
 # ---------------------------------------------------------------------------
 
 def _feedback_keys() -> list[str]:
-    """The keys the online eval writes, in write order: the code checks, then the judge's."""
+    """The keys this run writes, in write order: the code checks, then the judge's."""
     keys = [MARKDOWN_KEY, BREVITY_KEY]
     if calibration.is_validated(PERSONA_KEY):
         keys.append(PERSONA_KEY)
@@ -282,25 +334,140 @@ def _judge_inputs(turn: Turn) -> tuple[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# The run
+# Judging and writing
 # ---------------------------------------------------------------------------
+
+def _persona_comment() -> str:
+    kappa = calibration.CALIBRATED_KAPPA[PERSONA_KEY]
+    return (
+        f"evals.online: {judges.JUDGE_MODEL} judged one visitor message and TARS's reply against "
+        "the TARS persona. 1 = on-voice, 0.5 = slightly off, 0 = off-persona. "
+        f"Judge kappa {kappa:.2f} against human labels (bar {calibration.KAPPA_BAR}, validated)."
+    )
+
+
+def _persona_source() -> dict[str, Any]:
+    return {
+        "evaluator": EVALUATOR,
+        "judge_model": judges.JUDGE_MODEL,
+        "kappa": calibration.CALIBRATED_KAPPA[PERSONA_KEY],
+        "kappa_bar": calibration.KAPPA_BAR,
+        "validated": True,
+    }
+
+
+def _write_row(
+    client: Any,
+    tally: _Tally,
+    trace_id: str,
+    key: str,
+    score: float,
+    comment: str,
+    source_type: str,
+    source_info: dict[str, Any],
+) -> None:
+    """
+    Write one feedback row on the trace's root run.
+
+    ``run_id`` only, never ``trace_id=``: with a trace id a client that has an upload
+    queue only queues the row, and a failed upload would not raise.
+    """
+    try:
+        client.create_feedback(
+            run_id=trace_id,
+            key=key,
+            score=score,
+            comment=comment,
+            feedback_source_type=source_type,
+            source_info=source_info,
+        )
+    except Exception as exc:
+        # The class only: a LangSmith error's text holds the URL and the response body.
+        raise _WriteFailed(type(exc).__name__) from None
+    tally.rows += 1
+    tally.traces.add(trace_id)
+
+
+async def _judge_score(judge: Any, turn: Turn, tally: _Tally) -> tuple[float | None, str]:
+    """
+    Ask the persona judge about one masked exchange, with one retry.
+
+    Returns ``(score, "")``, or ``(None, <exception class>)`` after two failures. The
+    exception's text is dropped: a parse error can quote the judge's output, which
+    repeats the visitor. The score is snapped the way the calibration snaps it.
+    """
+    inputs, outputs = _judge_inputs(turn)
+    error = ""
+    for _ in range(2):
+        tally.judge_calls += 1
+        try:
+            result = await judge(inputs=inputs, outputs=outputs)
+            return calibration._persona_class(calibration._score(result)), ""
+        except Exception as exc:
+            tally.judge_errors += 1
+            error = type(exc).__name__
+    return None, error
+
+
+async def _score_turn(client: Any, judge: Any, turn: Turn, missing: Sequence[str], tally: _Tally) -> bool:
+    """
+    Write this turn's missing rows and print its line. False when the judge failed twice.
+
+    The code checks run on the reply as stored (they are local, nothing leaves) and are
+    written before the judge is called.
+    """
+    fields: list[str] = []
+    rows_before = tally.rows
+    for key, (check, check_name, comment) in _CHECKS.items():
+        if key in missing:
+            score = int(check(turn.reply))
+            _write_row(
+                client, tally, turn.trace_id, key, score, comment,
+                "api", {"evaluator": EVALUATOR, "check": check_name},
+            )
+            fields.append(f"{key}={score}")
+
+    judged = True
+    if PERSONA_KEY in missing:
+        persona, error = await _judge_score(judge, turn, tally)
+        if persona is None:
+            judged = False
+            fields.append(f"{PERSONA_KEY}=error({error})")
+        else:
+            _write_row(
+                client, tally, turn.trace_id, PERSONA_KEY, persona, _persona_comment(),
+                "model", _persona_source(),
+            )
+            fields.append(f"{PERSONA_KEY}={persona}")
+
+    _out(f"trace {turn.trace_id} {' '.join(fields)} written={tally.rows - rows_before}")
+    return judged
+
 
 async def run_online(
     client: Any,
+    judge: Any | None,
     *,
     project: str,
     limit: int,
     since_hours: int,
+    write: bool,
     now: datetime,
 ) -> int:
     """
-    Select and read the turns of ``project``; return the exit status.
+    Select, read and (with ``write``) score the turns of ``project``; return the exit status.
 
-    ``client`` is a LangSmith client; it is an argument so the offline tests pass a
-    double. Exit status: the module docstring.
+    ``client`` is a LangSmith client without an upload queue and ``judge`` the persona
+    evaluator (``judges.persona_adherence_judge()``); both are arguments so the offline
+    tests pass doubles. ``judge`` may be ``None`` in a dry run and while the persona
+    judge is under the kappa bar. Every list and read call happens before the first
+    write. Exit status: the module docstring.
     """
     keys = _feedback_keys()
-    _out(f"online eval: project={project} window={since_hours}h limit={limit} mode=dry-run")
+    _out(
+        f"online eval: project={project} window={since_hours}h limit={limit} "
+        f"mode={'write' if write else 'dry-run'}"
+    )
 
     try:
         runs = list(
@@ -336,13 +503,41 @@ async def run_online(
     )
     if len(runs) >= SCAN_CAP:
         _out(f"scan cap reached: the listing stopped at {SCAN_CAP} node runs; older turns were not seen")
+    status = 1 if unparsed else 0
 
-    for trace_id, turn in turns:
-        if turn is None:
-            _out(f"trace {trace_id} unparsed")
-        else:
-            _out(f"trace {trace_id} would_write={','.join(missing[trace_id])}")
-    return 1 if unparsed else 0
+    if not write:
+        for trace_id, turn in turns:
+            if turn is None:
+                _out(f"trace {trace_id} unparsed")
+            else:
+                _out(f"trace {trace_id} would_write={','.join(missing[trace_id])}")
+        return status
+
+    tally = _Tally()
+    with get_usage_metadata_callback() as usage:
+        for trace_id, turn in turns:
+            if turn is None:
+                _out(f"trace {trace_id} unparsed")
+                continue
+            try:
+                if not await _score_turn(client, judge, turn, missing[trace_id], tally):
+                    status = 1
+            except _WriteFailed as failed:
+                _out(f"error: {failed} on a feedback write for trace {trace_id}; run stopped")
+                status = 1
+                break
+
+    if PERSONA_KEY in keys:
+        totals = list(usage.usage_metadata.values())
+        _out(
+            f"judge: model={judges.JUDGE_MODEL} calls={tally.judge_calls} errors={tally.judge_errors} "
+            f"input_tokens={sum(t.get('input_tokens', 0) for t in totals)} "
+            f"output_tokens={sum(t.get('output_tokens', 0) for t in totals)}"
+        )
+    else:
+        _out(f"judge: not run ({PERSONA_KEY} is under the kappa bar {calibration.KAPPA_BAR})")
+    _out(f"written={tally.rows} rows on {len(tally.traces)} traces")
+    return status
 
 
 # ---------------------------------------------------------------------------
@@ -352,20 +547,25 @@ async def run_online(
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="python -m evals.online",
-        description="List the recent conversational turns of a LangSmith project that the "
-                    "online eval would score. A dry run: nothing is judged or written.",
+        description="Score recent conversational turns of a LangSmith project and write the "
+                    "scores back as feedback. A dry run unless --write is given.",
     )
     parser.add_argument(
         "--project", required=True,
-        help="LangSmith project to read turns from (no default).",
+        help="LangSmith project to read turns from and write feedback to (no default).",
     )
     parser.add_argument(
         "--limit", type=int, default=DEFAULT_LIMIT,
-        help=f"Most turns one run selects (default {DEFAULT_LIMIT}, maximum {MAX_LIMIT}).",
+        help=f"Most turns one run scores (default {DEFAULT_LIMIT}, maximum {MAX_LIMIT}).",
     )
     parser.add_argument(
         "--since-hours", type=int, default=DEFAULT_SINCE_HOURS,
         help=f"How far back to look for turns (default {DEFAULT_SINCE_HOURS}).",
+    )
+    parser.add_argument(
+        "--write", action="store_true",
+        help="Call the judge (needs ANTHROPIC_API_KEY, spends tokens) and write feedback rows. "
+             "Without it nothing is judged or written.",
     )
     return parser.parse_args(argv)
 
@@ -376,9 +576,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         _out(f"error: --limit must be between 1 and {MAX_LIMIT}")
         return 2
 
-    # Nothing here is traced, whatever the shell or .env says. The Anthropic SDK's own
-    # log switch goes too: at debug the SDK prints whole requests, and a judge request
-    # holds a visitor's message.
+    # No eval call is traced, whatever the shell or .env says, and the Anthropic SDK's
+    # own log switch is removed before the SDK is imported: at debug it prints the whole
+    # request, which here holds a visitor's message.
     force_tracing_off()
     os.environ.pop("ANTHROPIC_LOG", None)
     # langsmith logs a failed request itself: a traceback with the URL and response body,
@@ -389,20 +589,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     if settings.langsmith_api_key is None:
         _out("error: LANGSMITH_API_KEY is not set")
         return 2
+    use_judge = args.write and calibration.is_validated(PERSONA_KEY)
+    if use_judge and settings.anthropic_api_key is None:
+        _out("error: ANTHROPIC_API_KEY is not set (the judge needs it with --write)")
+        return 2
 
     # The key is passed explicitly: a bare Client() reads only the process environment,
-    # which a key set in .env never reaches. No upload queue: every call is a plain
-    # request that raises when it fails.
+    # which a key set in .env never reaches. No upload queue, so a feedback write is a
+    # plain POST that raises when it fails.
     client = Client(
         api_key=settings.langsmith_api_key.get_secret_value(),
         auto_batch_tracing=False,
     )
+    judge = judges.persona_adherence_judge() if use_judge else None
     return asyncio.run(
         run_online(
             client,
+            judge,
             project=args.project,
             limit=args.limit,
             since_hours=args.since_hours,
+            write=args.write,
             now=datetime.now(UTC),
         )
     )

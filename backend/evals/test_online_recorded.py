@@ -2,8 +2,9 @@
 Offline tests for the online eval (``online.py``) — eval_recorded.
 
 No network, no key, no model call. LangSmith is ``FakeLangSmith``, an in-memory object
-with the client calls the command makes. The live path (real LangSmith) is the command
-itself, run by hand.
+with the four client calls the command makes, and the judge is ``StubJudge``, which
+returns a canned result and records what it was given. The live path (real LangSmith,
+real judge) is the command itself, run by hand.
 
 Two things keep these tests honest:
 
@@ -39,13 +40,21 @@ from app import config as app_config
 from app.config import Settings
 from app.models.schemas import LeadData
 from app.tracing import build_email_anonymizer
-from evals import judges, online
+from evals import calibration, judges, online
 
 pytestmark = pytest.mark.eval_recorded
 
 NOW = datetime(2026, 11, 18, 18, 0, tzinfo=UTC)
 PROJECT = "test-project"
+ALL_KEYS = ["markdown_clean", "brevity_ok", "persona_adherence"]
 _TRACING_FLAGS = ("LANGSMITH_TRACING", "LANGCHAIN_TRACING_V2", "LANGSMITH_TRACING_V2", "LANGCHAIN_TRACING")
+
+MARKDOWN_COMMENT = (
+    "evals.online: scorecard.markdown_leak on TARS's reply. 1 = no markdown, 0 = markdown found."
+)
+BREVITY_COMMENT = (
+    "evals.online: scorecard.brevity_ok on TARS's reply. 1 = at most 5 sentences, 0 = more."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -63,7 +72,7 @@ def _stored(value: Any, *, masked: bool = True) -> Any:
 
 
 class FakeLangSmith:
-    """In-memory stand-in for the LangSmith client calls the online eval makes."""
+    """In-memory stand-in for the four LangSmith client calls the command makes."""
 
     def __init__(self) -> None:
         self.node_runs: list[ls_schemas.Run] = []
@@ -71,6 +80,7 @@ class FakeLangSmith:
         self.feedback: list[tuple[str, str]] = []  # (run id, key) of every row that exists
         self.created: list[dict[str, Any]] = []  # each create_feedback call, as it was given
         self.write_attempts = 0
+        self.write_error: Exception | None = None
         self.list_runs_calls: list[dict[str, Any]] = []
         self.feedback_reads: list[int] = []  # how many trace ids each list_feedback call asked for
         self.read_runs: list[str] = []
@@ -160,8 +170,26 @@ class FakeLangSmith:
 
     def create_feedback(self, run_id: Any = None, key: str = "unnamed", **kwargs: Any) -> None:
         self.write_attempts += 1
+        if self.write_error is not None:
+            raise self.write_error
         self.created.append({"run_id": run_id, "key": key, **kwargs})
         self.feedback.append((str(run_id), key))
+
+
+class StubJudge:
+    """The persona evaluator's stand-in: canned results, and a record of what it was given."""
+
+    def __init__(self, score: float = 1.0, comment: str = "On-voice.", errors: tuple[Exception, ...] = ()) -> None:
+        self.score = score
+        self.comment = comment
+        self.errors = list(errors)  # raised by the next calls, in order
+        self.calls: list[dict[str, str]] = []
+
+    async def __call__(self, *, inputs: str, outputs: str) -> dict[str, Any]:
+        self.calls.append({"inputs": inputs, "outputs": outputs})
+        if self.errors:
+            raise self.errors.pop(0)
+        return {"key": "persona_adherence", "score": self.score, "comment": self.comment}
 
 
 def _settings(langsmith: str | None = None, anthropic: str | None = None) -> Settings:
@@ -169,9 +197,11 @@ def _settings(langsmith: str | None = None, anthropic: str | None = None) -> Set
     return Settings(_env_file=None, langsmith_api_key=langsmith, anthropic_api_key=anthropic)
 
 
-def _run(fake: FakeLangSmith, *, limit: int = 20) -> int:
+def _run(fake: FakeLangSmith, judge: Any = None, *, write: bool = False, limit: int = 20) -> int:
     return asyncio.run(
-        online.run_online(fake, project=PROJECT, limit=limit, since_hours=168, now=NOW)
+        online.run_online(
+            fake, judge, project=PROJECT, limit=limit, since_hours=168, write=write, now=NOW
+        )
     )
 
 
@@ -235,23 +265,31 @@ def main_env(monkeypatch):
 class _MainWiring:
     def __init__(self) -> None:
         self.clients: list[dict[str, Any]] = []  # the kwargs of each Client main() built
+        self.judge_builds = 0
 
 
 def _wire_main(
     monkeypatch: pytest.MonkeyPatch,
     fake: FakeLangSmith,
+    judge: Any = None,
     *,
     langsmith: str | None = "langsmith-test-key",
+    anthropic: str | None = "anthropic-test-key",
 ) -> _MainWiring:
-    """Point ``online.main`` at the doubles: Settings with the given key, and the fake."""
+    """Point ``online.main`` at the doubles: Settings with the given keys, the fake, the stub."""
     wiring = _MainWiring()
 
     def _client(**kwargs):
         wiring.clients.append(kwargs)
         return fake
 
-    monkeypatch.setattr(app_config, "get_settings", lambda: _settings(langsmith))
+    def _judge():
+        wiring.judge_builds += 1
+        return judge
+
+    monkeypatch.setattr(app_config, "get_settings", lambda: _settings(langsmith, anthropic))
     monkeypatch.setattr(online, "Client", _client)
+    monkeypatch.setattr(judges, "persona_adherence_judge", _judge)
     return wiring
 
 
@@ -298,31 +336,37 @@ def test_selects_only_conversational_turns(capsys):
     )
 
 
-def test_dry_run_writes_nothing(capsys):
-    fake = FakeLangSmith()
+def test_dry_run_calls_no_judge_and_writes_nothing(capsys):
+    fake, judge = FakeLangSmith(), StubJudge()
     trace_id = fake.add_turn()
     scored = fake.add_turn(minutes_ago=2)
-    fake.feedback += [(scored, key) for key in ("markdown_clean", "brevity_ok", "persona_adherence")]
+    fake.feedback += [(scored, key) for key in ALL_KEYS]
 
-    assert _run(fake) == 0
+    assert _run(fake, judge) == 0
     out = capsys.readouterr().out
 
+    assert judge.calls == []
     assert fake.write_attempts == 0
     assert f"online eval: project={PROJECT} window=168h limit=20 mode=dry-run" in out
     assert "eligible=2 already_scored=1 selected=1 remaining=0 unparsed=0" in out
     assert f"trace {trace_id} would_write=markdown_clean,brevity_ok,persona_adherence" in out
     assert fake.read_runs == [trace_id]  # a scored turn's root run isn't read again
+    assert "judge:" not in out
+    assert "written=" not in out
 
 
-def test_limit_caps_the_selected_turns(capsys):
-    fake = FakeLangSmith()
+def test_limit_caps_the_judge_calls(capsys):
+    fake, judge = FakeLangSmith(), StubJudge()
     traces = [fake.add_turn(minutes_ago=minutes) for minutes in range(30, 0, -1)]  # oldest first
 
-    assert _run(fake, limit=20) == 0
+    assert _run(fake, judge, write=True, limit=20) == 0
     out = capsys.readouterr().out
 
+    assert len(judge.calls) == 20
     assert "eligible=30 already_scored=0 selected=20 remaining=10 unparsed=0" in out
     assert _trace_ids(out) == traces[:-21:-1]  # the 20 newest, newest first
+    assert {row["run_id"] for row in fake.created} == set(traces[-20:])
+    assert "written=60 rows on 20 traces" in out
 
 
 def test_feedback_is_read_50_traces_at_a_time():
@@ -376,7 +420,7 @@ def test_reads_the_turn_from_the_stored_run():
     assert turn.reply == "That adds up fast. Which report hurts most?"
 
 
-def test_judge_gets_one_masked_turn():
+def test_judge_gets_one_masked_turn(capsys):
     # LeadData documents the keys of the state's lead_data dict: building it from the
     # model means a wrong key in online.py (there is no "name" field) fails here.
     lead_data = LeadData(
@@ -395,8 +439,8 @@ def test_judge_gets_one_masked_turn():
         HumanMessage(content="Three warehouses."),
         AIMessage(content="Got it. Who should the team follow up with?"),
     )
-    fake = FakeLangSmith()
-    trace_id = fake.add_turn(
+    fake, judge = FakeLangSmith(), StubJudge()
+    fake.add_turn(
         node="lead_capture",
         visitor=(
             "I'm Dana Whitfield, VP of Operations at C++ Labs (US). Reach me at "
@@ -411,34 +455,241 @@ def test_judge_gets_one_masked_turn():
         history=earlier,
         masked=False,  # as if the tracer's masking had failed at upload
     )
-    turn = online._parse_turn(trace_id, fake.root_runs[trace_id])
-    assert turn is not None
 
-    inputs, outputs = online._judge_inputs(turn)
+    assert _run(fake, judge, write=True) == 0
+    out = capsys.readouterr().out
 
     reply = (
         "Thanks, [NAME]. I have you as [TITLE] at [COMPANY], email [EMAIL], phone [PHONE]. "
         "Does that look right, Ms. [NAME]?"
     )
-    # The calibration labels' format: one visitor line, one TARS line.
-    assert inputs == (
-        "Visitor: I'm [NAME], [TITLE] at [COMPANY]. Reach me at [EMAIL] or [PHONE]; "
-        "my cell is [PHONE] and billing is [EMAIL].\n"
-        f"TARS: {reply}"
-    )
-    assert outputs == reply
+    assert judge.calls == [
+        {
+            # The calibration labels' format: one visitor line, one TARS line.
+            "inputs": (
+                "Visitor: I'm [NAME], [TITLE] at [COMPANY]. Reach me at [EMAIL] or [PHONE]; "
+                "my cell is [PHONE] and billing is [EMAIL].\n"
+                f"TARS: {reply}"
+            ),
+            "outputs": reply,
+        }
+    ]
+    sent = judge.calls[0]["inputs"] + judge.calls[0]["outputs"]
     for earlier_word in ("forklift", "spreadsheet", "warehouses"):
-        assert earlier_word not in inputs + outputs
+        assert earlier_word not in sent
     for value in ("Dana", "Whitfield", "cpplabs", "C++", "555", "VP of Operations"):
-        assert value not in inputs + outputs
+        assert value not in sent
+    # The output holds ids and numbers only. (No digit strings here: a trace id is
+    # random hex and could hold one.)
+    for value in ("Dana", "Whitfield", "cpplabs", "C++", "VP of Operations", "[NAME]"):
+        assert value not in out
+
+
+# ---------------------------------------------------------------------------
+# Writing feedback
+# ---------------------------------------------------------------------------
+
+def test_second_run_writes_nothing(capsys):
+    fake, judge = FakeLangSmith(), StubJudge()
+    for minutes in (1, 2, 3):
+        fake.add_turn(minutes_ago=minutes)
+
+    assert _run(fake, judge, write=True) == 0
+    first = capsys.readouterr().out
+    assert "written=9 rows on 3 traces" in first
+    assert (len(judge.calls), len(fake.created), len(fake.read_runs)) == (3, 9, 3)
+
+    assert _run(fake, judge, write=True) == 0
+    second = capsys.readouterr().out
+    assert (len(judge.calls), len(fake.created), len(fake.read_runs)) == (3, 9, 3)
+    assert "eligible=3 already_scored=3 selected=0 remaining=0 unparsed=0" in second
+    assert "written=0 rows on 0 traces" in second
+
+
+def test_writes_only_the_missing_keys(capsys):
+    fake, judge = FakeLangSmith(), StubJudge(score=0.5)
+    trace_id = fake.add_turn()
+    fake.feedback.append((trace_id, "markdown_clean"))  # an earlier run wrote this row, then died
+
+    assert _run(fake, judge, write=True) == 0
+    out = capsys.readouterr().out
+
+    assert [row["key"] for row in fake.created] == ["brevity_ok", "persona_adherence"]
+    assert f"trace {trace_id} brevity_ok=1 persona_adherence=0.5 written=2" in out
+
+
+def test_feedback_holds_no_visitor_text_and_no_judge_reasoning(capsys):
+    fake = FakeLangSmith()
+    judge = StubJudge(
+        score=0.0,
+        comment="The visitor said forklift scheduling is chaos; TARS mocked the night shift: sarcasm.",
+    )
+    fake.add_turn(
+        visitor="Our forklift scheduling is chaos and the night shift keeps double-booking.",
+        reply="Sounds like your night shift can't count. **Bold** strategy.",
+    )
+
+    assert _run(fake, judge, write=True) == 0
+    out = capsys.readouterr().out
+
+    kappa = calibration.CALIBRATED_KAPPA["persona_adherence"]
+    assert {row["key"]: row["comment"] for row in fake.created} == {
+        "markdown_clean": MARKDOWN_COMMENT,
+        "brevity_ok": BREVITY_COMMENT,
+        "persona_adherence": (
+            f"evals.online: {judges.JUDGE_MODEL} judged one visitor message and TARS's reply "
+            "against the TARS persona. 1 = on-voice, 0.5 = slightly off, 0 = off-persona. "
+            f"Judge kappa {kappa:.2f} against human labels (bar 0.6, validated)."
+        ),
+    }
+    assert {row["key"]: row["score"] for row in fake.created} == {
+        "markdown_clean": 0,  # the reply has **bold**
+        "brevity_ok": 1,
+        "persona_adherence": 0.0,
+    }
+    for row in fake.created:  # no value, correction or extra: nothing free-form is sent
+        assert set(row) == {"run_id", "key", "score", "comment", "feedback_source_type", "source_info"}
+    everything = json.dumps(fake.created, default=str) + out
+    for words in ("forklift", "night shift", "double-booking", "mocked", "sarcasm", "Bold"):
+        assert words not in everything
+
+
+def test_persona_key_needs_the_recorded_kappa(monkeypatch, capsys):
+    fake, judge = FakeLangSmith(), StubJudge()
+    fake.add_turn()
+
+    under_the_bar = {"persona_adherence": calibration.KAPPA_BAR - 0.01}
+    monkeypatch.setattr(calibration, "CALIBRATED_KAPPA", under_the_bar)
+    assert _run(fake, judge, write=True) == 0
+    out = capsys.readouterr().out
+    assert judge.calls == []
+    assert [row["key"] for row in fake.created] == ["markdown_clean", "brevity_ok"]
+    assert "judge: not run (persona_adherence is under the kappa bar 0.6)" in out
+
+    # Exactly at the bar the judge counts, and the same trace now lacks its row.
+    monkeypatch.setattr(calibration, "CALIBRATED_KAPPA", {"persona_adherence": calibration.KAPPA_BAR})
+    assert _run(fake, judge, write=True) == 0
+    assert len(judge.calls) == 1
+    assert [row["key"] for row in fake.created] == ALL_KEYS
+    assert fake.created[-1]["source_info"] == {
+        "evaluator": "evals.online",
+        "judge_model": judges.JUDGE_MODEL,
+        "kappa": calibration.KAPPA_BAR,
+        "kappa_bar": calibration.KAPPA_BAR,
+        "validated": True,
+    }
+
+
+def test_a_judge_error_is_retried_once(capsys):
+    fake = FakeLangSmith()
+    judge = StubJudge(errors=(KeyError("score"),))
+    fake.add_turn()
+
+    assert _run(fake, judge, write=True) == 0
+    out = capsys.readouterr().out
+
+    assert len(judge.calls) == 2
+    assert [row["key"] for row in fake.created] == ALL_KEYS
+    assert "calls=2 errors=1" in out
+
+
+def test_a_judge_error_keeps_the_checks_and_exits_1(capsys):
+    visitor = "We need the Kestrel rollout fixed before the audit."
+    fake = FakeLangSmith()
+    judge = StubJudge(
+        errors=(ValueError(f"could not parse: {visitor}"), ValueError(f"could not parse: {visitor}"))
+    )
+    trace_id = fake.add_turn(visitor=visitor)
+
+    assert _run(fake, judge, write=True) == 1
+    out = capsys.readouterr().out
+
+    assert len(judge.calls) == 2  # the call and its one retry
+    assert [row["key"] for row in fake.created] == ["markdown_clean", "brevity_ok"]
+    assert (
+        f"trace {trace_id} markdown_clean=1 brevity_ok=1 persona_adherence=error(ValueError) written=2"
+        in out
+    )
+    assert "calls=2 errors=2" in out
+    assert "Kestrel" not in out
+    assert "could not parse" not in out
+
+    # The next run retries the judge for that turn and writes only its row.
+    assert _run(fake, judge, write=True) == 0
+    assert len(judge.calls) == 3
+    assert [row["key"] for row in fake.created] == ALL_KEYS
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        RuntimeError("POST /feedback failed: HTTPError('the response body')"),
+        ls_utils.LangSmithAuthError("Authentication failed for /feedback. HTTPError('401 Unauthorized')"),
+        ls_utils.LangSmithError("Failed to POST /feedback in LangSmith API. HTTPError('403 Forbidden')"),
+    ],
+    ids=["any-error", "refused-401", "refused-403"],
+)
+def test_a_failed_write_stops_before_the_judge(error, capsys):
+    fake, judge = FakeLangSmith(), StubJudge()
+    newest = fake.add_turn(minutes_ago=1)
+    fake.add_turn(minutes_ago=2)
+    fake.write_error = error
+
+    # A refused write is a failed write: exit 1, not the exit 2 of a refused listing.
+    assert _run(fake, judge, write=True) == 1
+    out = capsys.readouterr().out
+
+    assert judge.calls == []
+    assert fake.write_attempts == 1  # the first cheap row; the run stopped there
+    assert f"error: {type(error).__name__} on a feedback write for trace {newest}; run stopped" in out
+    assert "written=0 rows on 0 traces" in out
+    # Words, not status digits: a trace id is random hex and could hold "401".
+    for text in ("/feedback", "HTTPError", "Unauthorized", "Forbidden", "response body"):
+        assert text not in out
+
+
+def test_feedback_goes_to_the_root_run_synchronously(monkeypatch, main_env):
+    fake, judge = FakeLangSmith(), StubJudge()
+    trace_id = fake.add_turn()
+
+    assert _run(fake, judge, write=True) == 0
+
+    # run_id is the trace id (the root run's id) and there is no trace_id argument: with
+    # one, a client that has an upload queue only queues the row and a failure can't raise.
+    assert [row["run_id"] for row in fake.created] == [trace_id] * 3
+    assert all("trace_id" not in row for row in fake.created)
+    assert [(row["key"], row["feedback_source_type"]) for row in fake.created] == [
+        ("markdown_clean", "api"),
+        ("brevity_ok", "api"),
+        ("persona_adherence", "model"),
+    ]
+    assert fake.created[0]["source_info"] == {"evaluator": "evals.online", "check": "markdown_leak"}
+    assert fake.created[1]["source_info"] == {"evaluator": "evals.online", "check": "brevity_ok"}
+
+    # And the client main() builds has no upload queue at all.
+    built: dict[str, Any] = {}
+
+    async def _capture(client, judge, **_kwargs):
+        built["client"] = client
+        return 0
+
+    monkeypatch.setattr(app_config, "get_settings", lambda: _settings(langsmith="langsmith-test-key"))
+    monkeypatch.setattr(online, "run_online", _capture)
+    assert online.main(["--project", PROJECT]) == 0
+    client = built["client"]
+    assert isinstance(client, Client)
+    assert client.tracing_queue is None
+    assert client.compressed_traces is None
+    assert client.api_key == "langsmith-test-key"  # from Settings, passed explicitly
 
 
 # ---------------------------------------------------------------------------
 # Failures and exit status
 # ---------------------------------------------------------------------------
 
-def test_an_unparsed_turn_is_counted_and_exits_1(capsys):
-    fake = FakeLangSmith()
+@pytest.mark.parametrize("write", [False, True], ids=["dry-run", "write"])
+def test_an_unparsed_turn_is_counted_and_exits_1(write, capsys):
+    fake, judge = FakeLangSmith(), StubJudge()
     good = fake.add_turn(minutes_ago=1)
     unreadable = [
         fake.add_turn(minutes_ago=2, outputs=False),
@@ -446,19 +697,20 @@ def test_an_unparsed_turn_is_counted_and_exits_1(capsys):
         fake.add_turn(minutes_ago=4, root_error="RuntimeError('the graph failed')"),
     ]
 
-    # Exit 1 although it is a dry run: the stored shape isn't what the command assumes.
-    assert _run(fake) == 1
+    # Exit 1 in a dry run too: the stored shape isn't what the command assumes.
+    assert _run(fake, judge, write=write) == 1
     out = capsys.readouterr().out
 
     assert "selected=4 remaining=0 unparsed=3" in out
     for trace_id in unreadable:
         assert f"trace {trace_id} unparsed" in out
-    assert f"trace {good} would_write=" in out
+    assert {row["run_id"] for row in fake.created} == ({good} if write else set())
+    assert len(judge.calls) == (1 if write else 0)
 
 
 @pytest.mark.parametrize("call", ["list_runs", "list_feedback", "read_run"])
 def test_a_langsmith_error_while_listing_or_reading_exits_2(call, monkeypatch, capsys):
-    fake = FakeLangSmith()
+    fake, judge = FakeLangSmith(), StubJudge()
     fake.add_turn()
 
     def _refuse(*_args, **_kwargs):
@@ -468,12 +720,13 @@ def test_a_langsmith_error_while_listing_or_reading_exits_2(call, monkeypatch, c
 
     monkeypatch.setattr(fake, call, _refuse)
 
-    assert _run(fake) == 2
+    assert _run(fake, judge, write=True) == 2
     out = capsys.readouterr().out
 
     assert "error: LangSmithAuthError while listing or reading LangSmith; nothing was written" in out
     for text in ("/runs/query", "HTTPError", "Unauthorized"):
         assert text not in out
+    assert judge.calls == []
     assert fake.write_attempts == 0
 
 
@@ -490,40 +743,59 @@ def test_main_turns_tracing_off_and_drops_anthropic_log(monkeypatch, main_env):
     fake.add_turn()
     _wire_main(monkeypatch, fake)
 
+    at_judge_build: dict[str, Any] = {}
+
+    def _build_judge():
+        # What the process looks like at the moment the judge model would be built.
+        at_judge_build.update({name: os.environ.get(name) for name in (*_TRACING_FLAGS, "ANTHROPIC_LOG")})
+        at_judge_build["langsmith would trace"] = ls_utils.tracing_is_enabled()
+        return StubJudge()
+
+    monkeypatch.setattr(judges, "persona_adherence_judge", _build_judge)
     ls_utils.get_env_var.cache_clear()  # langsmith caches env reads
     try:
-        assert online.main(["--project", PROJECT]) == 0
-        assert ls_utils.tracing_is_enabled() is False
+        assert online.main(["--project", PROJECT, "--write"]) == 0
     finally:
         ls_utils.get_env_var.cache_clear()  # don't leave this test's env cached for later tests
 
-    assert {name: os.environ.get(name) for name in (*_TRACING_FLAGS, "ANTHROPIC_LOG")} == {
+    assert at_judge_build == {
         "LANGSMITH_TRACING": "false",
         "LANGCHAIN_TRACING_V2": "false",
         "LANGSMITH_TRACING_V2": "false",
         "LANGCHAIN_TRACING": "false",
         "ANTHROPIC_LOG": None,
+        "langsmith would trace": False,
     }
     # The client logs a failed request with its traceback and response body at ERROR.
     assert logging.getLogger("langsmith.client").getEffectiveLevel() > logging.ERROR
 
 
-def test_missing_keys_exit_2(monkeypatch, main_env, capsys):
-    # A key in the shell must not change the result: main() reads Settings, and these
-    # Settings are built with no .env file and no key.
+@pytest.mark.parametrize(
+    ("extra_args", "keys", "missing"),
+    [
+        ([], {}, "LANGSMITH_API_KEY"),
+        (["--write"], {"langsmith": "langsmith-test-key"}, "ANTHROPIC_API_KEY"),
+    ],
+    ids=["no-langsmith-key", "no-anthropic-key-with-write"],
+)
+def test_missing_keys_exit_2(extra_args, keys, missing, monkeypatch, main_env, capsys):
+    # Keys in the shell must not change the result: main() reads Settings, and these
+    # Settings are built with no .env file and the two keys given here.
     monkeypatch.setenv("LANGSMITH_API_KEY", "a-key-from-the-shell")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "a-key-from-the-shell")
     fake = FakeLangSmith()
-    wiring = _wire_main(monkeypatch, fake, langsmith=None)
+    wiring = _wire_main(monkeypatch, fake, StubJudge(), langsmith=keys.get("langsmith"), anthropic=None)
 
-    assert online.main(["--project", PROJECT]) == 2
+    assert online.main(["--project", PROJECT, *extra_args]) == 2
 
-    assert "error: LANGSMITH_API_KEY is not set" in capsys.readouterr().out
+    assert f"error: {missing} is not set" in capsys.readouterr().out
     assert wiring.clients == []  # no client was built, so nothing reached LangSmith
+    assert wiring.judge_builds == 0
 
 
 def test_limit_has_a_hard_maximum(monkeypatch, main_env, capsys):
     fake = FakeLangSmith()
-    wiring = _wire_main(monkeypatch, fake)
+    wiring = _wire_main(monkeypatch, fake, anthropic=None)  # a dry run needs no judge key
 
     for refused in ("101", "0"):
         assert online.main(["--project", PROJECT, "--limit", refused]) == 2
