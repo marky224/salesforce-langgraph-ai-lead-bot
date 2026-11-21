@@ -34,14 +34,14 @@ What the judge provider receives
     tracer's patterns from matching the rest of that email or number. Each captured
     value is looked for as stored and in title case, and each of those two also as the
     tracer's masking rewrites it: the plain forms catch a captured phone that the
-    tracer's pattern skips in the text (right after a "." or a "+", or before
-    ".<digit>"), the rewritten ones a captured email that the pattern only half matches.
-    Nothing else from the trace is sent: no earlier turns, no lead data, no ids.
-    Best-effort: a name typed in another case or misspelled, someone else's name and a
-    phone shape the patterns miss still reach the judge, as does everything else the
-    visitor typed in that message. Visitor text sits in the judge prompt, so it can steer
-    a score; the damage stops at the score (1, 0.5 or 0), because the judge's reasoning
-    is never stored or printed.
+    tracer's pattern skips in the text (right after a ".", after a "+" that no digit
+    follows, or before ".<digit>"), the rewritten ones a captured email that the pattern
+    only half matches. Nothing else from the trace is sent: no earlier turns, no lead
+    data, no ids. Best-effort: a name typed in another case or misspelled, someone else's
+    name and a phone shape the patterns miss still reach the judge, as does everything
+    else the visitor typed in that message. Visitor text sits in the judge prompt, so it
+    can steer a score; the damage stops at the score (1, 0.5 or 0), because the judge's
+    reasoning is never stored or printed.
 
 What is written
     Up to three feedback rows on the trace's root run: ``markdown_clean`` (1 or 0),
@@ -354,8 +354,8 @@ def _judge_inputs(turn: Turn) -> tuple[str, str]:
     text:
 
     - The plain form covers a captured phone that the phone pattern matches on its own
-      but skips in the text: right after a "." or a "+", or before ".<digit>"
-      ("Ph.210-555-0188"). Its rewritten twin is just "[PHONE]".
+      but skips in the text: right after a ".", after a "+" that no digit follows, or
+      before ".<digit>" ("Ph.210-555-0188"). Its rewritten twin is just "[PHONE]".
     - The rewritten twin covers a captured email that the email pattern only half
       matches, such as one with a non-ASCII letter in it: the first step leaves the same
       remainder in the text and in the rewritten form, and the plain form no longer
