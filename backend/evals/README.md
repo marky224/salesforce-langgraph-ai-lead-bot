@@ -167,6 +167,14 @@ themselves are never traced.
 - Visitor text goes into the judge prompt, so a visitor can steer a score (prompt injection). The damage
   stops at the score: it is always 1, 0.5 or 0, and nothing the judge writes is stored.
 - Two runs at the same time can write a key twice. Run one at a time.
+- One run reads at most 1,000 node runs from the listing. It sends LangSmith no `limit`, because the
+  server refuses one over 100; it reads the listing page by page and stops at 1,000 itself. When it stops
+  there it prints `scan cap reached`, and the turns past that point were not seen.
+- A feedback write that fails is tried 3 times, then the run stops (exit 1). The waits between the attempts
+  add up to about 3 seconds; on a rate limit (429) they are three times the server's `retry-after`, about
+  90 seconds when it sends none. Each attempt can also run into the client's own timeouts (10 seconds to
+  connect, 60 to read). A refused key (401 or 403) stops the run at once. The command prints nothing while
+  it waits.
 
 **Keys.** `LANGSMITH_API_KEY` always, and `ANTHROPIC_API_KEY` with `--write`, read from the environment or
 `.env`. An org-scoped LangSmith key also needs `LANGSMITH_WORKSPACE_ID` **exported in the shell**: the

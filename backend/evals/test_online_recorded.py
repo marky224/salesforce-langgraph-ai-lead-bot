@@ -16,6 +16,10 @@ Two things keep these tests honest:
   client's ``info`` property swallows the exception). ``no_env_keys`` replaces
   ``app.config.get_settings``, so no test reads a key from the shell or a ``.env``.
 
+One test goes a layer down: ``test_a_write_that_keeps_failing_is_tried_3_times`` writes
+through a real client whose HTTP session is replaced, so langsmith's own retry loop runs
+(and still nothing leaves the process).
+
 Rides the ``eval_recorded`` CI gate, like ``test_scorecard.py``.
 """
 
@@ -25,11 +29,13 @@ import asyncio
 import json
 import logging
 import os
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
+import requests
 from langchain_core.messages import AIMessage, HumanMessage
 from langsmith import Client
 from langsmith import schemas as ls_schemas
@@ -55,6 +61,8 @@ MARKDOWN_COMMENT = (
 BREVITY_COMMENT = (
     "evals.online: scorecard.brevity_ok on TARS's reply. 1 = at most 5 sentences, 0 = more."
 )
+# langsmith's retry loop, kept here because ``no_live_calls`` replaces it in every test.
+_REQUEST_WITH_RETRIES = Client.request_with_retries
 
 
 # ---------------------------------------------------------------------------
@@ -82,6 +90,7 @@ class FakeLangSmith:
         self.write_attempts = 0
         self.write_error: Exception | None = None
         self.list_runs_calls: list[dict[str, Any]] = []
+        self.runs_read = 0  # how many node runs the command took from a listing
         self.feedback_reads: list[int] = []  # how many trace ids each list_feedback call asked for
         self.read_runs: list[str] = []
 
@@ -152,7 +161,13 @@ class FakeLangSmith:
 
     def list_runs(self, **kwargs: Any) -> Any:
         self.list_runs_calls.append(kwargs)
-        return iter(self.node_runs[: kwargs["limit"]])
+        return self._one_at_a_time()
+
+    def _one_at_a_time(self) -> Any:
+        """Every node run, handed over as it is asked for: the client pages lazily too."""
+        for run in self.node_runs:
+            self.runs_read += 1
+            yield run
 
     def list_feedback(self, *, run_ids: list[str], feedback_key: list[str]) -> Any:
         self.feedback_reads.append(len(run_ids))
@@ -325,7 +340,6 @@ def test_selects_only_conversational_turns(capsys):
     assert query["project_name"] == PROJECT
     assert query["run_type"] == "chain"
     assert query["start_time"] == NOW - timedelta(hours=168)
-    assert query["limit"] == 1000
     assert query["filter"] == (
         'and(has(tags, "tars"), or(eq(name, "discovery"), eq(name, "qualification"), '
         'eq(name, "objection_handling"), eq(name, "lead_capture"), eq(name, "confirmation")))'
@@ -390,6 +404,19 @@ def test_the_scan_cap_is_reported(monkeypatch, capsys):
 
     assert "scanned=3 eligible=3" in out
     assert "scan cap reached: the listing stopped at 3 node runs" in out
+    assert fake.runs_read == 3  # the command stops reading there: the fake held 5
+
+
+def test_the_listing_sends_no_limit():
+    # LangSmith answers 400 to a /runs/query limit over 100 and the client sends the
+    # argument as it is, so the command sends none and applies the scan cap itself.
+    fake = FakeLangSmith()
+    fake.add_turn()
+
+    assert _run(fake) == 0
+
+    (query,) = fake.list_runs_calls
+    assert "limit" not in query
 
 
 # ---------------------------------------------------------------------------
@@ -648,7 +675,9 @@ def test_feedback_holds_no_visitor_text_and_no_judge_reasoning(capsys):
         "persona_adherence": 0.0,
     }
     for row in fake.created:  # no value, correction or extra: nothing free-form is sent
-        assert set(row) == {"run_id", "key", "score", "comment", "feedback_source_type", "source_info"}
+        assert set(row) == {
+            "run_id", "key", "score", "comment", "feedback_source_type", "source_info", "stop_after_attempt",
+        }
     everything = json.dumps(fake.created, default=str) + out
     for words in ("forklift", "night shift", "double-booking", "mocked", "sarcasm", "Bold"):
         assert words not in everything
@@ -746,6 +775,51 @@ def test_a_failed_write_stops_before_the_judge(error, capsys):
     # Words, not status digits: a trace id is random hex and could hold "401".
     for text in ("/feedback", "HTTPError", "Unauthorized", "Forbidden", "response body"):
         assert text not in out
+
+
+@pytest.mark.parametrize(
+    ("status", "error", "longest_wait"),
+    [(500, "LangSmithAPIError", 5), (429, "LangSmithRateLimitError", 95)],
+    ids=["server-error", "rate-limit"],
+)
+def test_a_write_that_keeps_failing_is_tried_3_times(status, error, longest_wait, monkeypatch, capsys):
+    # langsmith's own retry loop runs here, on a real client whose HTTP session and sleeps
+    # are replaced. With the client's default of 10 attempts the same write sleeps for
+    # about 8.5 minutes before it raises, and for hours on a rate limit.
+    fake, judge = FakeLangSmith(), StubJudge()
+    newest = fake.add_turn(minutes_ago=1)
+    fake.add_turn(minutes_ago=2)
+    posts: list[str] = []
+    waits: list[float] = []
+
+    def _answer(method, url, **_kwargs):
+        posts.append(f"{method} {url}")
+        response = requests.Response()
+        response.status_code = status
+        response._content = b'{"detail": "the response body"}'
+        return response
+
+    client = Client(
+        api_key="langsmith-test-key",
+        api_url="https://langsmith.invalid",  # resolves nowhere, should the session stub ever be missed
+        auto_batch_tracing=False,
+        info=ls_schemas.LangSmithInfo(),  # given here, or the client asks the server for it
+    )
+    monkeypatch.setattr(client.session, "request", _answer)
+    monkeypatch.setattr(Client, "request_with_retries", _REQUEST_WITH_RETRIES)
+    monkeypatch.setattr(time, "sleep", waits.append)
+    monkeypatch.setattr(fake, "create_feedback", client.create_feedback)
+
+    assert _run(fake, judge, write=True) == 1
+    out = capsys.readouterr().out
+
+    assert posts == ["POST https://langsmith.invalid/feedback"] * 3
+    assert len(waits) == 2
+    assert sum(waits) < longest_wait  # seconds
+    assert judge.calls == []
+    assert f"error: {error} on a feedback write for trace {newest}; run stopped" in out
+    assert "written=0 rows on 0 traces" in out
+    assert "the response body" not in out
 
 
 def test_feedback_goes_to_the_root_run_synchronously(monkeypatch, main_env):

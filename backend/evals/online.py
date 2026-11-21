@@ -19,7 +19,9 @@ What one score covers
     ``--since-hours``. That is the shape the persona judge's kappa was measured on (one
     visitor message and one reply). Greetings, site answers and the fixed replies are
     not judged. Newest first; a turn that already has every key is skipped, so a second
-    run over the same traces calls no judge and writes nothing.
+    run over the same traces calls no judge and writes nothing. One run reads at most
+    1,000 node runs. It sends the listing no ``limit`` (LangSmith refuses one over 100)
+    and stops reading at the cap itself.
 
 What the judge provider receives
     The judge prompt and two strings: ``Visitor: <message>\\nTARS: <reply>`` and the reply
@@ -43,8 +45,11 @@ What is written
     text built here. ``persona_adherence`` is written only while its recorded kappa clears
     the bar (``calibration.is_validated``); under the bar the judge isn't called. Writes
     are synchronous: the client has no upload queue, so a failed write raises and stops
-    the run. The two code checks are written before the judge is called, so a key that
-    can't write costs no judge call.
+    the run. A write gets 3 attempts, not the client's default 10: one that keeps failing
+    stops the run after about 3 seconds of waiting, not after minutes (on a rate limit,
+    three times the server's retry-after: about 90 seconds at the client's default of 30).
+    The two code checks are written before the judge is called, so a key that can't write
+    costs no judge call.
 
 Keys
     ``LANGSMITH_API_KEY`` always and ``ANTHROPIC_API_KEY`` with ``--write``, both through
@@ -81,6 +86,7 @@ import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from itertools import islice
 from typing import Any
 
 from langchain_core.callbacks import get_usage_metadata_callback
@@ -113,6 +119,9 @@ MAX_LIMIT = 100  # hard maximum: a typo such as 2000 must not become 2,000 judge
 DEFAULT_SINCE_HOURS = 168
 SCAN_CAP = 1000  # most node runs one listing reads
 _FEEDBACK_READ_CHUNK = 50  # trace ids per feedback read
+# Attempts per feedback write. The client's default is 10, with a doubling sleep between
+# them: about 8.5 minutes of silence before a failing write raises, hours on a rate limit.
+_WRITE_ATTEMPTS = 3
 
 # The nodes whose reply TARS writes in its persona. One of them runs per chat turn.
 CONVERSATIONAL_NODES = (
@@ -388,6 +397,7 @@ def _write_row(
             comment=comment,
             feedback_source_type=source_type,
             source_info=source_info,
+            stop_after_attempt=_WRITE_ATTEMPTS,
         )
     except Exception as exc:
         # The class only: a LangSmith error's text holds the URL and the response body.
@@ -478,14 +488,19 @@ async def run_online(
     )
 
     try:
+        # No ``limit`` argument: the client puts it in the query body as it is, and
+        # LangSmith answers 400 to one over 100. The client reads the listing a page at a
+        # time, so islice stops it at the cap.
         runs = list(
-            client.list_runs(
-                project_name=project,
-                run_type="chain",
-                start_time=now - timedelta(hours=since_hours),
-                filter=_RUN_FILTER,
-                select=_RUN_SELECT,
-                limit=SCAN_CAP,
+            islice(
+                client.list_runs(
+                    project_name=project,
+                    run_type="chain",
+                    start_time=now - timedelta(hours=since_hours),
+                    filter=_RUN_FILTER,
+                    select=_RUN_SELECT,
+                ),
+                SCAN_CAP,
             )
         )
         eligible = _eligible_trace_ids(runs)
