@@ -547,6 +547,28 @@ _UNMASKED_TURNS = [
         ("ines", "muñ", "cpplabs"),
         id="captured-name-starts-a-half-matched-email",
     ),
+    # A half-matched captured email that the visitor typed capitalised. The tracer's
+    # masking leaves "Ines.Muñ[EMAIL]" in the text, which only the title-case form put
+    # through that same masking equals: the title case of the already rewritten value is
+    # "Ines.Muñ[Email]" and matches nothing.
+    pytest.param(
+        {"email": "ines.muñoz@cpplabs.example"},
+        "Send it to Ines.Muñoz@Cpplabs.Example please",
+        _NOTED,
+        "Send it to [EMAIL] please",
+        _NOTED,
+        ("Ines", "Muñ", "Cpplabs"),
+        id="half-matched-email-typed-in-title-case",
+    ),
+    pytest.param(
+        {"email": "dána@cpplabs.example"},
+        "Send it to Dána@Cpplabs.Example please",
+        _NOTED,
+        "Send it to [EMAIL] please",
+        _NOTED,
+        ("Dá", "Cpplabs"),
+        id="tail-matched-email-typed-in-title-case",
+    ),
 ]
 
 
