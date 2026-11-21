@@ -100,10 +100,11 @@ cd backend && python -m evals.run --dimension sim --mode live --judges --report 
 
 `KAPPA_BAR = 0.6` (Landis–Koch "substantial"); the recorded result lives in `calibration.py::CALIBRATED_KAPPA`
 and travels with the labels + judge prompts (re-run + update on any change). A judge below the bar is still
-shown but flagged **advisory** and never folded into `overall_pass`. Recorded 2026-06-15: `persona_adherence`
-κ=0.74 (validated); `summary_faithfulness` κ=0.25 (advisory — the generic groundedness rubric over-flags the
-summary's asked-for sentiment gloss; a task-specific prompt is the follow-up). A longer write-up is in
-the maintainer's local build notes, which are not published.
+shown but flagged **advisory** and never folded into `overall_pass`. Recorded 2026-11-21, a re-run under
+langchain-anthropic 1.7.5: `persona_adherence` κ=0.61 (validated, by a thin margin: 3 of its 12 labels
+split; the first recording, 2026-06-15, was 0.74); `summary_faithfulness` κ=0.25, as before (advisory — the
+generic groundedness rubric over-flags the summary's asked-for sentiment gloss; a task-specific prompt is
+the follow-up). A longer write-up is in the maintainer's local build notes, which are not published.
 
 ## Online eval (live, manual)
 
