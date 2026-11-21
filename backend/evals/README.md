@@ -102,8 +102,8 @@ cd backend && python -m evals.run --dimension sim --mode live --judges --report 
 and travels with the labels + judge prompts (re-run + update on any change). A judge below the bar is still
 shown but flagged **advisory** and never folded into `overall_pass`. Recorded 2026-06-15: `persona_adherence`
 κ=0.74 (validated); `summary_faithfulness` κ=0.25 (advisory — the generic groundedness rubric over-flags the
-summary's asked-for sentiment gloss; a task-specific prompt is the follow-up). Deep dive:
-`_private/docs/build/14-evals.md` §8.
+summary's asked-for sentiment gloss; a task-specific prompt is the follow-up). A longer write-up is in
+the maintainer's local build notes, which are not published.
 
 ## Online eval (live, manual)
 
@@ -173,11 +173,18 @@ no lead data, no ids. The judge calls themselves are never traced.
 - One run reads at most 1,000 node runs from the listing. It sends LangSmith no `limit`, because the
   server refuses one over 100; it reads the listing page by page and stops at 1,000 itself. When it stops
   there it prints `scan cap reached`, and the turns past that point were not seen.
-- A feedback write that fails is tried 3 times, then the run stops (exit 1). The waits between the attempts
-  add up to about 3 seconds; on a rate limit (429) they are three times the server's `retry-after`, about
-  90 seconds when it sends none. Each attempt can also run into the client's own timeouts (10 seconds to
-  connect, 60 to read). A refused key (401 or 403) stops the run at once. The command prints nothing while
-  it waits.
+- A feedback write that fails is tried 3 times, then the run stops (exit 1). How long that takes depends on
+  how the server fails. When it answers with an error (a 500 or a 404), the waits add up to about 3
+  seconds. On a rate limit (429) they follow the server's `Retry-After`, about 12 times its value in all,
+  or about 90 seconds when the server sends none. When the server stops answering, the client's HTTP
+  adapter retries each attempt itself (4 tries, each up to the 60-second read timeout), so one write can
+  wait about 12 minutes before it raises. A refused key (401 or 403) stops the run at once. The command
+  prints nothing while it waits.
+- A phone number that the tracer itself misses is sent as it was stored. The tracer's phone pattern skips
+  a number right after a `.` or a `+`, or before `.<digit>` (`Ph.210-555-0188`). In a normal masked upload
+  such a number is stored raw while the captured `phone` is stored as `[PHONE]`, so the online eval has
+  nothing to find it with. Fixing that takes a change to the app's tracing patterns (`app/tracing.py`),
+  which the online eval leaves alone.
 
 **Keys.** `LANGSMITH_API_KEY` always, and `ANTHROPIC_API_KEY` with `--write`, read from the environment or
 `.env`. An org-scoped LangSmith key also needs `LANGSMITH_WORKSPACE_ID` **exported in the shell**: the
@@ -228,4 +235,4 @@ python -m pytest evals/test_<dim>_recorded.py -s --record-mode=once   # re-recor
 Review the YAML diff (it's the "model behaviour changed" artifact), update the floors in the test to the
 new baseline, and commit. Cassettes have auth/cookie headers filtered — no secrets are stored.
 
-Deep dive (local-only): `_private/docs/build/14-evals.md`.
+Deep dive: the maintainer's local build notes, which are not published.

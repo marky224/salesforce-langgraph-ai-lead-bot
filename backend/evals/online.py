@@ -48,11 +48,13 @@ What is written
     text built here. ``persona_adherence`` is written only while its recorded kappa clears
     the bar (``calibration.is_validated``); under the bar the judge isn't called. Writes
     are synchronous: the client has no upload queue, so a failed write raises and stops
-    the run. A write gets 3 attempts, not the client's default 10: one that keeps failing
-    stops the run after about 3 seconds of waiting, not after minutes (on a rate limit,
-    three times the server's retry-after: about 90 seconds at the client's default of 30).
-    The two code checks are written before the judge is called, so a key that can't write
-    costs no judge call.
+    the run. A write gets 3 attempts, not the client's default 10. How long a write that
+    keeps failing waits depends on how the server fails: an error answer (a 500 or a 404)
+    stops the run after about 3 seconds; a rate limit (429) after about 12 times the
+    server's Retry-After, or about 90 seconds when it sends none; a server that stops
+    answering after about 12 minutes, because the client's HTTP adapter retries each
+    attempt itself (4 tries, each up to the 60-second read timeout). The two code checks
+    are written before the judge is called, so a key that can't write costs no judge call.
 
 Keys
     ``LANGSMITH_API_KEY`` always and ``ANTHROPIC_API_KEY`` with ``--write``, both through
