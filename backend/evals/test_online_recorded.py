@@ -513,6 +513,40 @@ _UNMASKED_TURNS = [
         ("210", "555", "0188"),
         id="captured-phone-inside-a-longer-number",
     ),
+    # A captured phone that the tracer's pattern matches on its own but skips in the text,
+    # right after a ".": only the value as stored still finds it there (the tracer's
+    # masking turns the captured value itself into "[PHONE]"). No digit may get through.
+    pytest.param(
+        {"phone": "210-555-0188"},
+        "Ph.210-555-0188 is my cell",
+        _NOTED,
+        "Ph.[PHONE] is my cell",
+        _NOTED,
+        ("0", "1", "2", "5", "8"),
+        id="captured-phone-right-after-a-dot",
+    ),
+    pytest.param(
+        {"phone": "2105550188"},
+        "tel.2105550188 any time",
+        _NOTED,
+        "tel.[PHONE] any time",
+        _NOTED,
+        ("0", "1", "2", "5", "8"),
+        id="captured-phone-digits-right-after-a-dot",
+    ),
+    # A captured first name that starts a captured email the pattern only half matches
+    # (it stops at the "ñ" and leaves "ines.muñ[EMAIL]"). Both forms of the captured
+    # values go in one pass, longest first: replacing the name first would cut the
+    # remainder off the email and let ".muñ" through.
+    pytest.param(
+        {"first_name": "ines", "email": "ines.muñoz@cpplabs.example"},
+        "ines here, ines.muñoz@cpplabs.example",
+        _NOTED,
+        "[NAME] here, [EMAIL]",
+        _NOTED,
+        ("ines", "muñ", "cpplabs"),
+        id="captured-name-starts-a-half-matched-email",
+    ),
 ]
 
 

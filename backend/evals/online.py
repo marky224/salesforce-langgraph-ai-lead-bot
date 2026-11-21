@@ -31,13 +31,16 @@ What the judge provider receives
     joined with ``[NAME]``, ``company`` with ``[COMPANY]``, ``title`` with ``[TITLE]``,
     and the captured ``email`` and ``phone`` with ``[EMAIL]`` and ``[PHONE]``. That order
     matters: a placeholder written next to an ``@`` or after an area code would stop the
-    tracer's patterns from matching the rest of that email or number. Nothing else from
-    the trace is sent: no earlier turns, no lead data, no ids. Best-effort: a name typed
-    in another case or misspelled, someone else's name and a phone shape the patterns
-    miss still reach the judge, as does everything else the visitor typed in that
-    message. Visitor text sits in the judge prompt, so it can steer a score; the damage
-    stops at the score (1, 0.5 or 0), because the judge's reasoning is never stored or
-    printed.
+    tracer's patterns from matching the rest of that email or number. Each captured
+    value is looked for both as stored and as the tracer's masking rewrites it: the
+    first catches a captured phone that the tracer's pattern skips in the text (right
+    after a "." or a "+", or before ".<digit>"), the second a captured email that the
+    pattern only half matches. Nothing else from the trace is sent: no earlier turns, no
+    lead data, no ids. Best-effort: a name typed in another case or misspelled, someone
+    else's name and a phone shape the patterns miss still reach the judge, as does
+    everything else the visitor typed in that message. Visitor text sits in the judge
+    prompt, so it can steer a score; the damage stops at the score (1, 0.5 or 0), because
+    the judge's reasoning is never stored or printed.
 
 What is written
     Up to three feedback rows on the trace's root run: ``markdown_clean`` (1 or 0),
@@ -311,9 +314,13 @@ def _lead_values(lead_data: dict[str, Any]) -> dict[str, str]:
     return values
 
 
-def _mask_lead_values(text: str, lead_data: dict[str, Any]) -> str:
+def _mask_lead_values(text: str, *lead_data: dict[str, Any]) -> str:
     """
     Replace the lead values captured in this trace with their placeholders.
+
+    ``lead_data`` can be given in more than one form (``_judge_inputs`` passes it as
+    stored and as the tracer's masking rewrites it); the values of every form are
+    replaced in the same pass.
 
     The values are visitor text that came through the extraction model, so they are
     untrusted: each one is matched literally (``re.escape``), never as a pattern.
@@ -321,7 +328,9 @@ def _mask_lead_values(text: str, lead_data: dict[str, Any]) -> str:
     a non-word character ("Yahoo!", "C++ Labs"). One pass, longest value first, so a
     full name wins over its parts and a placeholder is never matched again.
     """
-    values = _lead_values(lead_data)
+    values: dict[str, str] = {}
+    for captured in lead_data:
+        values |= _lead_values(captured)
     if not values:
         return text
     alternatives = "|".join(re.escape(value) for value in sorted(values, key=len, reverse=True))
@@ -337,16 +346,30 @@ def _judge_inputs(turn: Turn) -> tuple[str, str]:
     so no raw email or phone shape leaves here even for a trace that was stored unmasked.
     The other order leaves part of one behind: a placeholder next to an ``@`` or after an
     area code stops the tracer's patterns from matching ("cc [NAME]@kestrelfreight.io",
-    "(210) [PHONE]"). The captured values go through the tracer's masking along with the
-    text, as they do in a masked upload: a captured email that the pattern only half
-    matches then reads the same in the text and in ``lead_data``, and is replaced whole.
+    "(210) [PHONE]").
+
+    Each captured value is replaced in two forms: as stored, and as the tracer's masking
+    rewrites it (the masking also runs over a copy of ``lead_data``). Neither form is
+    enough alone, because the tracer's patterns can read a value differently on its own
+    and inside the text:
+
+    - The stored form covers a captured phone that the phone pattern matches on its own
+      but skips in the text: right after a "." or a "+", or before ".<digit>"
+      ("Ph.210-555-0188"). Its rewritten form is just "[PHONE]".
+    - The rewritten form covers a captured email that the email pattern only half
+      matches, such as one with a non-ASCII letter in it: the first step leaves the same
+      remainder in the text and in the rewritten value, and the stored form no longer
+      matches the text.
+
+    Both forms go in one pass, so the longest one wins where a shorter captured value
+    (a first name) starts inside it.
     """
     masked = build_email_anonymizer()(
         # A copy of lead_data: the anonymizer writes into what it is given.
         {"visitor": turn.visitor, "reply": turn.reply, "lead_data": dict(turn.lead_data)}
     )
-    visitor = _mask_lead_values(masked["visitor"], masked["lead_data"])
-    reply = _mask_lead_values(masked["reply"], masked["lead_data"])
+    visitor = _mask_lead_values(masked["visitor"], turn.lead_data, masked["lead_data"])
+    reply = _mask_lead_values(masked["reply"], turn.lead_data, masked["lead_data"])
     return f"Visitor: {visitor}\nTARS: {reply}", reply
 
 

@@ -156,8 +156,11 @@ that was stored unmasked. Then the values captured in that trace's `lead_data` a
 `last_name` and the full name with `[NAME]`, `company` with `[COMPANY]`, `title` with `[TITLE]`, and the
 captured `email` and `phone` with `[EMAIL]` and `[PHONE]`. The order matters: a placeholder written next
 to an `@` or after an area code would stop the tracer's patterns from matching the rest of that email or
-number. Nothing else from the trace is sent: no earlier turns, no lead data, no ids. The judge calls
-themselves are never traced.
+number. Each captured value is looked for both as stored and as the tracer's masking rewrites it. The
+first catches a captured phone that the tracer's pattern skips in the text (right after a `.` or a `+`, or
+before `.<digit>`, as in `Ph.210-555-0188`); the second catches a captured email that the pattern only half
+matches, such as one with a non-ASCII letter in it. Nothing else from the trace is sent: no earlier turns,
+no lead data, no ids. The judge calls themselves are never traced.
 
 **Limits.**
 - The masking is best-effort. A name typed in another case or misspelled, another person's name, a phone
