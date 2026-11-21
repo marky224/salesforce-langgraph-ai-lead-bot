@@ -23,16 +23,19 @@ What one score covers
 
 What the judge provider receives
     The judge prompt and two strings: ``Visitor: <message>\\nTARS: <reply>`` and the reply
-    alone. Before the call the values captured in that trace's ``lead_data`` are replaced:
-    ``first_name``, ``last_name`` and the two joined with ``[NAME]``, ``company`` with
-    ``[COMPANY]``, ``title`` with ``[TITLE]``, and the captured ``email`` and ``phone``
-    with ``[EMAIL]`` and ``[PHONE]``. Then the text goes through the tracer's email and
-    phone masking again. Nothing else from the trace is sent: no earlier turns, no lead
-    data, no ids. Best-effort: a name typed in another case or misspelled, someone else's
-    name and a phone shape the patterns miss still reach the judge, as does everything
-    else the visitor typed in that message. Visitor text sits in the judge prompt, so it
-    can steer a score; the damage stops at the score (1, 0.5 or 0), because the judge's
-    reasoning is never stored or printed.
+    alone. Before the call the text goes through the tracer's email and phone masking
+    again, which covers a trace that was stored unmasked. Then the values captured in
+    that trace's ``lead_data`` are replaced: ``first_name``, ``last_name`` and the two
+    joined with ``[NAME]``, ``company`` with ``[COMPANY]``, ``title`` with ``[TITLE]``,
+    and the captured ``email`` and ``phone`` with ``[EMAIL]`` and ``[PHONE]``. That order
+    matters: a placeholder written next to an ``@`` or after an area code would stop the
+    tracer's patterns from matching the rest of that email or number. Nothing else from
+    the trace is sent: no earlier turns, no lead data, no ids. Best-effort: a name typed
+    in another case or misspelled, someone else's name and a phone shape the patterns
+    miss still reach the judge, as does everything else the visitor typed in that
+    message. Visitor text sits in the judge prompt, so it can steer a score; the damage
+    stops at the score (1, 0.5 or 0), because the judge's reasoning is never stored or
+    printed.
 
 What is written
     Up to three feedback rows on the trace's root run: ``markdown_clean`` (1 or 0),
@@ -321,16 +324,21 @@ def _judge_inputs(turn: Turn) -> tuple[str, str]:
     The two strings the judge gets: the exchange in the calibration labels' format, and
     the reply alone as the text to score.
 
-    The captured lead values go first, then the tracer's own email and phone masking, so
-    no raw email or phone shape leaves here even for a trace that was stored unmasked.
+    The tracer's own email and phone masking goes first, then the captured lead values,
+    so no raw email or phone shape leaves here even for a trace that was stored unmasked.
+    The other order leaves part of one behind: a placeholder next to an ``@`` or after an
+    area code stops the tracer's patterns from matching ("cc [NAME]@kestrelfreight.io",
+    "(210) [PHONE]"). The captured values go through the tracer's masking along with the
+    text, as they do in a masked upload: a captured email that the pattern only half
+    matches then reads the same in the text and in ``lead_data``, and is replaced whole.
     """
     masked = build_email_anonymizer()(
-        {
-            "visitor": _mask_lead_values(turn.visitor, turn.lead_data),
-            "reply": _mask_lead_values(turn.reply, turn.lead_data),
-        }
+        # A copy of lead_data: the anonymizer writes into what it is given.
+        {"visitor": turn.visitor, "reply": turn.reply, "lead_data": dict(turn.lead_data)}
     )
-    return f"Visitor: {masked['visitor']}\nTARS: {masked['reply']}", masked["reply"]
+    visitor = _mask_lead_values(masked["visitor"], masked["lead_data"])
+    reply = _mask_lead_values(masked["reply"], masked["lead_data"])
+    return f"Visitor: {visitor}\nTARS: {reply}", reply
 
 
 # ---------------------------------------------------------------------------

@@ -151,10 +151,12 @@ trace. `persona_adherence` is written only while its recorded κ clears the bar 
 judge is called, so a key that can't write feedback costs no judge call.
 
 **What the judge provider sees.** The judge prompt and one exchange: `Visitor: <message>` / `TARS: <reply>`.
-Before the call, the values captured in that trace's `lead_data` are replaced: `first_name`, `last_name`
-and the full name with `[NAME]`, `company` with `[COMPANY]`, `title` with `[TITLE]`, and the captured
-`email` and `phone` with `[EMAIL]` and `[PHONE]`. Then the text goes through the tracer's email and phone
-masking again. Nothing else from the trace is sent: no earlier turns, no lead data, no ids. The judge calls
+Before the call, the text goes through the tracer's email and phone masking again, which covers a trace
+that was stored unmasked. Then the values captured in that trace's `lead_data` are replaced: `first_name`,
+`last_name` and the full name with `[NAME]`, `company` with `[COMPANY]`, `title` with `[TITLE]`, and the
+captured `email` and `phone` with `[EMAIL]` and `[PHONE]`. The order matters: a placeholder written next
+to an `@` or after an area code would stop the tracer's patterns from matching the rest of that email or
+number. Nothing else from the trace is sent: no earlier turns, no lead data, no ids. The judge calls
 themselves are never traced.
 
 **Limits.**

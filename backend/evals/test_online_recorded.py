@@ -420,17 +420,82 @@ def test_reads_the_turn_from_the_stored_run():
     assert turn.reply == "That adds up fast. Which report hurts most?"
 
 
-def test_judge_gets_one_masked_turn(capsys):
+# Test 7's turns. Each is stored unmasked, as if the tracer's masking had failed at upload:
+# (lead_data, the visitor's message, TARS's reply, the two as the judge must get them,
+# and text that must not reach the judge in any form).
+_NOTED = "Noted. What should the team look at first?"
+_UNMASKED_TURNS = [
+    pytest.param(
+        {
+            "first_name": "Dana",
+            "last_name": "Whitfield",
+            "email": "dana.whitfield@cpplabs.example",
+            "company": "C++ Labs (US)",  # a regex metacharacter, and it ends in a non-word character
+            "phone": "555-0142",  # seven digits: the tracer's phone pattern doesn't match it
+            "title": "VP of Operations",
+        },
+        "I'm Dana Whitfield, VP of Operations at C++ Labs (US). Reach me at "
+        "dana.whitfield@cpplabs.example or 555-0142; my cell is (210) 555-0188 and billing "
+        "is ap@cpplabs.example.",
+        "Thanks, Dana. I have you as VP of Operations at C++ Labs (US), email "
+        "dana.whitfield@cpplabs.example, phone 555-0142. Does that look right, Ms. Whitfield?",
+        "I'm [NAME], [TITLE] at [COMPANY]. Reach me at [EMAIL] or [PHONE]; "
+        "my cell is [PHONE] and billing is [EMAIL].",
+        "Thanks, [NAME]. I have you as [TITLE] at [COMPANY], email [EMAIL], phone [PHONE]. "
+        "Does that look right, Ms. [NAME]?",
+        ("Dana", "Whitfield", "cpplabs", "C++", "555", "VP of Operations"),
+        id="every-captured-value",
+    ),
+    # A captured value inside another email, or at the end of a longer number. The whole
+    # email or number must become its placeholder: with the lead values replaced first,
+    # a placeholder next to "@" or after the area code stops the tracer's patterns and
+    # the rest gets through ("cc [NAME]@kestrelfreight.io", "(210) [PHONE]").
+    pytest.param(
+        {"first_name": "dana"},  # stored as the visitor typed it
+        "i'm dana. cc dana@kestrelfreight.io on it",
+        _NOTED,
+        "i'm [NAME]. cc [EMAIL] on it",
+        _NOTED,
+        ("dana", "kestrelfreight"),
+        id="first-name-in-another-email",
+    ),
+    pytest.param(
+        {"company": "Kestrel"},
+        "We're Kestrel. Quotes go to sales@Kestrel.io",
+        _NOTED,
+        "We're [COMPANY]. Quotes go to [EMAIL]",
+        _NOTED,
+        ("Kestrel", "sales"),
+        id="company-in-another-email",
+    ),
+    pytest.param(
+        {"last_name": "whitfield"},
+        "whitfield here, whitfield@cpplabs.example",
+        _NOTED,
+        "[NAME] here, [EMAIL]",
+        _NOTED,
+        ("whitfield", "cpplabs"),
+        id="last-name-in-another-email",
+    ),
+    pytest.param(
+        {"phone": "555-0188"},
+        "Call 555-0188, or (210) 555-0188 from outside the city",
+        _NOTED,
+        "Call [PHONE], or [PHONE] from outside the city",
+        _NOTED,
+        ("210", "555", "0188"),
+        id="captured-phone-inside-a-longer-number",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("lead", "visitor", "reply", "visitor_sent", "reply_sent", "never_sent"), _UNMASKED_TURNS
+)
+def test_judge_gets_one_masked_turn(lead, visitor, reply, visitor_sent, reply_sent, never_sent, capsys):
     # LeadData documents the keys of the state's lead_data dict: building it from the
     # model means a wrong key in online.py (there is no "name" field) fails here.
-    lead_data = LeadData(
-        first_name="Dana",
-        last_name="Whitfield",
-        email="dana.whitfield@cpplabs.example",
-        company="C++ Labs (US)",  # a regex metacharacter, and it ends in a non-word character
-        phone="555-0142",  # seven digits: the tracer's phone pattern doesn't match it
-        title="VP of Operations",
-    ).model_dump()
+    lead_data = LeadData(**lead).model_dump()
     earlier = (
         HumanMessage(content="Our forklift bookings are a mess."),
         AIMessage(content="Bookings on paper, or in a spreadsheet?"),
@@ -442,15 +507,8 @@ def test_judge_gets_one_masked_turn(capsys):
     fake, judge = FakeLangSmith(), StubJudge()
     fake.add_turn(
         node="lead_capture",
-        visitor=(
-            "I'm Dana Whitfield, VP of Operations at C++ Labs (US). Reach me at "
-            "dana.whitfield@cpplabs.example or 555-0142; my cell is (210) 555-0188 and billing "
-            "is ap@cpplabs.example."
-        ),
-        reply=(
-            "Thanks, Dana. I have you as VP of Operations at C++ Labs (US), email "
-            "dana.whitfield@cpplabs.example, phone 555-0142. Does that look right, Ms. Whitfield?"
-        ),
+        visitor=visitor,
+        reply=reply,
         lead_data=lead_data,
         history=earlier,
         masked=False,  # as if the tracer's masking had failed at upload
@@ -459,30 +517,72 @@ def test_judge_gets_one_masked_turn(capsys):
     assert _run(fake, judge, write=True) == 0
     out = capsys.readouterr().out
 
-    reply = (
-        "Thanks, [NAME]. I have you as [TITLE] at [COMPANY], email [EMAIL], phone [PHONE]. "
-        "Does that look right, Ms. [NAME]?"
-    )
     assert judge.calls == [
         {
             # The calibration labels' format: one visitor line, one TARS line.
-            "inputs": (
-                "Visitor: I'm [NAME], [TITLE] at [COMPANY]. Reach me at [EMAIL] or [PHONE]; "
-                "my cell is [PHONE] and billing is [EMAIL].\n"
-                f"TARS: {reply}"
-            ),
-            "outputs": reply,
+            "inputs": f"Visitor: {visitor_sent}\nTARS: {reply_sent}",
+            "outputs": reply_sent,
         }
     ]
     sent = judge.calls[0]["inputs"] + judge.calls[0]["outputs"]
     for earlier_word in ("forklift", "spreadsheet", "warehouses"):
         assert earlier_word not in sent
-    for value in ("Dana", "Whitfield", "cpplabs", "C++", "555", "VP of Operations"):
+    for value in never_sent:
         assert value not in sent
-    # The output holds ids and numbers only. (No digit strings here: a trace id is
-    # random hex and could hold one.)
-    for value in ("Dana", "Whitfield", "cpplabs", "C++", "VP of Operations", "[NAME]"):
-        assert value not in out
+    # The output holds ids and numbers only. (Digit strings aren't checked here: a trace
+    # id is random hex and could hold one.)
+    for value in (*never_sent, "[NAME]"):
+        assert value.isdigit() or value not in out
+
+
+def test_a_name_stored_in_lowercase_is_masked_in_title_case_too():
+    # Extraction may keep a value as the visitor typed it; TARS then writes it capitalised.
+    fake, judge = FakeLangSmith(), StubJudge()
+    fake.add_turn(
+        node="lead_capture",
+        visitor="it's dana whitfield from kestrel freight",
+        reply="Thanks, Dana. Is Kestrel Freight the registered name, Ms. Whitfield?",
+        lead_data=LeadData(first_name="dana", last_name="whitfield", company="kestrel freight").model_dump(),
+    )
+
+    assert _run(fake, judge, write=True) == 0
+
+    reply = "Thanks, [NAME]. Is [COMPANY] the registered name, Ms. [NAME]?"
+    assert judge.calls == [
+        {"inputs": f"Visitor: it's [NAME] from [COMPANY]\nTARS: {reply}", "outputs": reply}
+    ]
+
+
+@pytest.mark.parametrize("masked", [True, False], ids=["stored-masked", "stored-unmasked"])
+@pytest.mark.parametrize(
+    "email",
+    [
+        "andré@cpplabs.example",  # the pattern finds nothing: no ASCII character before the "@"
+        "dána@cpplabs.example",  # the pattern finds only "na@cpplabs.example"
+    ],
+    ids=["pattern-finds-nothing", "pattern-finds-the-tail"],
+)
+def test_a_captured_email_the_pattern_misses_is_masked_whole(email, masked):
+    # The tracer's email pattern is ASCII-only, so the captured value is the only cover
+    # for an address like these. A masked upload stores the second one as "dá[EMAIL]",
+    # in the text and in lead_data alike.
+    fake, judge = FakeLangSmith(), StubJudge()
+    fake.add_turn(
+        node="lead_capture",
+        visitor=f"Send it to {email} please.",
+        reply=f"Will do: {email}.",
+        lead_data=LeadData(email=email).model_dump(),
+        masked=masked,
+    )
+
+    assert _run(fake, judge, write=True) == 0
+
+    assert judge.calls == [
+        {
+            "inputs": "Visitor: Send it to [EMAIL] please.\nTARS: Will do: [EMAIL].",
+            "outputs": "Will do: [EMAIL].",
+        }
+    ]
 
 
 # ---------------------------------------------------------------------------
