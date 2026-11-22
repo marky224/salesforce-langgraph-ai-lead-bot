@@ -45,7 +45,7 @@ What the judge provider receives
     half-matched email is stored as "ines.muñ[EMAIL]": its title case keeps the
     tracer's placeholder in upper case, as the stored text has it, so that address is
     found typed either way. Not every half-matched email is. The rule: an address the
-    tracer also cuts in the middle of a word after the "@" (before a letter that has a
+    tracer cuts in the middle of a word after the "@" (before a letter that has a
     capital, such as "ä"), typed in title case, is sent in part when the title case
     changes something outside the placeholder other than the letter right after it.
     One example: "dána@cpplabs.exämple" is stored as "dá[EMAIL]ämple" and, typed in
