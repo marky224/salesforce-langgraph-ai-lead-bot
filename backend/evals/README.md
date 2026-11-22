@@ -159,13 +159,13 @@ captured `email` and `phone` with `[EMAIL]` and `[PHONE]`. The order matters: a 
 to an `@` or after an area code would stop the tracer's patterns from matching the rest of that email or
 number. Each captured value is looked for as stored and in title case, and each of those two forms also
 as the tracer's masking rewrites it. The plain forms catch a captured phone that the tracer's pattern skips
-in the text (right after a `.`, after a `+` that no digit follows, or before `.<digit>`, as in
-`Ph.210-555-0188`); the rewritten ones catch a captured email that the pattern only half matches, such as
-one with a non-ASCII letter before the `@`, whether the visitor typed it as captured or in title case.
-That holds for a normal, masked upload too: there the captured value is itself stored half masked
-(`ines.muñ[EMAIL]`), and its title case keeps the tracer's placeholder in upper case, as the stored text
-has it (`Ines.Muñ[EMAIL]`). Nothing else from the trace is sent: no earlier turns, no lead data, no ids.
-The judge calls themselves are never traced.
+in the text (right after a `.`, before `.<digit>`, or after a `+` that the pattern doesn't take with the
+number, as in `Ph.210-555-0188` and `Tel+210-555-0188`; Limits has the rule); the rewritten ones catch a
+captured email that the pattern only half matches, such as one with a non-ASCII letter before the `@`,
+whether the visitor typed it as captured or in title case. That holds for a normal, masked upload too:
+there the captured value is itself stored half masked (`ines.muñ[EMAIL]`), and its title case keeps the
+tracer's placeholder in upper case, as the stored text has it (`Ines.Muñ[EMAIL]`). Nothing else from the
+trace is sent: no earlier turns, no lead data, no ids. The judge calls themselves are never traced.
 
 **Limits.**
 - The masking is best-effort. A name typed in another case or misspelled, another person's name, a phone
@@ -186,11 +186,13 @@ The judge calls themselves are never traced.
   wait about 12 minutes before it raises. A refused key (401 or 403) stops the run at once. The command
   prints nothing while it waits.
 - A phone number that the tracer itself misses is sent as it was stored. The tracer's phone pattern skips
-  a number right after a `.`, after a `+` that no digit follows, or before `.<digit>` (`Ph.210-555-0188`,
-  `+(210) 555-0188`); a `+` followed by a digit, as in `+210-555-0188`, is masked. In a normal masked
-  upload a skipped number is stored raw while the captured `phone` is stored as `[PHONE]`, so the online
-  eval has nothing to find it with. Fixing that takes a change to the app's tracing patterns
-  (`app/tracing.py`), which the online eval leaves alone.
+  a number right after a `.` or before `.<digit>` (`Ph.210-555-0188`), and a number glued to a letter,
+  digit or underscore on either side (`tel2105550188`, `cell_210-555-0188`, `2105550188ext`). It takes a
+  leading `+` with the number only when a digit follows the `+` and the `+` doesn't itself come right
+  after a letter, digit, underscore, `.` or `+`: `+210-555-0188` is masked, while `+(210) 555-0188` and
+  `Tel+210-555-0188` are skipped. In a normal masked upload a skipped number is stored raw while the
+  captured `phone` is stored as `[PHONE]`, so the online eval has nothing to find it with. Fixing that
+  takes a change to the app's tracing patterns (`app/tracing.py`), which the online eval leaves alone.
 - On a masked upload, one kind of half-matched email is still sent in part when the visitor typed it in
   title case: an address the tracer cuts in the middle of a word after the `@`, such as
   `dána@cpplabs.exämple`, which is stored as `dá[EMAIL]ämple`. The title case of that stored value
