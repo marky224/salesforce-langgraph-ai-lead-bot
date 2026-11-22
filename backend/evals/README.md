@@ -161,8 +161,11 @@ number. Each captured value is looked for as stored and in title case, and each 
 as the tracer's masking rewrites it. The plain forms catch a captured phone that the tracer's pattern skips
 in the text (right after a `.`, after a `+` that no digit follows, or before `.<digit>`, as in
 `Ph.210-555-0188`); the rewritten ones catch a captured email that the pattern only half matches, such as
-one with a non-ASCII letter in it, whether the visitor typed it as captured or capitalised. Nothing else
-from the trace is sent: no earlier turns, no lead data, no ids. The judge calls themselves are never traced.
+one with a non-ASCII letter before the `@`, whether the visitor typed it as captured or in title case.
+That holds for a normal, masked upload too: there the captured value is itself stored half masked
+(`ines.muñ[EMAIL]`), and its title case keeps the tracer's placeholder in upper case, as the stored text
+has it (`Ines.Muñ[EMAIL]`). Nothing else from the trace is sent: no earlier turns, no lead data, no ids.
+The judge calls themselves are never traced.
 
 **Limits.**
 - The masking is best-effort. A name typed in another case or misspelled, another person's name, a phone
@@ -188,6 +191,11 @@ from the trace is sent: no earlier turns, no lead data, no ids. The judge calls 
   upload a skipped number is stored raw while the captured `phone` is stored as `[PHONE]`, so the online
   eval has nothing to find it with. Fixing that takes a change to the app's tracing patterns
   (`app/tracing.py`), which the online eval leaves alone.
+- On a masked upload, one kind of half-matched email is still sent in part when the visitor typed it in
+  title case: an address the tracer cuts in the middle of a word after the `@`, such as
+  `dána@cpplabs.exämple`, which is stored as `dá[EMAIL]ämple`. The title case of that stored value
+  capitalises the letter after the placeholder and the text doesn't, so the two don't match and
+  `Dá[EMAIL]ämple` is sent. A trace stored unmasked doesn't have this gap.
 
 **Keys.** `LANGSMITH_API_KEY` always, and `ANTHROPIC_API_KEY` with `--write`, read from the environment or
 `.env`. An org-scoped LangSmith key also needs `LANGSMITH_WORKSPACE_ID` **exported in the shell**: the

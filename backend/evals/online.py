@@ -36,12 +36,14 @@ What the judge provider receives
     tracer's masking rewrites it: the plain forms catch a captured phone that the
     tracer's pattern skips in the text (right after a ".", after a "+" that no digit
     follows, or before ".<digit>"), the rewritten ones a captured email that the pattern
-    only half matches. Nothing else from the trace is sent: no earlier turns, no lead
-    data, no ids. Best-effort: a name typed in another case or misspelled, someone else's
-    name and a phone shape the patterns miss still reach the judge, as does everything
-    else the visitor typed in that message. Visitor text sits in the judge prompt, so it
-    can steer a score; the damage stops at the score (1, 0.5 or 0), because the judge's
-    reasoning is never stored or printed.
+    only half matches. A normal trace is a masked upload, where the captured value is
+    itself stored rewritten ("ines.muñ[EMAIL]"): its title case keeps the tracer's
+    placeholder in upper case, as the stored text has it. Nothing else from the trace is
+    sent: no earlier turns, no lead data, no ids. Best-effort: a name typed in another
+    case or misspelled, someone else's name and a phone shape the patterns miss still
+    reach the judge, as does everything else the visitor typed in that message. Visitor
+    text sits in the judge prompt, so it can steer a score; the damage stops at the score
+    (1, 0.5 or 0), because the judge's reasoning is never stored or printed.
 
 What is written
     Up to three feedback rows on the trace's root run: ``markdown_clean`` (1 or 0),
@@ -312,7 +314,13 @@ def _lead_values(lead_data: dict[str, Any]) -> dict[str, str]:
         if not isinstance(value, str) or len(value.strip()) < 2:
             continue
         # As stored and in title case: extraction may keep "dana" as the visitor typed it.
-        for form in (value.strip(), value.strip().title()):
+        # A masked upload stores a half-matched email as "ines.muñ[EMAIL]", and the text
+        # holds "Ines.Muñ[EMAIL]": the title case keeps the tracer's placeholders in
+        # upper case.
+        title = re.sub(
+            r"\[(?:Email|Phone)\]", lambda match: match.group(0).upper(), value.strip().title()
+        )
+        for form in (value.strip(), title):
             values.setdefault(form, placeholder)
     return values
 
@@ -364,7 +372,14 @@ def _judge_inputs(turn: Turn) -> tuple[str, str]:
     The case forms are built before the masking, not after it: the title case of an
     already rewritten value ("Ines.Muñ[Email]") matches nothing, while the rewritten
     title-case form ("Ines.Muñ[EMAIL]") is what the first step leaves in the text when
-    the visitor typed the address capitalised.
+    the visitor typed the address in title case. That covers a trace stored unmasked. A
+    masked upload, which every normal trace is, stores the captured value already
+    rewritten ("ines.muñ[EMAIL]"), so there is no raw value to start from: for it
+    ``_lead_values`` puts the tracer's placeholders back in upper case after taking the
+    title case. One case that misses on a masked upload: an address the tracer cuts in
+    the middle of a word after the "@" ("dá[EMAIL]ämple"), typed in title case. The title
+    case of the stored value capitalises the letter after the placeholder
+    ("Dá[EMAIL]Ämple") and the text doesn't ("Dá[EMAIL]ämple").
 
     Every form goes in one pass, so the longest one wins where a shorter captured value
     (a first name) starts inside it.

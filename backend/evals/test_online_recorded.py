@@ -547,7 +547,7 @@ _UNMASKED_TURNS = [
         ("ines", "muñ", "cpplabs"),
         id="captured-name-starts-a-half-matched-email",
     ),
-    # A half-matched captured email that the visitor typed capitalised. The tracer's
+    # A half-matched captured email that the visitor typed in title case. The tracer's
     # masking leaves "Ines.Muñ[EMAIL]" in the text, which only the title-case form put
     # through that same masking equals: the title case of the already rewritten value is
     # "Ines.Muñ[Email]" and matches nothing.
@@ -570,12 +570,54 @@ _UNMASKED_TURNS = [
         id="tail-matched-email-typed-in-title-case",
     ),
 ]
+# Turns stored masked, as every normal upload is. The first two are the last two above:
+# the tracer has already rewritten the text ("Ines.Muñ[EMAIL]") and the captured value
+# alike ("ines.muñ[EMAIL]"), so the text equals only a title case of the captured value
+# that keeps the tracer's placeholder in upper case. A plain one ends in "[Email]".
+_MASKED_TURNS = [
+    pytest.param(
+        {"email": "ines.muñoz@cpplabs.example"},
+        "Send it to Ines.Muñoz@Cpplabs.Example please",
+        _NOTED,
+        "Send it to [EMAIL] please",
+        _NOTED,
+        ("Ines", "Muñ", "Cpplabs"),
+        id="half-matched-email-typed-in-title-case-stored-masked",
+    ),
+    pytest.param(
+        {"email": "dána@cpplabs.example"},
+        "Send it to Dána@Cpplabs.Example please",
+        _NOTED,
+        "Send it to [EMAIL] please",
+        _NOTED,
+        ("Dá", "Cpplabs"),
+        id="tail-matched-email-typed-in-title-case-stored-masked",
+    ),
+    # The same for "[PHONE]": a company kept in lower case with a number in its name,
+    # which TARS writes capitalised. Stored as "dial [PHONE] plumbing".
+    pytest.param(
+        {"company": "dial 210-555-0188 plumbing"},
+        "we're dial 210-555-0188 plumbing",
+        "Is Dial 210-555-0188 Plumbing the registered name?",
+        "we're [COMPANY]",
+        "Is [COMPANY] the registered name?",
+        ("dial", "Dial", "lumbing", "210"),
+        id="company-around-a-phone-written-in-title-case-stored-masked",
+    ),
+]
 
 
 @pytest.mark.parametrize(
-    ("lead", "visitor", "reply", "visitor_sent", "reply_sent", "never_sent"), _UNMASKED_TURNS
+    ("lead", "visitor", "reply", "visitor_sent", "reply_sent", "never_sent", "masked"),
+    [
+        pytest.param(*turn.values, masked, id=turn.id)
+        for masked, turns in ((False, _UNMASKED_TURNS), (True, _MASKED_TURNS))
+        for turn in turns
+    ],
 )
-def test_judge_gets_one_masked_turn(lead, visitor, reply, visitor_sent, reply_sent, never_sent, capsys):
+def test_judge_gets_one_masked_turn(
+    lead, visitor, reply, visitor_sent, reply_sent, never_sent, masked, capsys
+):
     # LeadData documents the keys of the state's lead_data dict: building it from the
     # model means a wrong key in online.py (there is no "name" field) fails here.
     lead_data = LeadData(**lead).model_dump()
@@ -594,7 +636,7 @@ def test_judge_gets_one_masked_turn(lead, visitor, reply, visitor_sent, reply_se
         reply=reply,
         lead_data=lead_data,
         history=earlier,
-        masked=False,  # as if the tracer's masking had failed at upload
+        masked=masked,  # False: as if the tracer's masking had failed at upload
     )
 
     assert _run(fake, judge, write=True) == 0
