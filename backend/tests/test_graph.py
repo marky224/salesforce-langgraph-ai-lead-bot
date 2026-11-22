@@ -1008,7 +1008,7 @@ class TestAfterSaveRouting:
         assert route_entry_point(state) == "after_save"
 
     def test_a_stage_restored_as_a_string_routes_to_after_save(self, monkeypatch):
-        """The Postgres serde can restore stage as a plain str (contract 4)."""
+        """Routing still works when stage is the plain string, not the enum member."""
         self._cap(monkeypatch, "40")
         state = self._complete_state(salesforce_lead_id="00Q1", salesforce_task_id="00T1")
         state["stage"] = "complete"

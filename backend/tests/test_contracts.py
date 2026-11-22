@@ -2,7 +2,7 @@
 Contract guard tests.
 
 These assert *cross-cutting contracts* that span multiple modules and would
-otherwise break silently. See the repo's cross-cutting contracts and the lead-scoring
+otherwise break silently. Each test class states its own; see also the lead-scoring
 write-up in the maintainer's local build notes, which are not published.
 
 Contract: the deterministic scorer's per-dimension score tables must stay in

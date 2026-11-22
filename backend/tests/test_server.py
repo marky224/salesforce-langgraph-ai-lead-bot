@@ -203,7 +203,7 @@ def test_chat_stream_emits_tokens_and_done_event(client):
     assert "".join(e["token"] for e in token_events) == "Hello there friend"
     assert not any("error" in e for e in events)
 
-    # Exactly one terminal frame, carrying the full SSE 'done' contract (CLAUDE.md #2).
+    # Exactly one terminal 'done' frame, with every key frontend/widget.js reads from it.
     assert len(done_events) == 1
     done = done_events[0]
     for key in ("thread_id", "stage", "is_complete", "lead_id", "lead_data"):
