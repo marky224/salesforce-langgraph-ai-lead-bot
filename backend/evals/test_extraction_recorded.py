@@ -25,7 +25,8 @@ from evals.targets import build_eval_llm, run_extraction
 
 pytestmark = pytest.mark.eval_recorded
 
-# Recorded baseline (grok-4.3, see _private/docs/build/14-evals.md). Scalars (the
+# Recorded baseline (grok-4.3; the write-up is in the maintainer's local build notes,
+# which are not published). Scalars (the
 # enum-.value contract) recorded a perfect 1.0 — the gate fails on ANY scalar
 # regression in node/evaluator code. The list-count rate (0.9815 recorded) gets a
 # small margin since list cardinality is inherently fuzzier. Floors travel with the

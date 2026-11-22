@@ -43,10 +43,14 @@ What the judge provider receives
     one: a captured value is replaced only where no such character touches it. A normal
     trace is a masked upload, where the captured value is itself stored rewritten. A
     half-matched email is stored as "ines.muñ[EMAIL]": its title case keeps the
-    tracer's placeholder in upper case, as the stored text has it, so it is still
-    found. One shape is the exception: an address the tracer also cuts in the middle of
-    a word after the "@", stored as "dá[EMAIL]ämple", is sent in part when the visitor
-    typed it in title case (``_judge_inputs`` has the exact condition). A phone is
+    tracer's placeholder in upper case, as the stored text has it, so that address is
+    found typed either way. Not every half-matched email is. The rule: an address the
+    tracer cuts in the middle of a word after the "@" (before a letter that has a
+    capital, such as "ä"), typed in title case, is sent in part when the title case
+    changes something outside the placeholder other than the letter right after it.
+    One example: "dána@cpplabs.exämple" is stored as "dá[EMAIL]ämple" and, typed in
+    title case, is sent as "Dá[EMAIL]ämple". ``_judge_inputs`` has more examples of
+    the rule, and they are examples, not a complete list of what misses. A phone is
     stored as "[PHONE]", which finds nothing: a number the pattern skipped in the text
     goes to the judge as stored. Nothing else from the trace is sent: no earlier turns,
     no lead data, no ids. Best-effort: a name typed in another case or misspelled,
@@ -400,17 +404,25 @@ def _judge_inputs(turn: Turn) -> tuple[str, str]:
     The letter after the placeholder is not enough on its own. "dana@cpplabs.exämple"
     is rewritten to "[EMAIL]ämple", the text holds that same "[EMAIL]ämple" whether the
     visitor typed the address as captured or in title case, and the form as stored
-    finds it in either order. For the order to matter, the title case must also change
-    something outside the placeholder: a letter before it ("dá[EMAIL]ämple",
-    "o'[EMAIL]ämple") or one more label after the cut ("[EMAIL]ämple.co", typed as
-    "Dana@Cpplabs.Exämple.Co").
+    finds it in either order. The rule: for the order to matter, the title case must
+    also change something outside the placeholder other than that letter. Examples,
+    not a complete list: a letter before the placeholder ("dá[EMAIL]ämple",
+    "o'[EMAIL]ämple"), one more label after the cut ("[EMAIL]ämple.co", typed as
+    "Dana@Cpplabs.Exämple.Co"), or a letter after a hyphen or a digit in the cut label
+    ("[EMAIL]ämple-shop", "[EMAIL]ämple2go"). "[EMAIL]ämple.42" is not one: the title
+    case changes nothing in ".42". The rule is about a letter that has a capital. One
+    that has none ("[EMAIL]例ple") reads the same in both title cases and is found in
+    either order.
 
     That covers a trace stored unmasked. A masked upload, which every normal trace is,
     stores the captured value already rewritten, so there is no raw value to start
     from. There the upper-cased placeholder still finds "Ines.Muñ[EMAIL]" and the form
-    as stored still finds "[EMAIL]ämple", but an address with both (a letter right
-    after the placeholder, and a letter before it or one more label) misses: typed in
-    title case, "Dá[EMAIL]ämple" is sent.
+    as stored still finds "[EMAIL]ämple", but the same rule decides what misses: an
+    address the tracer cuts in the middle of a word after the "@", typed in title
+    case, is sent in part when the title case changes something outside the
+    placeholder other than the letter right after it. Each example above is sent as
+    the text holds it: "Dá[EMAIL]ämple", "O'[EMAIL]ämple", "[EMAIL]ämple.Co",
+    "[EMAIL]ämple-Shop", "[EMAIL]ämple2Go".
 
     Every form goes in one pass, so the longest one wins where a shorter captured value
     (a first name) starts inside it.

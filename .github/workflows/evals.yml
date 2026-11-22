@@ -1,7 +1,7 @@
 name: evals
 
-# Deterministic, offline eval gate (tier 1 of the two-tier design in
-# _private/docs/build/14-evals.md). Replays committed VCR cassettes — no API key,
+# Deterministic, offline eval gate (tier 1 of the two-tier design in the maintainer's
+# local build notes, which are not published). Replays committed VCR cassettes — no API key,
 # no network — so a reworded extraction/router prompt anchor changes the request
 # body, misses its cassette, and fails closed. The tier-2 live run + model A/B is a
 # manual `python -m evals.run --mode live` (it needs a real key and costs tokens),
