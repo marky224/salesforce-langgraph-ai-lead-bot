@@ -379,17 +379,21 @@ def _judge_inputs(turn: Turn) -> tuple[str, str]:
       remainder in the text and in the rewritten form, and the plain form no longer
       matches the text.
 
-    The case forms are built before the masking, not after it: the title case of an
-    already rewritten value ("Ines.Muñ[Email]") matches nothing, while the rewritten
-    title-case form ("Ines.Muñ[EMAIL]") is what the first step leaves in the text when
-    the visitor typed the address in title case. That covers a trace stored unmasked. A
-    masked upload, which every normal trace is, stores the captured value already
-    rewritten ("ines.muñ[EMAIL]"), so there is no raw value to start from: for it
-    ``_lead_values`` puts the tracer's placeholders back in upper case after taking the
-    title case. One case that misses on a masked upload: an address the tracer cuts in
-    the middle of a word after the "@" ("dá[EMAIL]ämple"), typed in title case. The title
-    case of the stored value capitalises the letter after the placeholder
-    ("Dá[EMAIL]Ämple") and the text doesn't ("Dá[EMAIL]ämple").
+    The case forms are built before the masking, not after it. The reason is a letter
+    right after a placeholder. The tracer cuts some addresses in the middle of a word
+    after the "@": it rewrites "dána@cpplabs.exämple" to "dá[EMAIL]ämple", and leaves
+    "Dá[EMAIL]ämple" in the text when the visitor typed that address in title case. The
+    title-case form put through the masking is exactly that. The title case of the
+    already rewritten value is not: it capitalises the letter after the placeholder
+    ("Dá[EMAIL]Ämple") and matches nothing. (It also turns the placeholder into
+    "[Email]", but ``_lead_values`` puts that back in upper case, so an address with
+    nothing after the placeholder, "ines.muñ[EMAIL]", matches either way.)
+
+    That covers a trace stored unmasked. A masked upload, which every normal trace is,
+    stores the captured value already rewritten, so there is no raw value to start
+    from. There the upper-cased placeholder still finds "Ines.Muñ[EMAIL]", and the
+    address cut in the middle of a word is the one case that misses: typed in title
+    case, "Dá[EMAIL]ämple" is sent.
 
     Every form goes in one pass, so the longest one wins where a shorter captured value
     (a first name) starts inside it.

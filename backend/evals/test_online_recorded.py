@@ -548,9 +548,8 @@ _UNMASKED_TURNS = [
         id="captured-name-starts-a-half-matched-email",
     ),
     # A half-matched captured email that the visitor typed in title case. The tracer's
-    # masking leaves "Ines.Muñ[EMAIL]" in the text, which only the title-case form put
-    # through that same masking equals: the title case of the already rewritten value is
-    # "Ines.Muñ[Email]" and matches nothing.
+    # masking leaves "Ines.Muñ[EMAIL]" in the text, and the title-case form put through
+    # that same masking equals it.
     pytest.param(
         {"email": "ines.muñoz@cpplabs.example"},
         "Send it to Ines.Muñoz@Cpplabs.Example please",
@@ -569,8 +568,23 @@ _UNMASKED_TURNS = [
         ("Dá", "Cpplabs"),
         id="tail-matched-email-typed-in-title-case",
     ),
+    # The same for an address the tracer cuts in the middle of a word after the "@": its
+    # masking leaves "Dá[EMAIL]ämple" in the text. This turn holds the rule that the case
+    # forms are built before the masking. The title case of the already rewritten value
+    # is "Dá[EMAIL]Ämple", with the letter after the placeholder capitalised, and matches
+    # nothing.
+    pytest.param(
+        {"email": "dána@cpplabs.exämple"},
+        "Send it to Dána@Cpplabs.Exämple please",
+        _NOTED,
+        "Send it to [EMAIL] please",
+        _NOTED,
+        ("Dá", "ämple"),
+        id="email-cut-inside-a-word-typed-in-title-case",
+    ),
 ]
-# Turns stored masked, as every normal upload is. The first two are the last two above:
+# Turns stored masked, as every normal upload is. The first two are the half-matched and
+# tail-matched turns above:
 # the tracer has already rewritten the text ("Ines.Muñ[EMAIL]") and the captured value
 # alike ("ines.muñ[EMAIL]"), so the text equals only a title case of the captured value
 # that keeps the tracer's placeholder in upper case. A plain one ends in "[Email]".
