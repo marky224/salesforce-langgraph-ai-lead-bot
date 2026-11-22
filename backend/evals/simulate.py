@@ -1,7 +1,7 @@
 """
 Simulated-user loop (PR C2) — drive the *real* compiled graph against a persona.
 
-A second LLM role-plays the website visitor (decision #4: reuse xAI grok-4.3) while
+A second LLM role-plays the website visitor (reusing xAI grok-4.3) while
 the graph runs the real grok-4.3 system-under-test, with Salesforce mocked at the
 ``app.tools.salesforce._get_sf_client`` seam (exactly as ``tests/test_e2e.py`` does)
 so **zero** real CRM writes happen. The loop stops on the real terminal signal —
@@ -10,7 +10,7 @@ graph state ``stage == COMPLETE`` — or the persona's ``max_turns`` cap.
 This is the *producer* of the ``Trajectory`` that ``scorecard.py`` consumes. It is
 nondeterministic (two live models talking), so it is exercised only by the
 report-only ``test_simulation_live.py`` (``eval_live``) and the ``run.py --dimension
-sim --mode live`` CLI — never the offline gate. Roll-our-own (decision #1): ~40 lines,
+sim --mode live`` CLI — never the offline gate. Roll-our-own: ~40 lines,
 zero new deps, and it stops on graph *state*, which a message-stream library can't
 naturally see.
 """

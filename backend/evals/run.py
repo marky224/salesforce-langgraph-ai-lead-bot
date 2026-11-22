@@ -165,7 +165,7 @@ async def _run_sim(model: str, judges: bool = False) -> dict:
     Drive the real graph against each persona (live only) → per-persona scorecard.
 
     The system-under-test runs ``model`` (the ``--model`` override); the simulated
-    visitor is held fixed at the recorded grok-4.3 driver (decision #4) so a SUT swap
+    visitor is held fixed at the recorded grok-4.3 driver so a SUT swap
     stays comparable. Salesforce is mocked inside ``simulate`` — zero CRM writes. With
     ``judges=True`` the calibrated judges (claude-sonnet-4-6) also grade each finished
     conversation, attaching advisory rows (extra live cost, needs ANTHROPIC_API_KEY).
