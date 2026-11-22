@@ -169,6 +169,7 @@ See [architecture.md](architecture.md) for detailed Mermaid diagrams of the Lang
 **Production Deployment**
 - Backend on Azure Container Apps (free tier, scale-to-zero)
 - Frontend widget on Azure Static Web Apps (CDN-hosted, cross-origin)
+- Infrastructure: Terraform, imported from live with a zero-change plan (private repo)
 - Embedded on GitHub Pages portfolio via 2-line `<script>` snippet
 - SSE streaming for real-time token-by-token display
 - Mobile responsive (fullscreen on small screens)
