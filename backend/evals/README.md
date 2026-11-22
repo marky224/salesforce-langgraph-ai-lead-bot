@@ -3,8 +3,10 @@
 An **opt-in** eval suite that measures extraction, routing and site answers against the **real prompts** and
 **recorded real-model responses** — the gap the mock-based `backend/tests` suite can't cover. It also
 runs a **simulated-user scorecard** (PR C): whole conversations driven against the real graph by a
-second LLM role-playing personas. It is never collected by `pytest tests/`, never installed into the
-prod image, and its deps live in `backend/requirements-eval.txt`.
+second LLM role-playing personas. And it has an **online eval** (PR D4): a manual command that scores
+recent production turns from LangSmith traces and writes the scores back as LangSmith feedback. It is
+never collected by `pytest tests/`, never installed into the prod image, and its deps live in
+`backend/requirements-eval.txt`.
 
 ## Two tiers
 
@@ -98,10 +100,138 @@ cd backend && python -m evals.run --dimension sim --mode live --judges --report 
 
 `KAPPA_BAR = 0.6` (Landis–Koch "substantial"); the recorded result lives in `calibration.py::CALIBRATED_KAPPA`
 and travels with the labels + judge prompts (re-run + update on any change). A judge below the bar is still
-shown but flagged **advisory** and never folded into `overall_pass`. Recorded 2026-06-15: `persona_adherence`
-κ=0.74 (validated); `summary_faithfulness` κ=0.25 (advisory — the generic groundedness rubric over-flags the
-summary's asked-for sentiment gloss; a task-specific prompt is the follow-up). Deep dive:
-`_private/docs/build/14-evals.md` §8.
+shown but flagged **advisory** and never folded into `overall_pass`. Recorded 2026-11-21, a re-run under
+langchain-anthropic 1.7.5: `persona_adherence` κ=0.61 (validated, by a thin margin: 3 of its 12 labels
+split; the first recording, 2026-06-15, was 0.74); `summary_faithfulness` κ=0.25, as before (advisory — the
+generic groundedness rubric over-flags the summary's asked-for sentiment gloss; a task-specific prompt is
+the follow-up). A longer write-up is in the maintainer's local build notes, which are not published.
+
+## Online eval (live, manual)
+
+`python -m evals.online` scores recent **production turns**. It reads conversational turns from one
+LangSmith project, runs two code checks and the validated persona judge on each, and writes the scores
+onto the turn's trace as LangSmith feedback. You run it by hand: nothing schedules it, no CI job runs it,
+and there is no `eval_live` pytest for it, so `pytest backend/evals -m eval_live --run-live` never writes
+to a project.
+
+```bash
+# dry run (the default): selects and reads turns, calls no judge, writes nothing
+cd backend && python -m evals.online --project <project>
+
+# judge up to 20 unscored turns and write the feedback rows (needs ANTHROPIC_API_KEY; spends tokens)
+cd backend && python -m evals.online --project <project> --write
+```
+
+| Option | Default | What it does |
+|--------|---------|--------------|
+| `--project` | none (required) | The LangSmith project to read turns from and write feedback to. |
+| `--limit` | 20 | Most turns one run scores. Hard maximum 100: a larger value is refused before any LangSmith call. |
+| `--since-hours` | 168 | How far back to look for turns. |
+| `--write` | off | Call the judge and write feedback. Without it the run is a dry run. |
+
+**What one score covers.** One turn is one trace: exactly one of the five conversational nodes
+(`discovery`, `qualification`, `objection_handling`, `lead_capture`, `confirmation`) ran in it and finished
+without error, and it carries the `tars` tag. That is one visitor message and TARS's reply to it, the
+shape the persona judge's κ was measured on (the 12 persona labels are single exchanges). Greetings, site
+answers and the fixed replies are not judged. Turns are taken newest first, and a turn that already has
+every key is skipped, so a second run over the same traces calls no judge and writes nothing; a run that
+died halfway is finished by the next one, which writes only the missing keys.
+
+**What is written.** Up to three feedback rows on the trace's root run:
+
+| Key | Score | Source |
+|-----|-------|--------|
+| `markdown_clean` | 1 = no markdown in the reply, 0 = markdown found (`scorecard.markdown_leak`) | code |
+| `brevity_ok` | 1 = at most 5 sentences, 0 = more (`scorecard.brevity_ok`) | code |
+| `persona_adherence` | 1 = on-voice, 0.5 = slightly off, 0 = off-persona | the `claude-sonnet-4-6` judge |
+
+Each comment is fixed text built in code. The judge's reasoning is never stored or printed, because
+LangSmith does not mask feedback and the reasoning quotes the turn; to see why a turn scored 0, open its
+trace. `persona_adherence` is written only while its recorded κ clears the bar (`calibration.is_validated`).
+`summary_faithfulness` (κ below the bar) is not part of the online eval. The two code checks are written before the
+judge is called, so a key that can't write feedback costs no judge call.
+
+**What the judge provider sees.** The judge prompt and one exchange: `Visitor: <message>` / `TARS: <reply>`.
+Before the call, the text goes through the tracer's email and phone masking again, which covers a trace
+that was stored unmasked. Then the values captured in that trace's `lead_data` are replaced: `first_name`,
+`last_name` and the full name with `[NAME]`, `company` with `[COMPANY]`, `title` with `[TITLE]`, and the
+captured `email` and `phone` with `[EMAIL]` and `[PHONE]`. The order matters: a placeholder written next
+to an `@` or after an area code would stop the tracer's patterns from matching the rest of that email or
+number. Each captured value is looked for as stored and in title case, and each of those two forms also
+as the tracer's masking rewrites it. On a trace stored unmasked, the plain forms catch a captured phone
+that the tracer's pattern skips in the text (right after a `.`, before `.<digit>`, or after a `+` that the
+pattern doesn't take with the number, as in `Ph.210-555-0188` and `Tel+210-555-0188`; Limits has the
+rule). The rewritten ones catch a captured email that the pattern only half matches, such as one with a
+non-ASCII letter before the `@`, whether the visitor typed it as captured or in title case. The email half
+holds for a normal, masked upload too, with the one exception in the last item of Limits: there the
+captured value is itself stored half masked (`ines.muñ[EMAIL]`), and its title case keeps the tracer's
+placeholder in upper case, as the stored text has it (`Ines.Muñ[EMAIL]`). The phone half does not: there
+the captured phone is stored as `[PHONE]`, and a number the pattern skipped is sent as stored (Limits).
+Nothing else from the trace is sent: no earlier turns, no lead data, no ids. The judge calls themselves
+are never traced.
+
+**Limits.**
+- The masking is best-effort. A name typed in another case or misspelled, another person's name, a phone
+  number in a shape the patterns miss, and everything else the visitor typed in that one message still
+  reach the judge provider. The judge was not calibrated on text that holds the `[NAME]`, `[COMPANY]` and
+  `[TITLE]` placeholders.
+- Visitor text goes into the judge prompt, so a visitor can steer a score (prompt injection). The damage
+  stops at the score: it is always 1, 0.5 or 0, and nothing the judge writes is stored.
+- Two runs at the same time can write a key twice. Run one at a time.
+- One run reads at most 1,000 node runs from the listing. It sends LangSmith no `limit`, because the
+  server refuses one over 100; it reads the listing page by page and stops at 1,000 itself. When it stops
+  there it prints `scan cap reached`, and the turns past that point were not seen.
+- A feedback write that fails is tried 3 times, then the run stops (exit 1). How long that takes depends on
+  how the server fails. When it answers with an error (a 500 or a 404), the waits add up to about 3
+  seconds. On a rate limit (429) they follow the server's `Retry-After`, about 12 times its value in all,
+  or about 90 seconds when the server sends none. When the server stops answering, the client's HTTP
+  adapter retries each attempt itself (4 tries, each up to the 60-second read timeout), so one write can
+  wait about 12 minutes before it raises. A refused key (401 or 403) stops the run at once. The command
+  prints nothing while it waits.
+- A phone number that the tracer itself misses is sent as it was stored. The tracer's phone pattern skips
+  a number right after a `.` or before `.<digit>` (`Ph.210-555-0188`), and a number glued to a letter,
+  digit or underscore on either side (`tel2105550188`, `cell_210-555-0188`, `2105550188ext`). It takes a
+  leading `+` with the number only when a digit follows the `+` and the `+` doesn't itself come right
+  after a letter, digit, underscore, `.` or `+`: `+210-555-0188` is masked, while `+(210) 555-0188` and
+  `Tel+210-555-0188` are skipped. In a normal masked upload a skipped number is stored raw while the
+  captured `phone` is stored as `[PHONE]`, so the online eval has nothing to find it with. Fixing that
+  takes a change to the app's tracing patterns (`app/tracing.py`), which the online eval leaves alone.
+- On a masked upload, one kind of half-matched email is still sent in part when the visitor typed it in
+  title case: an address the tracer cuts in the middle of a word after the `@` and that keeps something
+  more outside the placeholder, such as `dána@cpplabs.exämple`, which is stored as `dá[EMAIL]ämple`. The
+  title case of that stored value capitalises the letter after the placeholder and the text doesn't, so
+  the two don't match and `Dá[EMAIL]ämple` is sent. The cut alone is not enough: `dana@cpplabs.exämple`
+  is stored as `[EMAIL]ämple`, the text holds the same, and it is masked. A miss also needs a letter
+  before the placeholder (`dá[EMAIL]ämple`, `o'[EMAIL]ämple`) or one more label after the cut
+  (`[EMAIL]ämple.co`, typed as `Dana@Cpplabs.Exämple.Co`). A trace stored unmasked doesn't have this gap.
+
+**Keys.** `LANGSMITH_API_KEY` always, and `ANTHROPIC_API_KEY` with `--write`, read from the environment or
+`.env`. An org-scoped LangSmith key also needs `LANGSMITH_WORKSPACE_ID` **exported in the shell**: the
+LangSmith client reads it from the process environment, so a value that is only in `.env` never reaches it.
+
+**Exit status.**
+
+| Status | Meaning |
+|--------|---------|
+| 0 | A dry run, nothing to do, or every selected turn fully written. |
+| 1 | A selected turn couldn't be parsed, a judge call failed twice, or a feedback write failed. |
+| 2 | A missing key, a `--limit` outside 1–100, or a LangSmith list or read call that failed (a refused key or project included) before any write. |
+
+Two cases where the rules meet: a dry run that found an unparsed turn exits 1, not 0; and a refusal (401
+or 403) on a feedback write is a failed write, so it exits 1, not 2. Output goes to standard output only
+(counts, trace ids, scores, judge call and token totals). An error prints its exception class, never its text.
+
+**If the dry run finds no eligible turn** (`eligible=0`), stop and tell the maintainer. Don't start a chat
+with the bot to have something to score: that spends the bot's tokens, adds a synthetic trace to the
+project, and leaves the eval scoring its own traffic. Whether to chat with the bot first is the
+maintainer's decision, and a result that rests on such a chat should say so.
+
+**Cost.** One judge call per turn, plus one retry when a call fails. A default run (20 turns) is an
+estimated $0.15–0.20 at the judge model's list price ($3 / $15 per 1M input / output tokens); the run
+prints its real call and token totals.
+
+**Tests.** `test_online_recorded.py` rides the recorded gate (`eval_recorded`): an in-memory LangSmith fake
+and a stub judge, no key and no network.
 
 ## Add a case
 
@@ -124,4 +254,4 @@ python -m pytest evals/test_<dim>_recorded.py -s --record-mode=once   # re-recor
 Review the YAML diff (it's the "model behaviour changed" artifact), update the floors in the test to the
 new baseline, and commit. Cassettes have auth/cookie headers filtered — no secrets are stored.
 
-Deep dive (local-only): `_private/docs/build/14-evals.md`.
+Deep dive: the maintainer's local build notes, which are not published.

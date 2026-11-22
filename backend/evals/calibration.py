@@ -45,18 +45,22 @@ LABELS_DATASET = "judge_labels.jsonl"
 # only. A deliberately strict, defensible line — not tuned to make a judge pass.
 KAPPA_BAR = 0.6
 
-# Recorded by ``python -m evals.calibration`` (judge=claude-sonnet-4-6, 2026-06-15) against
-# the 20 maintainer-confirmed labels in datasets/judge_labels.jsonl. Re-run + update on any
-# judge-prompt / judge-model / label change (the kappa and the labels are a pair).
+# Recorded by ``python -m evals.calibration`` (judge=claude-sonnet-4-6, 2026-11-21, under
+# langchain-anthropic 1.7.5) against the 20 maintainer-confirmed labels in
+# datasets/judge_labels.jsonl. Re-run + update on any judge-prompt / judge-model / label
+# change (the kappa and the labels are a pair). The first recording (2026-06-15, under
+# langchain-anthropic 0.3.22) was 0.7447 for persona_adherence and the same 0.25 for
+# summary_faithfulness.
 #
-# - persona_adherence (0.74) CLEARS the 0.6 bar → validated; counts toward the scorecard.
+# - persona_adherence (0.61) CLEARS the 0.6 bar → validated; counts toward the scorecard.
+#   By a thin margin: 3 of its 12 labels split (agreement 0.75).
 # - summary_faithfulness (0.25) is BELOW the bar → advisory only. The generic RAG
 #   groundedness rubric over-flags the asked-for sentiment / conversion-likelihood gloss
 #   (TRANSCRIPT_SUMMARY_PROMPT requests it) as "ungrounded" even when no fact is fabricated;
 #   it still caught every genuinely hallucinated summary. A task-specific faithfulness
 #   prompt is the follow-up — until then this judge does not count toward the scorecard.
 CALIBRATED_KAPPA: dict[str, float] = {
-    "persona_adherence": 0.7447,
+    "persona_adherence": 0.6129,
     "summary_faithfulness": 0.25,
 }
 
