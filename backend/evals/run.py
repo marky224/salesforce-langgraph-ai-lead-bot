@@ -36,7 +36,12 @@ DIMENSIONS = ("extraction", "routing")
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the offline/online eval suite.")
+    parser = argparse.ArgumentParser(
+        description="Run the extraction and routing evals from the recorded cassettes "
+                    "(--mode recorded, the default) or against the live provider (--mode live), "
+                    "and the simulated-user scorecard (--dimension sim, live only). The online "
+                    "eval is a separate command: python -m evals.online.",
+    )
     parser.add_argument("--dimension", choices=(*DIMENSIONS, "sim", "all"), default="all")
     parser.add_argument("--mode", choices=("recorded", "live"), default="recorded")
     parser.add_argument(
