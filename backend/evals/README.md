@@ -196,14 +196,20 @@ are never traced.
   `Tel+210-555-0188` are skipped. In a normal masked upload a skipped number is stored raw while the
   captured `phone` is stored as `[PHONE]`, so the online eval has nothing to find it with. Fixing that
   takes a change to the app's tracing patterns (`app/tracing.py`), which the online eval leaves alone.
-- On a masked upload, one kind of half-matched email is still sent in part when the visitor typed it in
-  title case: an address the tracer cuts in the middle of a word after the `@` and that keeps something
-  more outside the placeholder, such as `dána@cpplabs.exämple`, which is stored as `dá[EMAIL]ämple`. The
-  title case of that stored value capitalises the letter after the placeholder and the text doesn't, so
-  the two don't match and `Dá[EMAIL]ämple` is sent. The cut alone is not enough: `dana@cpplabs.exämple`
-  is stored as `[EMAIL]ämple`, the text holds the same, and it is masked. A miss also needs a letter
-  before the placeholder (`dá[EMAIL]ämple`, `o'[EMAIL]ämple`) or one more label after the cut
-  (`[EMAIL]ämple.co`, typed as `Dana@Cpplabs.Exämple.Co`). A trace stored unmasked doesn't have this gap.
+- On a masked upload, a half-matched email can still be sent in part when the visitor typed it in title
+  case. The rule: an address the tracer cuts in the middle of a word after the `@` (before a letter that
+  has a capital, such as `ä`), typed in title case, is sent in part when the title case changes something
+  outside the placeholder other than the letter right after it. The captured address is stored cut the
+  same way (`dana@cpplabs.exämple-shop` as `[EMAIL]ämple-shop`) and is looked for as stored and in the
+  title case of that stored value. That title case capitalises the letter after the placeholder
+  (`[EMAIL]Ämple-Shop`), which the text keeps in lower case, so it doesn't match; the stored form matches
+  only while the title case leaves the rest outside the placeholder as stored, and here the text holds
+  `[EMAIL]ämple-Shop`, which is sent. More examples, not a complete list: `dána@cpplabs.exämple` (stored
+  as `dá[EMAIL]ämple`) sends `Dá[EMAIL]ämple`, `o'neil@cpplabs.exämple` sends `O'[EMAIL]ämple`,
+  `dana@cpplabs.exämple2go` sends `[EMAIL]ämple2Go` and `dana@cpplabs.exämple.co` sends
+  `[EMAIL]ämple.Co`. The cut alone is not enough: `dana@cpplabs.exämple` is stored as `[EMAIL]ämple`, the
+  text holds the same, and it is masked; so is `dana@cpplabs.exämple.42`, because the title case changes
+  nothing in `.42`. A trace stored unmasked doesn't have this gap.
 
 **Keys.** `LANGSMITH_API_KEY` always, and `ANTHROPIC_API_KEY` with `--write`, read from the environment or
 `.env`. An org-scoped LangSmith key also needs `LANGSMITH_WORKSPACE_ID` **exported in the shell**: the
