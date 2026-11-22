@@ -2,8 +2,8 @@
 Contract guard tests.
 
 These assert *cross-cutting contracts* that span multiple modules and would
-otherwise break silently. See CLAUDE.md ("Cross-cutting contracts") and
-_private/docs/build/04-lead-scoring.md.
+otherwise break silently. See the repo's cross-cutting contracts and the lead-scoring
+write-up in the maintainer's local build notes, which are not published.
 
 Contract: the deterministic scorer's per-dimension score tables must stay in
 lock-step with the qualification enums. If a BudgetRange / Timeline /
