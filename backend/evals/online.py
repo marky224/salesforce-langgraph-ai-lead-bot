@@ -33,22 +33,24 @@ What the judge provider receives
     matters: a placeholder written next to an ``@`` or after an area code would stop the
     tracer's patterns from matching the rest of that email or number. Each captured
     value is looked for as stored and in title case, and each of those two also as the
-    tracer's masking rewrites it: the plain forms catch a captured phone that the
-    tracer's pattern skips in the text (right after a ".", before ".<digit>", or after a
-    "+" that no digit follows or that itself comes right after a letter, digit,
-    underscore, "." or "+", as in "Tel+210-555-0188"), the rewritten ones a captured
-    email that the pattern only half matches. The pattern also skips a number glued to a
-    letter, digit or underscore on either side ("tel2105550188", "cell_210-555-0188",
-    "2105550188ext"), and no form finds that one: a captured value is replaced only
-    where no such character touches it. A normal trace is a masked upload, where the
-    captured value is itself stored rewritten ("ines.muñ[EMAIL]"): its title case keeps
-    the tracer's placeholder in upper case, as the stored text has it. Nothing else from
-    the trace is sent: no earlier turns, no lead data, no ids. Best-effort: a name typed
-    in another case or misspelled, someone else's name and a phone shape the patterns
-    miss still reach the judge, as does everything else the visitor typed in that
-    message. Visitor text sits in the judge prompt, so it can steer a score; the damage
-    stops at the score (1, 0.5 or 0), because the judge's reasoning is never stored or
-    printed.
+    tracer's masking rewrites it. On a trace stored unmasked, the plain forms catch a
+    captured phone that the tracer's pattern skips in the text (right after a ".",
+    before ".<digit>", or after a "+" that no digit follows or that itself comes right
+    after a letter, digit, underscore, "." or "+", as in "Tel+210-555-0188"). The
+    rewritten ones catch a captured email that the pattern only half matches. The
+    pattern also skips a number glued to a letter, digit or underscore on either side
+    ("tel2105550188", "cell_210-555-0188", "2105550188ext"), and no form finds that
+    one: a captured value is replaced only where no such character touches it. A normal
+    trace is a masked upload, where the captured value is itself stored rewritten. A
+    half-matched email is stored as "ines.muñ[EMAIL]": its title case keeps the
+    tracer's placeholder in upper case, as the stored text has it, so it is still
+    found. A phone is stored as "[PHONE]", which finds nothing: a number the pattern
+    skipped in the text goes to the judge as stored. Nothing else from the trace is
+    sent: no earlier turns, no lead data, no ids. Best-effort: a name typed in another
+    case or misspelled, someone else's name and a phone shape the patterns miss still
+    reach the judge, as does everything else the visitor typed in that message. Visitor
+    text sits in the judge prompt, so it can steer a score; the damage stops at the score
+    (1, 0.5 or 0), because the judge's reasoning is never stored or printed.
 
 What is written
     Up to three feedback rows on the trace's root run: ``markdown_clean`` (1 or 0),
@@ -370,10 +372,12 @@ def _judge_inputs(turn: Turn) -> tuple[str, str]:
       but skips in the text: right after a ".", before ".<digit>", or after a "+" that
       no digit follows or that itself comes right after a letter, digit, underscore, "."
       or "+" ("Ph.210-555-0188", "+(210) 555-0188", "Tel+210-555-0188"). Its rewritten
-      twin is just "[PHONE]". The pattern also skips a number glued to a letter, digit or
-      underscore on either side ("tel2105550188", "cell_210-555-0188", "2105550188ext").
-      No form finds that one: ``_mask_lead_values`` replaces a value only where no such
-      character touches it.
+      twin is just "[PHONE]". That holds only for a trace stored unmasked: a masked
+      upload stores the captured phone itself as "[PHONE]", so there is no plain form
+      to look with, and the skipped number goes to the judge as stored. The pattern
+      also skips a number glued to a letter, digit or underscore on either side
+      ("tel2105550188", "cell_210-555-0188", "2105550188ext"). No form finds that one:
+      ``_mask_lead_values`` replaces a value only where no such character touches it.
     - The rewritten twin covers a captured email that the email pattern only half
       matches, such as one with a non-ASCII letter in it: the first step leaves the same
       remainder in the text and in the rewritten form, and the plain form no longer

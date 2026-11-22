@@ -158,14 +158,16 @@ that was stored unmasked. Then the values captured in that trace's `lead_data` a
 captured `email` and `phone` with `[EMAIL]` and `[PHONE]`. The order matters: a placeholder written next
 to an `@` or after an area code would stop the tracer's patterns from matching the rest of that email or
 number. Each captured value is looked for as stored and in title case, and each of those two forms also
-as the tracer's masking rewrites it. The plain forms catch a captured phone that the tracer's pattern skips
-in the text (right after a `.`, before `.<digit>`, or after a `+` that the pattern doesn't take with the
-number, as in `Ph.210-555-0188` and `Tel+210-555-0188`; Limits has the rule); the rewritten ones catch a
-captured email that the pattern only half matches, such as one with a non-ASCII letter before the `@`,
-whether the visitor typed it as captured or in title case. That holds for a normal, masked upload too:
-there the captured value is itself stored half masked (`ines.muñ[EMAIL]`), and its title case keeps the
-tracer's placeholder in upper case, as the stored text has it (`Ines.Muñ[EMAIL]`). Nothing else from the
-trace is sent: no earlier turns, no lead data, no ids. The judge calls themselves are never traced.
+as the tracer's masking rewrites it. On a trace stored unmasked, the plain forms catch a captured phone
+that the tracer's pattern skips in the text (right after a `.`, before `.<digit>`, or after a `+` that the
+pattern doesn't take with the number, as in `Ph.210-555-0188` and `Tel+210-555-0188`; Limits has the
+rule). The rewritten ones catch a captured email that the pattern only half matches, such as one with a
+non-ASCII letter before the `@`, whether the visitor typed it as captured or in title case. The email half
+holds for a normal, masked upload too: there the captured value is itself stored half masked
+(`ines.muñ[EMAIL]`), and its title case keeps the tracer's placeholder in upper case, as the stored text
+has it (`Ines.Muñ[EMAIL]`). The phone half does not: there the captured phone is stored as `[PHONE]`, and
+a number the pattern skipped is sent as stored (Limits). Nothing else from the trace is sent: no earlier
+turns, no lead data, no ids. The judge calls themselves are never traced.
 
 **Limits.**
 - The masking is best-effort. A name typed in another case or misspelled, another person's name, a phone
