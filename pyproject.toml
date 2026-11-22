@@ -19,10 +19,10 @@ extend-exclude = ["backend/tests/perf"]  # untracked local scratch
 select = ["E", "W", "F", "I", "UP", "B", "SIM", "C4"]
 ignore = [
     "E501",   # line length is not enforced (no formatter gate in CI)
-    "UP042",  # `class X(str, Enum)` is deliberate — every `.value` is isinstance-guarded
-              # and the Postgres serde + e2e substring routing rely on it (a stage must work as
-              # the member or its plain string; the `.value` strings are also the scorer's keys and
-              # Salesforce picklist values). StrEnum would change `str(enum)` semantics. Don't convert.
+    "UP042",  # `class X(str, Enum)` is deliberate — every `.value` is isinstance-guarded and the
+              # Postgres serde + e2e substring routing rely on it (a stage must work as the member
+              # or its plain string; the `.value` strings are also the scorer's keys and Salesforce
+              # picklist values). StrEnum would change `str(enum)` semantics. Don't convert.
 ]
 
 [tool.ruff.lint.isort]
