@@ -7,7 +7,7 @@ Extraction is scored in two parts, by design:
 
 - **Scalar fields** (the enum-valued ``budget_range`` / ``timeline`` /
   ``company_size`` / ``decision_maker`` / ``current_solution`` plus the contact
-  fields) are compared by **exact value**. This is where contract #1 lives — the
+  fields) are compared by **exact value**. The match must be exact — the
   ``.value`` strings in ``models/schemas.py`` are simultaneously the scorer keys,
   the Salesforce picklist values, and the Apex parser's inputs, so an extraction
   that returns the wrong string silently produces the wrong Lead. precision/recall/F1.

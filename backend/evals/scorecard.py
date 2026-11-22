@@ -17,7 +17,7 @@ Design notes:
   scorecard and its tests are self-contained and never import the live loop.
 - Bands mirror the deterministic rubric in
   ``app.tools.qualification.compute_lead_score`` (HIGH >=70, MEDIUM 40-69, LOW <40)
-  — contract #1: the same ``.value`` strings are scorer keys + SF picklist values.
+  — the same ``.value`` strings are scorer keys + SF picklist values.
 - ``effective_score`` recomputes the deterministic score from captured data when a
   conversation did not COMPLETE, so an incomplete run still gets an honest band.
 """
@@ -75,8 +75,8 @@ def reached_complete(final_state: dict[str, Any]) -> bool:
     True when the conversation reached the terminal COMPLETE stage.
 
     ``ConversationStage`` is a ``str`` enum, so this compares equal whether ``stage``
-    is the enum member or its ``"complete"`` ``.value`` string (the Postgres-serde-safe
-    invariant, CLAUDE.md contract #4).
+    is the enum member or its ``"complete"`` ``.value`` string (the app's stage checks
+    accept both too, so nothing depends on which form a checkpoint restores).
     """
     return final_state.get("stage") == ConversationStage.COMPLETE
 

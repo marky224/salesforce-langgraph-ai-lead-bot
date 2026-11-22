@@ -79,7 +79,8 @@ cd backend && python -m evals.run --dimension sim --mode live --report md --outp
 
 Add a persona: append one line to `datasets/personas.jsonl` (`id`, `system` = visitor profile,
 `expected` = `{reaches_complete, score_band, must_capture, max_turns}`) using the exact enum `.value`
-strings (contract #1) and synthetic `*.example` identities (no PII).
+strings (also the scorer's keys and the Salesforce picklist values) and synthetic `*.example`
+identities (no PII).
 
 ## Calibrated LLM judges (live, report-only)
 
@@ -243,8 +244,8 @@ and a stub judge, no key and no network.
 
 Append one JSON line to `datasets/extraction.jsonl`, `datasets/routing.jsonl` or `datasets/site_answer.jsonl`.
 Extraction `expected`
-**must use the exact enum `.value` strings** from `app/models/schemas.py` (contract #1). Then record the
-new case's response:
+**must use the exact enum `.value` strings** from `app/models/schemas.py` (also the scorer's keys and the
+Salesforce picklist values). Then record the new case's response:
 
 ```bash
 cd backend && python -m pytest evals/test_extraction_recorded.py -s --record-mode=once
